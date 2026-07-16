@@ -137,7 +137,5 @@ def get_steps(mode: str) -> list[StepDefinition]:
             StepDefinition(name="检查并安装项目依赖", fn=step_install_deps, max_retries=1),
             StepDefinition(name="执行 deploy.sh 打包", fn=step_build, max_retries=1),
             StepDefinition(name="选择最新 dist/*.tar.gz", fn=step_select_artifact, max_retries=0),
-            StepDefinition(name="检查并创建 SVN 目录", fn=step_upload_svn, max_retries=0),
             StepDefinition(name="上传产物到 SVN", fn=step_upload_svn, max_retries=2, retry_delay=5.0),
-            StepDefinition(name="SVN 提交完成", fn=lambda ctx: StepResult(success=True, message="SVN commit done"), max_retries=0),
         ]

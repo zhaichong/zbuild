@@ -35,6 +35,47 @@ def _svn_exe(config: dict[str, Any]) -> str:
     return config.get("svn_exe", "svn")
 
 
+def list_svn_contents(svn_url: str, svn_exe: str = "svn") -> list[dict[str, str]]:
+    """List the contents of an SVN directory.
+
+    Returns a list of dicts with 'name', 'kind' (file/dir), and 'rev'.
+    """
+    try:
+        r = run_process(
+            [svn_exe, "list", "--xml", svn_url],
+            timeout=30,
+        )
+        if r.returncode != 0:
+            logging.warning("SVN list failed: %s", r.stderr)
+            return []
+
+        entries: list[dict[str, str]] = []
+        try:
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(r.stdout)
+            for entry_elem in root.findall(".//entry"):
+                name_elem = entry_elem.find("name")
+                kind = entry_elem.get("kind", "file")
+                rev = entry_elem.get("revision", "")
+                if name_elem is not None and name_elem.text:
+                    entries.append({
+                        "name": name_elem.text,
+                        "kind": kind,
+                        "rev": rev,
+                    })
+        except Exception as exc:
+            logging.warning("Failed to parse SVN list XML: %s", exc)
+            for line in r.stdout.strip().split("\n"):
+                line = line.strip()
+                if line:
+                    entries.append({"name": line, "kind": "file", "rev": ""})
+
+        return entries
+    except Exception as exc:
+        logging.error("SVN list error: %s", exc)
+        return []
+
+
 def ensure_svn_path(svn_url: str, svn_exe: str = "svn") -> bool:
     """Ensure the SVN directory exists, creating it if necessary.
 

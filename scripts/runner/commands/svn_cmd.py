@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from runner.cli import register
-from svn_ops import list_svn_contents
+from uploaders.svn import list_svn_contents
 
 
 @register("svn-list")

@@ -14,7 +14,7 @@
         <span v-for="(status, name) in toolStatuses" :key="name" class="flex items-center gap-1">
           <span
             class="w-2 h-2 rounded-full"
-            :class="status.ok ? 'bg-green-500' : 'bg-red-500'"
+            :class="status && status.ok ? 'bg-green-500' : 'bg-red-500'"
           ></span>
           <span>{{ name }}</span>
         </span>

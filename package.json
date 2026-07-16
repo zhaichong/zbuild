@@ -1,0 +1,40 @@
+{
+  "name": "zbuild",
+  "version": "2.0.0",
+  "private": true,
+  "description": "特殊订单打包上传工具 — Vue 3 + Vite + Electron",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "set ELECTRON_RUN_AS_NODE=& electron .",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER=1 electron .\"",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint src/ --ext .ts,.vue",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "pinia": "^2.1.0",
+    "lucide-vue-next": "^0.300.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.4.0",
+    "vue-tsc": "^2.0.0",
+    "typescript": "^5.4.0",
+    "tailwindcss": "^3.4.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "electron": "^30.0.0",
+    "concurrently": "^8.2.0",
+    "cross-env": "^7.0.0",
+    "wait-on": "^7.2.0",
+    "@vue/eslint-config-typescript": "^13.0.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.20.0",
+    "prettier": "^3.2.0"
+  },
+  "volta": { "node": "22.22.2" }
+}

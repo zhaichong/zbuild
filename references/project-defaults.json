@@ -1,0 +1,22 @@
+[
+  {
+    "projectName": "yarward-ntv-frontend",
+    "defaultSvnLeaf": "前端",
+    "serverUploadPath": "/home/data/web"
+  },
+  {
+    "projectName": "yarward-web-frontend",
+    "defaultSvnLeaf": "前端",
+    "serverUploadPath": "/home/data/web"
+  },
+  {
+    "projectName": "zhbf-bedhead-frontend",
+    "defaultSvnLeaf": "前端",
+    "serverUploadPath": "/home/data/web/a10"
+  },
+  {
+    "projectName": "zhbf-fontend",
+    "defaultSvnLeaf": "前端",
+    "serverUploadPath": "/home/data/web/a10"
+  }
+]

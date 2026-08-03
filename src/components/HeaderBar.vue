@@ -1,10 +1,28 @@
 <template>
   <header class="app-header">
-    <div class="flex items-center gap-4">
-      <h1 class="text-base font-semibold tracking-wide">
-        特殊订单打包上传
+    <div class="flex items-center gap-3">
+      <!-- App Hub Launcher Button -->
+      <button
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none"
+        :style="activeApp === 'portal' ? 'background: #fff; color: #1e40af; shadow: 0 1px 2px rgba(0,0,0,0.1)' : 'background: rgba(255,255,255,0.15); color: #fff;'"
+        title="打开应用中心大厅"
+        @click="emit('switch-app', activeApp === 'portal' ? 'zbuild' : 'portal')"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+        <span>应用大厅</span>
+      </button>
+
+      <span class="text-white/30 text-xs">/</span>
+
+      <h1 class="text-sm font-semibold tracking-wide flex items-center gap-2">
+        <span v-if="activeApp === 'mock-query'">终端数据链路提取控制台</span>
+        <span v-else-if="activeApp === 'portal'">开发者应用中心 & 工具矩阵</span>
+        <span v-else>特殊订单打包上传</span>
       </h1>
-      <div class="mode-switch">
+
+      <div v-if="activeApp === 'zbuild'" class="mode-switch">
         <button
           v-for="m in modes"
           :key="m.value"
@@ -17,8 +35,9 @@
       </div>
     </div>
     <div class="flex items-center gap-3">
-      <!-- Tool status indicators -->
+      <!-- Tool status indicators (only in zbuild mode) -->
       <div
+        v-if="activeApp === 'zbuild'"
         class="flex items-center gap-3 text-xs"
         style="color: rgba(255,255,255,.7)"
       >
@@ -35,8 +54,9 @@
         </span>
       </div>
 
-      <!-- Auto-detect tools button -->
+      <!-- Auto-detect tools button (only in zbuild mode) -->
       <button
+        v-if="activeApp === 'zbuild'"
         class="h-[34px] px-3 rounded-lg flex items-center gap-1.5 transition-colors text-xs font-medium"
         style="background: rgba(255,255,255,.12); color: #fff; border: none; cursor: pointer;"
         :disabled="detecting"
@@ -76,7 +96,7 @@
 
       <!-- Server test button (only in server mode) -->
       <button
-        v-if="store.mode === 'server'"
+        v-if="activeApp === 'zbuild' && store.mode === 'server'"
         class="h-[34px] px-3 rounded-lg flex items-center gap-1.5 transition-colors text-xs font-medium"
         :style="serverTestStyle"
         :disabled="testingServer"
@@ -151,10 +171,17 @@ import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import type { UploadMode } from '@/types'
 
+withDefaults(defineProps<{
+  activeApp?: string
+}>(), {
+  activeApp: 'zbuild',
+})
+
 const store = useAppStore()
 const emit = defineEmits<{
   'open-settings': []
   'set-mode': [mode: UploadMode]
+  'switch-app': [appId: string]
 }>()
 
 const detecting = ref(false)

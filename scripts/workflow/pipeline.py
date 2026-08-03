@@ -361,6 +361,26 @@ class Pipeline:
         # Save initial record
         self.history_store.create(record)
 
+        # Auto-create order directory if configured and enabled
+        order_dir_base = self.config.get("order_dir_path")
+        form_cfg = self.config.get("form", {}) if isinstance(self.config.get("form"), dict) else {}
+        create_enabled = self.config.get("create_order_dir") or form_cfg.get("createOrderDir") or form_cfg.get("create_order_dir")
+
+        if order_dir_base and create_enabled:
+            order_no = self.config.get("order_no") or form_cfg.get("orderNo") or form_cfg.get("order_no") or ""
+            hospital_name = self.config.get("hospital_name") or form_cfg.get("hospitalName") or form_cfg.get("hospital_name") or ""
+            if order_no and hospital_name:
+                try:
+                    from tools.order_dir import create_order_directory
+                    enabled_projs = [p for p in self.config.get("projects", []) if p.get("enabled", True)]
+                    res = create_order_directory(order_dir_base, str(order_no), str(hospital_name), enabled_projs)
+                    if res.get("success"):
+                        emit_log(f"{res.get('message')}", level="info")
+                    else:
+                        emit_log(f"创建提测目录失败: {res.get('message')}", level="warning")
+                except Exception as e:
+                    emit_log(f"创建提测目录异常: {e}", level="warning")
+
         projects = self.config.get("projects", [])
         enabled_projects = [p for p in projects if p.get("enabled", True)]
 

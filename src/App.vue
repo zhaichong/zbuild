@@ -1,16 +1,37 @@
 <template>
-  <div class="min-h-screen bg-bg-base">
+  <div class="h-screen bg-bg-base flex flex-col overflow-hidden">
     <!-- Full-width gradient header -->
     <HeaderBar
+      :active-app="currentApp"
       @open-settings="onOpenSettings"
       @set-mode="onSetMode"
+      @switch-app="onSwitchApp"
     />
 
-    <!-- Two-column shell -->
-    <div class="app-shell">
+    <!-- App View 1: Application Portal Hub -->
+    <div
+      v-if="currentApp === 'portal'"
+      class="flex-1 min-h-0 flex flex-col overflow-hidden"
+    >
+      <AppPortal @launch-app="onSwitchApp" />
+    </div>
+
+    <!-- App View 2: Native Mock Query Tool Console -->
+    <div
+      v-else-if="currentApp === 'mock-query'"
+      class="flex-1 min-h-0 flex flex-col overflow-hidden"
+    >
+      <MockQueryTool />
+    </div>
+
+    <!-- App View 3: Special Order Build & Upload Tool -->
+    <div
+      v-else
+      class="app-shell flex-1"
+    >
       <!-- Left: Main scrollable column -->
       <div class="main-col">
-        <div class="space-y-4">
+        <div class="space-y-3">
           <TemplateSelector />
           <CommandForm />
           <ProjectTable />
@@ -193,6 +214,8 @@ import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import HeaderBar from '@/components/HeaderBar.vue'
+import AppPortal from '@/components/AppPortal.vue'
+import MockQueryTool from '@/components/MockQueryTool.vue'
 import TemplateSelector from '@/components/TemplateSelector.vue'
 import CommandForm from '@/components/CommandForm.vue'
 import ProjectTable from '@/components/ProjectTable.vue'
@@ -207,6 +230,18 @@ import { setupRunListeners, startRun, stopRun } from '@/composables/usePipeline'
 import { checkLocalChanges } from '@/composables/useProjects'
 import { saveConfig } from '@/composables/useConfig'
 import type { UploadMode, LocalChangeSummary } from '@/types'
+
+const currentApp = ref<'zbuild' | 'portal' | 'mock-query'>('portal')
+
+function onSwitchApp(appId: string) {
+  if (appId === 'portal') {
+    currentApp.value = 'portal'
+  } else if (appId === 'mock-query') {
+    currentApp.value = 'mock-query'
+  } else {
+    currentApp.value = 'zbuild'
+  }
+}
 
 interface RunPayloadProject {
   name: string

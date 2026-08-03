@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('tool', {
   chooseDirectory: (currentPath) => ipcRenderer.invoke('dialog:directory', currentPath),
   chooseExecutable: (currentPath) => ipcRenderer.invoke('dialog:executable', currentPath),
 
+  // order directory
+  createOrderDir: (payload) => ipcRenderer.invoke('order-dir:create', parsePayload(payload)),
+
   // run lifecycle
   startRun: (payload) => ipcRenderer.invoke('run:start', parsePayload(payload)),
   stopRun: () => ipcRenderer.invoke('run:stop'),
@@ -57,6 +60,9 @@ contextBridge.exposeInMainWorld('tool', {
   // history
   listHistory: () => ipcRenderer.invoke('history:list'),
   getHistory: (id) => ipcRenderer.invoke('history:get', id),
+
+  // mock query request
+  mockQueryRequest: (payload) => ipcRenderer.invoke('mock-query:request', parsePayload(payload)),
 });
 
 contextBridge.exposeInMainWorld('mini', {

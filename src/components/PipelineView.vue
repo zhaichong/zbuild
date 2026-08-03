@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="hasProgress"
-    class="flex-1 h-full flex flex-col overflow-hidden bg-white"
+    class="flex-1 min-h-0 flex flex-col overflow-hidden bg-white"
   >
     <!-- Header -->
     <div class="px-4 py-2.5 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between flex-shrink-0">
@@ -49,7 +49,7 @@
     </div>
 
     <!-- Projects List -->
-    <div class="p-3.5 space-y-3 overflow-y-auto flex-1 min-h-0">
+    <div class="p-3 space-y-2.5 overflow-y-auto flex-1 min-h-0">
       <div
         v-for="(state, name) in store.projectStates"
         :key="name"

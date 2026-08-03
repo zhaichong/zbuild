@@ -96,6 +96,26 @@
                     </button>
                   </div>
                 </div>
+                <div>
+                  <label class="block text-xs text-text-3 mb-1.5">提测目录地址 / 创建目录位置</label>
+                  <div class="flex gap-2">
+                    <input
+                      v-model="store.config.orderDirPath"
+                      type="text"
+                      class="flex-1 form-input min-w-0 font-mono text-xs"
+                      placeholder="例如: D:\yh\特殊订单\2026"
+                    >
+                    <button
+                      class="px-3 py-2 text-sm border border-border rounded-lg bg-white text-text-2 hover:bg-border-light transition-colors whitespace-nowrap"
+                      @click="onChooseDir('orderDirPath')"
+                    >
+                      浏览
+                    </button>
+                  </div>
+                  <p class="mt-1 text-[11px] text-text-3 leading-relaxed">
+                    配置后在订单号右侧可勾选「自动创建提测目录」，自动创建订单同名文件夹并生成 Excel 提测单。
+                  </p>
+                </div>
               </div>
             </section>
 
@@ -157,6 +177,7 @@
                         {{ projName }}
                       </span>
                       <input
+                        v-if="store.config && store.config.buildCommands"
                         v-model="store.config.buildCommands[projName]"
                         type="text"
                         class="flex-1 min-w-0 px-2.5 py-1 text-xs font-mono border border-border rounded-md bg-slate-50/50 text-text-2 focus:bg-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none transition-colors"
@@ -214,6 +235,123 @@
                         type="button"
                         class="px-2 py-1 text-xs border border-border bg-white text-text-3 rounded-md hover:bg-slate-100 transition-colors shrink-0"
                         @click="showAddBuildCmdModal = false"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 打包产物获取目录 -->
+                <div class="pt-2 border-t border-border/60">
+                  <div class="flex items-center justify-between mb-1.5 gap-2">
+                    <label class="block text-xs text-text-3 font-medium">默认全局打包产物目录（多个用逗号分隔）</label>
+                    <button
+                      type="button"
+                      class="text-xs text-primary hover:text-primary-dark font-medium flex items-center gap-1 transition-colors shrink-0"
+                      @click="showAddArtifactPathModal = !showAddArtifactPathModal"
+                    >
+                      <svg
+                        class="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      项目独立产物目录
+                    </button>
+                  </div>
+                  <input
+                    v-model="globalArtifactPathsInput"
+                    type="text"
+                    class="w-full form-input font-mono text-xs"
+                    placeholder="例如: dist, build, target, output, release"
+                  >
+                  <p class="mt-1.5 text-[11px] text-text-3 leading-relaxed">
+                    由于版本或框架不同，打包产物输出目录可能不同。构建后将在配置的目录中自动查找最新的产物包（<code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">.tar.gz</code> / <code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">.zip</code>）。
+                  </p>
+
+                  <!-- 各项目独立产物目录列表 -->
+                  <div
+                    v-if="allConfiguredArtifactPathProjects.length > 0 || showAddArtifactPathModal"
+                    class="mt-2.5 border border-border/80 rounded-xl bg-slate-50/60 p-3 space-y-2 max-h-40 overflow-y-auto"
+                  >
+                    <div
+                      v-for="projName in allConfiguredArtifactPathProjects"
+                      :key="projName"
+                      class="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-border/60 shadow-2xs hover:border-primary/40 transition-colors"
+                    >
+                      <span
+                        class="text-xs font-semibold text-text-1 w-28 sm:w-36 truncate shrink-0"
+                        :title="projName"
+                      >
+                        {{ projName }}
+                      </span>
+                      <input
+                        v-if="store.config && store.config.projectArtifactPaths"
+                        v-model="store.config.projectArtifactPaths[projName]"
+                        type="text"
+                        class="flex-1 min-w-0 px-2.5 py-1 text-xs font-mono border border-border rounded-md bg-slate-50/50 text-text-2 focus:bg-white focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none transition-colors"
+                        placeholder="留空继承全局默认；根目录填 ."
+                      >
+                      <button
+                        type="button"
+                        class="p-1 text-text-3 hover:text-danger hover:bg-danger/10 rounded transition-colors shrink-0"
+                        title="删除此项目配置"
+                        @click="removeProjectArtifactPath(projName)"
+                      >
+                        <svg
+                          class="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <!-- Inline Add Form -->
+                    <div
+                      v-if="showAddArtifactPathModal"
+                      class="flex flex-wrap items-center gap-2 bg-blue-50/60 p-2.5 rounded-lg border border-primary/30 mt-2"
+                    >
+                      <input
+                        v-model="newArtifactProjectName"
+                        type="text"
+                        class="w-28 sm:w-32 px-2.5 py-1 text-xs border border-border rounded-md bg-white text-text-1 focus:border-primary/50 outline-none"
+                        placeholder="项目名称"
+                        @keyup.enter="confirmAddArtifactProject"
+                      >
+                      <input
+                        v-model="newArtifactPathValue"
+                        type="text"
+                        class="flex-1 min-w-[6rem] px-2.5 py-1 text-xs font-mono border border-border rounded-md bg-white text-text-1 focus:border-primary/50 outline-none"
+                        placeholder="留空继承全局默认；根目录填 ."
+                        @keyup.enter="confirmAddArtifactProject"
+                      >
+                      <button
+                        type="button"
+                        class="px-2.5 py-1 text-xs bg-primary text-white rounded-md hover:opacity-90 transition-opacity shrink-0"
+                        @click="confirmAddArtifactProject"
+                      >
+                        添加
+                      </button>
+                      <button
+                        type="button"
+                        class="px-2 py-1 text-xs border border-border bg-white text-text-3 rounded-md hover:bg-slate-100 transition-colors shrink-0"
+                        @click="showAddArtifactPathModal = false"
                       >
                         取消
                       </button>
@@ -493,6 +631,23 @@ const showAddBuildCmdModal = ref(false)
 const newBuildCmdProjectName = ref('')
 const newBuildCmdValue = ref('deploy.sh')
 
+const showAddArtifactPathModal = ref(false)
+const newArtifactProjectName = ref('')
+const newArtifactPathValue = ref('dist')
+
+const globalArtifactPathsInput = computed({
+  get() {
+    return (store.config?.artifactPaths || ['dist']).join(', ')
+  },
+  set(val: string) {
+    if (!store.config) return
+    store.config.artifactPaths = val
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  },
+})
+
 const DEFAULT_SERVER_UPLOAD_PATHS: Record<string, string> = {
   'yarward-ntv-frontend': '/home/data/web',
   'yarward-web-frontend': '/home/data/web',
@@ -518,6 +673,12 @@ function initConfigDefaults() {
   }
   if (!store.config.buildCommands) {
     store.config.buildCommands = {}
+  }
+  if (!store.config.artifactPaths || !store.config.artifactPaths.length) {
+    store.config.artifactPaths = ['dist']
+  }
+  if (!store.config.projectArtifactPaths) {
+    store.config.projectArtifactPaths = {}
   }
   for (const [key, val] of Object.entries(DEFAULT_BUILD_COMMANDS)) {
     if (!(key in store.config.buildCommands)) {
@@ -562,6 +723,11 @@ const allConfiguredBuildCommandProjects = computed(() => {
   return Object.keys(store.config.buildCommands)
 })
 
+const allConfiguredArtifactPathProjects = computed(() => {
+  if (!store.config?.projectArtifactPaths) return []
+  return Object.keys(store.config.projectArtifactPaths)
+})
+
 function removeProjectUploadPath(name: string) {
   if (store.config?.serverUploadPaths) {
     delete store.config.serverUploadPaths[name]
@@ -571,6 +737,12 @@ function removeProjectUploadPath(name: string) {
 function removeProjectBuildCommand(name: string) {
   if (store.config?.buildCommands) {
     delete store.config.buildCommands[name]
+  }
+}
+
+function removeProjectArtifactPath(name: string) {
+  if (store.config?.projectArtifactPaths) {
+    delete store.config.projectArtifactPaths[name]
   }
 }
 
@@ -606,7 +778,23 @@ function confirmAddBuildCmdProject() {
   }
 }
 
-async function onChooseDir(field: 'rootPath' | 'localOutputDir') {
+function confirmAddArtifactProject() {
+  const name = newArtifactProjectName.value.trim()
+  const path = newArtifactPathValue.value.trim() || 'dist'
+  if (!name) {
+    store.showToast('请输入项目名称', 'warning')
+    return
+  }
+  if (store.config) {
+    if (!store.config.projectArtifactPaths) store.config.projectArtifactPaths = {}
+    store.config.projectArtifactPaths[name] = path
+    newArtifactProjectName.value = ''
+    newArtifactPathValue.value = 'dist'
+    showAddArtifactPathModal.value = false
+  }
+}
+
+async function onChooseDir(field: 'rootPath' | 'localOutputDir' | 'orderDirPath') {
   if (!store.config) return
   const current = store.config[field] || ''
   const result = await ipc.chooseDirectory(current)

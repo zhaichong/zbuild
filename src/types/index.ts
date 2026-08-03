@@ -11,6 +11,7 @@ export interface ToolPaths {
 export interface FormConfig {
   hospitalName: string
   orderNo: string
+  createOrderDir?: boolean
   svnUsername: string
   svnPassword: string
   serverAddress: string
@@ -23,6 +24,9 @@ export interface AppConfig {
   svnRootUrl: string
   buildCommand?: string
   buildCommands?: Record<string, string>
+  artifactPaths?: string[]
+  projectArtifactPaths?: Record<string, string>
+  orderDirPath?: string
   tools: ToolPaths
   uploadAfterBuild: boolean
   uploadToServer: boolean

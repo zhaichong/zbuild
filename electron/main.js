@@ -275,6 +275,14 @@ function pyConfigToFrontend(py) {
     svnRootUrl: py.svn_root || '',
     buildCommand: py.build_command || 'deploy.sh',
     buildCommands: py.build_commands || {},
+    artifactPaths: py.artifact_paths || ['dist'],
+    projectArtifactPaths: py.project_artifact_paths || {},
+    orderDirPath: py.order_dir_path || '',
+    selectedProjects: py.selected_projects || py.selectedProjects || [],
+    projectBranches: py.project_branches || py.projectBranches || {},
+    projectSvnLeaves: py.project_svn_leaves || py.projectSvnLeaves || {},
+    projectServerPaths: py.project_server_paths || py.projectServerPaths || py.server_upload_paths || {},
+    projectBuildCommands: py.project_build_commands || py.projectBuildCommands || py.build_commands || {},
     tools: {
       git: tools.git || '',
       bash: tools.bash || '',
@@ -289,6 +297,7 @@ function pyConfigToFrontend(py) {
     form: {
       hospitalName: py.hospital_name || '',
       orderNo: py.order_no || '',
+      createOrderDir: py.create_order_dir !== undefined ? py.create_order_dir : (py.form ? py.form.createOrderDir : false),
       svnUsername: svnCreds.username || '',
       svnPassword: svnCreds.password || '',
       serverAddress: server.host || '',
@@ -300,13 +309,27 @@ function pyConfigToFrontend(py) {
 
 function frontendConfigToPy(fe) {
   const form = fe.form || {};
+  const artifactPaths = Array.isArray(fe.artifactPaths)
+    ? fe.artifactPaths
+    : (typeof fe.artifactPaths === 'string'
+        ? fe.artifactPaths.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean)
+        : ['dist']);
   return {
     mode: fe.uploadToServer ? 'server' : (fe.uploadAfterBuild === false ? 'local' : 'svn'),
     root_path: fe.rootPath || '',
     svn_root: fe.svnRootUrl || '',
     local_output: fe.localOutputDir || '',
+    order_dir_path: fe.orderDirPath || '',
+    create_order_dir: !!form.createOrderDir,
     build_command: (fe.buildCommand || 'deploy.sh').trim(),
     build_commands: fe.buildCommands || {},
+    artifact_paths: artifactPaths.length ? artifactPaths : ['dist'],
+    project_artifact_paths: fe.projectArtifactPaths || {},
+    selected_projects: fe.selectedProjects || [],
+    project_branches: fe.projectBranches || {},
+    project_svn_leaves: fe.projectSvnLeaves || {},
+    project_server_paths: fe.projectServerPaths || fe.serverUploadPaths || {},
+    project_build_commands: fe.projectBuildCommands || fe.buildCommands || {},
     auto_install_deps: true,
     auto_pull: true,
     skip_svn_commit: false,
@@ -368,6 +391,9 @@ ipcMain.handle('tools:detect', async (_, p) => {
     debugLog('tools:detect ERROR: ' + e.message);
     throw e;
   }
+});
+ipcMain.handle('order-dir:create', async (_, p) => {
+  return await runPython('create-order-dir', p);
 });
 
 // projects
@@ -443,21 +469,25 @@ ipcMain.handle('server:test', async (_, p) => {
 // templates
 ipcMain.handle('templates:list', async () => {
   const result = await runPython('template-list');
-  return (result.templates || []).map(t => ({
-    id: t.template_id || t.id,
-    name: t.name || '',
-    description: t.description || '',
-    config: t.config ? pyConfigToFrontend(t.config) : {},
-  }));
+  return (result.templates || []).map(t => {
+    const feCfg = t.config ? pyConfigToFrontend(t.config) : {};
+    return {
+      id: t.template_id || t.id,
+      name: t.name || '',
+      description: t.description || '',
+      config: feCfg,
+    };
+  });
 });
 ipcMain.handle('templates:get', async (_, id) => {
   const result = await runPython('template-get', { id });
   const t = result.template || result;
+  const feCfg = t.config ? pyConfigToFrontend(t.config) : {};
   return {
     id: t.template_id || t.id,
     name: t.name || '',
     description: t.description || '',
-    config: t.config ? pyConfigToFrontend(t.config) : {},
+    config: feCfg,
   };
 });
 ipcMain.handle('templates:save', async (_, t) => {
@@ -466,16 +496,17 @@ ipcMain.handle('templates:save', async (_, t) => {
     id: t.id || '',
     template_id: t.id || '',
     name: t.name,
-    description: t.description,
+    description: t.description || '',
     mode: feConfig.uploadToServer ? 'server' : (feConfig.uploadAfterBuild === false ? 'local' : 'svn'),
     config: feConfig ? frontendConfigToPy(feConfig) : {},
   };
   const result = await runPython('template-save', pyTemplate);
+  const savedObj = result.template || result;
   return {
-    id: result.template_id || result.id || t.id,
-    name: result.name || t.name,
-    description: result.description || t.description,
-    config: t.config || {},
+    id: savedObj.template_id || savedObj.id || t.id,
+    name: savedObj.name || t.name,
+    description: savedObj.description || t.description,
+    config: savedObj.config ? pyConfigToFrontend(savedObj.config) : (t.config || {}),
   };
 });
 ipcMain.handle('templates:delete', async (_, id) => { await runPython('template-delete', { id }); return true; });
@@ -522,6 +553,51 @@ ipcMain.handle('history:get', async (_, id) => {
     hospitalName: cfgSnap.hospital_name || r.hospital_name || r.hospitalName || '',
     orderNo: cfgSnap.order_no || r.order_no || r.orderNo || '',
   };
+});
+
+// mock query proxy request (Node http/https backend)
+const http = require('http');
+const https = require('https');
+
+ipcMain.handle('mock-query:request', async (_, { url: fullUrl, method = 'GET', body = null }) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const parsed = new URL(fullUrl);
+      const requestLib = parsed.protocol === 'https:' ? https : http;
+      const headers = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MockQueryTool/1.0',
+      };
+      let bodyData = null;
+      if (body) {
+        bodyData = typeof body === 'string' ? body : JSON.stringify(body);
+        headers['Content-Length'] = Buffer.byteLength(bodyData);
+      }
+      const req = requestLib.request(parsed, { method: method || 'GET', headers }, (res) => {
+        let chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          const dataStr = Buffer.concat(chunks).toString('utf-8');
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const parsedData = JSON.parse(dataStr);
+              const finalData = parsedData.data !== undefined ? parsedData.data : parsedData;
+              resolve(finalData);
+            } catch (e) {
+              resolve(dataStr);
+            }
+          } else {
+            reject(new Error(`远程服务器返回错误 ${res.statusCode}: ${dataStr.substring(0, 200)}`));
+          }
+        });
+      });
+      req.on('error', (err) => reject(err));
+      if (bodyData) req.write(bodyData);
+      req.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
 });
 
 // dialogs

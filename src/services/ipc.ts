@@ -76,6 +76,9 @@ export const ipc = {
   chooseExecutable: (currentPath?: string): Promise<string> =>
     window.tool.chooseExecutable(currentPath),
 
+  createOrderDir: (payload: Record<string, unknown>): Promise<{ success: boolean; message: string; dir?: string; excel?: string }> =>
+    (window.tool as any).createOrderDir(toPlainObject(payload)),
+
   startRun: (payload: Record<string, unknown>): Promise<boolean> =>
     window.tool.startRun(toPlainObject(payload)),
 
@@ -98,4 +101,9 @@ export const ipc = {
   listHistory: (): Promise<ExecutionRecord[]> => window.tool.listHistory(),
 
   getHistory: (id: string): Promise<ExecutionRecord> => window.tool.getHistory(id),
+
+  mockQueryRequest: (url: string, method = 'GET', body?: unknown): Promise<unknown> =>
+    (window.tool as any).mockQueryRequest
+      ? (window.tool as any).mockQueryRequest(toPlainObject({ url, method, body }))
+      : Promise.reject(new Error('IPC unavailable')),
 }

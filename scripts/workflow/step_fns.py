@@ -174,6 +174,12 @@ def step_build(ctx: StepContext) -> StepResult:
         or ctx.config.get("buildCommand")
         or "deploy.sh"
     )
+    artifact_paths = (
+        ctx.extra.get("artifact_paths")
+        or ctx.config.get("project_artifact_paths", {}).get(ctx.project_name)
+        or ctx.config.get("artifact_paths")
+        or ["dist"]
+    )
     use_cache = ctx.config.get("use_build_cache", False)
 
     input_hash = ""
@@ -200,6 +206,7 @@ def step_build(ctx: StepContext) -> StepResult:
             ctx.project_path,
             bash_exe=bash_path,
             build_command=build_cmd,
+            artifact_paths=artifact_paths,
             on_line=lambda line: emit("log", {"level": "info", "message": line, "project": ctx.project_name}),
         )
         if artifact:
@@ -214,7 +221,7 @@ def step_build(ctx: StepContext) -> StepResult:
             )
         return StepResult(
             success=False,
-            message="打包完成但未找到产物 (dist/*.tar.gz)",
+            message="打包完成但未找到产物压缩包",
         )
     except BuildError as exc:
         return StepResult(success=False, message=f"打包失败: {exc}")
@@ -225,7 +232,7 @@ def step_build(ctx: StepContext) -> StepResult:
 # ---------------------------------------------------------------------------
 
 def step_select_artifact(ctx: StepContext) -> StepResult:
-    """Select the latest dist/*.tar.gz as the build artifact."""
+    """Select the latest tarball in candidate paths as the build artifact."""
     from git.build import latest_artifact
 
     if ctx.artifact_path and ctx.artifact_path.is_file():
@@ -234,7 +241,13 @@ def step_select_artifact(ctx: StepContext) -> StepResult:
             message=f"已选择产物: {ctx.artifact_path.name}",
         )
 
-    artifact = latest_artifact(ctx.project_path)
+    artifact_paths = (
+        ctx.extra.get("artifact_paths")
+        or ctx.config.get("project_artifact_paths", {}).get(ctx.project_name)
+        or ctx.config.get("artifact_paths")
+        or ["dist"]
+    )
+    artifact = latest_artifact(ctx.project_path, candidate_paths=artifact_paths)
     if artifact:
         ctx.artifact_path = artifact
         return StepResult(

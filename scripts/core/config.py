@@ -95,12 +95,15 @@ def default_config() -> dict[str, Any]:
             "password": "",
         },
         "local_output": str(DATA_DIR / "local-output"),
+        "order_dir_path": "",
         "auto_pull": True,
         "auto_install_deps": True,
         "skip_svn_commit": False,
         "node_required_version": "14.21.3",
         "build_command": DEFAULT_BUILD_COMMAND,
         "build_commands": dict(DEFAULT_BUILD_COMMANDS),
+        "artifact_paths": ["dist"],
+        "project_artifact_paths": {},
         "server_upload_paths": dict(DEFAULT_SERVER_UPLOAD_PATHS),
     }
 
@@ -122,6 +125,13 @@ def normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
     if config["mode"] not in ("svn", "server", "local"):
         config["mode"] = "svn"
 
+    # Normalize order_dir_path
+    raw_order_dir = raw.get("order_dir_path")
+    if raw_order_dir and isinstance(raw_order_dir, str):
+        config["order_dir_path"] = raw_order_dir.strip()
+    else:
+        config["order_dir_path"] = ""
+
     # Normalize build_command (global fallback)
     raw_build_cmd = raw.get("build_command")
     if raw_build_cmd and isinstance(raw_build_cmd, str) and raw_build_cmd.strip():
@@ -137,6 +147,28 @@ def normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
         merged_cmds = dict(DEFAULT_BUILD_COMMANDS)
         merged_cmds.update({k: str(v).strip() for k, v in build_commands.items() if str(v).strip()})
         config["build_commands"] = merged_cmds
+
+    # Normalize artifact_paths list
+    raw_art_paths = config.get("artifact_paths")
+    if isinstance(raw_art_paths, str):
+        config["artifact_paths"] = [p.strip() for p in raw_art_paths.replace(";", ",").split(",") if p.strip()]
+    elif isinstance(raw_art_paths, list):
+        config["artifact_paths"] = [str(p).strip() for p in raw_art_paths if str(p).strip()]
+    else:
+        config["artifact_paths"] = ["dist"]
+    if not config["artifact_paths"]:
+        config["artifact_paths"] = ["dist"]
+
+    # Normalize project_artifact_paths dict
+    proj_art_paths = config.get("project_artifact_paths")
+    if not isinstance(proj_art_paths, dict):
+        config["project_artifact_paths"] = {}
+    else:
+        config["project_artifact_paths"] = {
+            k: (str(v).strip() if isinstance(v, str) else ", ".join(v) if isinstance(v, list) else str(v))
+            for k, v in proj_art_paths.items()
+            if v
+        }
 
     # Normalize server_upload_paths dict
     server_paths = config.get("server_upload_paths")

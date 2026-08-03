@@ -29,24 +29,72 @@ def get_commit_sha(project_path: Path | str) -> str:
     return ""
 
 
+def resolve_candidate_dirs(
+    project_path: Path | str,
+    candidate_paths: list[str] | str | None = None,
+) -> list[Path]:
+    """Return list of candidate output directory Paths for a project.
+
+    `candidate_paths` can be a list of relative strings (e.g. ['dist', 'build', 'target'])
+    or a comma/semicolon separated string ('dist, build, target').
+    Defaults to ['dist'] if empty or None.
+    """
+    project = Path(project_path)
+    if candidate_paths is None:
+        raw_list = ["dist"]
+    elif isinstance(candidate_paths, str):
+        raw_list = [p.strip() for p in candidate_paths.replace(";", ",").split(",") if p.strip()]
+    else:
+        raw_list = [str(p).strip() for p in candidate_paths if str(p).strip()]
+
+    if not raw_list:
+        raw_list = ["dist"]
+
+    dirs = []
+    for rel_p in raw_list:
+        p = project / rel_p
+        dirs.append(p)
+    return dirs
+
+
+def _find_all_tarballs(
+    project_path: Path | str,
+    candidate_paths: list[str] | str | None = None,
+) -> list[Path]:
+    """Find all tarballs / zip files in candidate output directories."""
+    project = Path(project_path)
+    dirs = resolve_candidate_dirs(project, candidate_paths)
+    found: list[Path] = []
+    seen: set[Path] = set()
+
+    for d in dirs:
+        if d.is_dir():
+            for ext in ("*.tar.gz", "*.tgz", "*.tar", "*.zip"):
+                for tb in d.glob(ext):
+                    if tb not in seen:
+                        seen.add(tb)
+                        found.append(tb)
+        elif d.is_file() and d.suffix.lower() in (".gz", ".tgz", ".tar", ".zip"):
+            if d not in seen:
+                seen.add(d)
+                found.append(d)
+
+    found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return found
+
+
 def build_project(
     project_path: Path | str,
     *,
     bash_exe: str = "bash",
     build_command: str = "deploy.sh",
+    artifact_paths: list[str] | str | None = None,
     on_line: Optional[callable] = None,
 ) -> tuple[subprocess.CompletedProcess, Optional[Path]]:
     """Run the configured build command/script in the project directory.
 
     Returns (completed_process, artifact_path) where artifact_path is
-    the newest ``dist/*.tar.gz`` produced by *this* build.
-
-    Raises
-    ------
-    BuildError
-        If the build script is not found, fails, or finishes without producing
-        a fresh ``dist/*.tar.gz`` (a pre-existing tarball is never
-        accepted as the build result).
+    the newest tarball produced by *this* build in the candidate search paths.
     """
     project = Path(project_path)
     cmd_str = (build_command or "deploy.sh").strip()
@@ -105,8 +153,8 @@ def build_project(
         else:
             run_cmd = parts
 
-    # Capture a snapshot of the dist/ directory before the build starts
-    pre_snapshot = artifact_snapshot(project)
+    # Capture a snapshot of candidate directories before the build starts
+    pre_snapshot = artifact_snapshot(project, candidate_paths=artifact_paths)
     build_start = time.time()
 
     logger.info("Running build command '%s' in %s", cmd_str, project)
@@ -138,17 +186,18 @@ def build_project(
         )
 
     # Find the newest tar.gz that changed during the build
-    artifact = latest_changed_artifact(project, pre_snapshot)
+    artifact = latest_changed_artifact(project, pre_snapshot, candidate_paths=artifact_paths)
 
     # Also accept a tarball rewritten during this build with identical
     # content (reproducible build) - freshness is proven by its mtime.
     if not artifact:
-        artifact = _fresh_artifact(project, build_start)
+        artifact = _fresh_artifact(project, build_start, candidate_paths=artifact_paths)
 
     # Never fall back to a pre-existing tarball
     if not artifact:
+        searched_dirs = ", ".join(str(p.relative_to(project) if p.is_relative_to(project) else p.name) for p in resolve_candidate_dirs(project, artifact_paths))
         raise BuildError(
-            f"打包命令 '{cmd_str}' 执行结束，但 dist/ 中没有产生新的 .tar.gz 产物。"
+            f"打包命令 '{cmd_str}' 执行结束，但在搜索路径 [{searched_dirs}] 中没有产生新的压缩包 (.tar.gz / .zip)。"
             "构建可能已静默失败，请检查上面的构建日志。"
             + (f"\n输出尾部: {result.stdout[-300:]}" if result.stdout else "")
         )
@@ -156,14 +205,13 @@ def build_project(
     return result, artifact
 
 
-def _fresh_artifact(project_path: Path | str, since: float) -> Optional[Path]:
-    """Return the newest dist/*.tar.gz modified at or after *since*."""
-    project = Path(project_path)
-    dist_dir = project / "dist"
-    if not dist_dir.is_dir():
-        return None
-
-    tarballs = sorted(dist_dir.glob("*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+def _fresh_artifact(
+    project_path: Path | str,
+    since: float,
+    candidate_paths: list[str] | str | None = None,
+) -> Optional[Path]:
+    """Return the newest tarball modified at or after *since*."""
+    tarballs = _find_all_tarballs(project_path, candidate_paths)
     for tb in tarballs:
         # 1s tolerance for filesystem mtime granularity
         if tb.stat().st_mtime >= since - 1:
@@ -171,20 +219,12 @@ def _fresh_artifact(project_path: Path | str, since: float) -> Optional[Path]:
     return None
 
 
-def fix_known_bad_deploy_tar(project_path: Path | str) -> Optional[Path]:
-    """Attempt to fix a known issue where deploy.sh produces a bad tar.
-
-    Some projects have a deploy.sh that creates a tar.gz with incorrect
-    paths.  This function detects and fixes that case.
-
-    Returns the fixed artifact path, or None if no fix was needed.
-    """
-    project = Path(project_path)
-    dist_dir = project / "dist"
-    if not dist_dir.is_dir():
-        return None
-
-    tarballs = sorted(dist_dir.glob("*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+def fix_known_bad_deploy_tar(
+    project_path: Path | str,
+    candidate_paths: list[str] | str | None = None,
+) -> Optional[Path]:
+    """Attempt to fix a known issue where deploy.sh produces a bad tar."""
+    tarballs = _find_all_tarballs(project_path, candidate_paths)
     if not tarballs:
         return None
 
@@ -194,33 +234,32 @@ def fix_known_bad_deploy_tar(project_path: Path | str) -> Optional[Path]:
         r = run_process(["tar", "-tzf", str(newest)])
         if r.returncode == 0:
             entries = r.stdout.strip().split("\n")
-            # If all entries start with a known bad prefix, flag it
             if entries and all(e.startswith("dist/") for e in entries[:5]):
                 logger.warning("Known bad tar format detected in %s", newest)
-                # Could re-pack here; for now just log
     except Exception:
         pass
     return newest
 
 
-def artifact_snapshot(project_path: Path | str) -> dict[str, str]:
-    """Return a snapshot of the current dist/ directory state.
+def artifact_snapshot(
+    project_path: Path | str,
+    candidate_paths: list[str] | str | None = None,
+) -> dict[str, str]:
+    """Return a snapshot of tarballs in candidate directories.
 
-    Returns dict mapping filename -> sha256 for each tar.gz in dist/.
+    Returns dict mapping relative_filepath -> sha256.
     """
     project = Path(project_path)
-    dist_dir = project / "dist"
+    tarballs = _find_all_tarballs(project, candidate_paths)
     snapshot: dict[str, str] = {}
 
-    if not dist_dir.is_dir():
-        return snapshot
-
-    for tarball in dist_dir.glob("*.tar.gz"):
+    for tarball in tarballs:
         h = hashlib.sha256()
         with open(tarball, "rb") as f:
             for chunk in iter(lambda: f.read(8192), b""):
                 h.update(chunk)
-        snapshot[tarball.name] = h.hexdigest()
+        rel_key = str(tarball.relative_to(project)) if tarball.is_relative_to(project) else tarball.name
+        snapshot[rel_key] = h.hexdigest()
 
     return snapshot
 
@@ -228,33 +267,30 @@ def artifact_snapshot(project_path: Path | str) -> dict[str, str]:
 def latest_changed_artifact(
     project_path: Path | str,
     before_snapshot: dict[str, str],
+    candidate_paths: list[str] | str | None = None,
 ) -> Optional[Path]:
-    """Return the newest tar.gz that differs from the before snapshot."""
+    """Return the newest tarball across candidate dirs that differs from before_snapshot."""
     project = Path(project_path)
-    dist_dir = project / "dist"
-    if not dist_dir.is_dir():
-        return None
+    tarballs = _find_all_tarballs(project, candidate_paths)
 
-    tarballs = sorted(dist_dir.glob("*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
     for tb in tarballs:
         h = hashlib.sha256()
         with open(tb, "rb") as f:
             for chunk in iter(lambda: f.read(8192), b""):
                 h.update(chunk)
         current_hash = h.hexdigest()
-        if before_snapshot.get(tb.name) != current_hash:
+        rel_key = str(tb.relative_to(project)) if tb.is_relative_to(project) else tb.name
+        if before_snapshot.get(rel_key) != current_hash:
             return tb
     return None
 
 
-def latest_artifact(project_path: Path | str) -> Optional[Path]:
-    """Return the newest tar.gz in dist/, or None."""
-    project = Path(project_path)
-    dist_dir = project / "dist"
-    if not dist_dir.is_dir():
-        return None
-
-    tarballs = sorted(dist_dir.glob("*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+def latest_artifact(
+    project_path: Path | str,
+    candidate_paths: list[str] | str | None = None,
+) -> Optional[Path]:
+    """Return the newest tarball across candidate output directories, or None."""
+    tarballs = _find_all_tarballs(project_path, candidate_paths)
     return tarballs[0] if tarballs else None
 
 

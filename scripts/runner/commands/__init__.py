@@ -16,4 +16,5 @@ from runner.commands import (  # noqa: F401
     history_cmd,
     template_cmd,
     affected_cmd,
+    order_dir_cmd,
 )

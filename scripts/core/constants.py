@@ -1,59 +1,56 @@
 # -*- coding: utf-8 -*-
 """Module-level constants, dataclasses, and workflow definitions."""
-from dataclasses import dataclass, field
+import os
+from dataclasses import dataclass
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent.parent.parent
-CONFIG_PATH = APP_DIR / "references" / "tool-config.json"
+_DATA_DIR_ENV = os.environ.get("ZBUILD_DATA_DIR")
+DATA_DIR = Path(_DATA_DIR_ENV).resolve() if _DATA_DIR_ENV else APP_DIR
+CONFIG_PATH = (
+    DATA_DIR / "tool-config.json"
+    if _DATA_DIR_ENV
+    else APP_DIR / "references" / "tool-config.json"
+)
 PROJECT_DEFAULTS_PATH = APP_DIR / "references" / "project-defaults.json"
-BUILD_HISTORY_PATH = APP_DIR / "references" / "build-history.json"
-DEBUG_LOG_PATH = APP_DIR / "tmp" / "python-tool-debug.log"
-HISTORY_DIR = APP_DIR / "references" / "history"
-TEMPLATES_DIR = APP_DIR / "references" / "templates"
+BUILD_HISTORY_PATH = (
+    DATA_DIR / "build-history.json"
+    if _DATA_DIR_ENV
+    else APP_DIR / "references" / "build-history.json"
+)
+DEBUG_LOG_PATH = (
+    DATA_DIR / "logs" / "python-tool-debug.log"
+    if _DATA_DIR_ENV
+    else APP_DIR / "tmp" / "python-tool-debug.log"
+)
+HISTORY_DIR = DATA_DIR / "history" if _DATA_DIR_ENV else APP_DIR / "references" / "history"
+TEMPLATES_DIR = (
+    DATA_DIR / "templates" if _DATA_DIR_ENV else APP_DIR / "references" / "templates"
+)
 APP_ICON_PATH = APP_DIR / "assets" / "app.ico"
 UPGRADE_DOC_NAME = "全部升级说明.docx"
 UPGRADE_DOC_PATH = APP_DIR / UPGRADE_DOC_NAME
 DEFAULT_SVN_ROOT = "https://10.1.1.120/svn/智慧病房特殊订单"
-
-WORKFLOW_STEPS = [
-    "检查 Git/Bash/SVN 工具",
-    "切换 Git 分支",
-    "拉取当前分支最新代码",
-    "检查并安装项目依赖",
-    "执行 deploy.sh 打包",
-    "选择最新 dist/*.tar.gz",
-    "检查并创建 SVN 目录",
-    "上传产物到 SVN",
-    "SVN 提交完成",
-]
-
-WORKFLOW_STEPS_SERVER = [
-    "检查 Git/Bash 工具",
-    "切换 Git 分支",
-    "拉取当前分支最新代码",
-    "检查并安装项目依赖",
-    "执行 deploy.sh 打包",
-    "选择最新 dist/*.tar.gz",
-    "上传产物到服务器",
-]
-
-WORKFLOW_STEPS_LOCAL = [
-    "检查 Git/Bash/SVN 工具",
-    "切换 Git 分支",
-    "拉取当前分支最新代码",
-    "检查并安装项目依赖",
-    "执行 deploy.sh 打包",
-    "选择最新 dist/*.tar.gz",
-    "跳过 SVN，准备本地输出",
-    "复制产物到本地输出目录",
-    "本地打包完成",
-]
+DEFAULT_BUILD_COMMAND = "deploy.sh"
 
 DEFAULT_SERVER_UPLOAD_PATHS = {
-    "zhbf-bedhead-frontend": "/home/data/web/a10",
-    "zhbf-fontend": "/home/data/web/a10",
     "yarward-ntv-frontend": "/home/data/web",
     "yarward-web-frontend": "/home/data/web",
+    "zbuild": "/home/data/web",
+    "zhbf-bedhead-frontend": "/home/data/web/a10",
+    "zhbf-fontend": "/home/data/web/a10",
+    "zhbf-frontend": "/home/data/web/a10",
+    "zhbf-web": "/home/data/web",
+}
+
+DEFAULT_BUILD_COMMANDS = {
+    "yarward-ntv-frontend": "deploy.sh",
+    "yarward-web-frontend": "deploy.sh",
+    "zbuild": "deploy.sh",
+    "zhbf-bedhead-frontend": "deploy.sh",
+    "zhbf-fontend": "deploy.sh",
+    "zhbf-frontend": "deploy.sh",
+    "zhbf-web": "deploy.sh",
 }
 
 
@@ -65,6 +62,8 @@ class ProjectInfo:
     current_branch: str
     branches: list[str]
     default_svn_leaf: str
+    server_upload_path: str = ""
+    build_command: str = DEFAULT_BUILD_COMMAND
 
 
 @dataclass

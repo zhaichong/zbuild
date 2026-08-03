@@ -1,71 +1,233 @@
 <template>
-  <div class="flex items-center justify-between bg-surface rounded-lg shadow-sm p-4">
+  <header class="app-header">
     <div class="flex items-center gap-4">
-      <h1 class="text-xl font-bold text-gray-800">特殊订单打包上传工具</h1>
-      <span
-        class="px-3 py-1 rounded-full text-xs font-medium"
-        :class="modeBadgeClass"
-      >
-        {{ modeLabel }}
-      </span>
+      <h1 class="text-base font-semibold tracking-wide">
+        特殊订单打包上传
+      </h1>
+      <div class="mode-switch">
+        <button
+          v-for="m in modes"
+          :key="m.value"
+          class="mode-btn"
+          :class="{ active: store.mode === m.value }"
+          @click="emit('set-mode', m.value)"
+        >
+          {{ m.label }}
+        </button>
+      </div>
     </div>
     <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2 text-sm text-gray-500">
-        <span v-for="(status, name) in toolStatuses" :key="name" class="flex items-center gap-1">
+      <!-- Tool status indicators -->
+      <div
+        class="flex items-center gap-3 text-xs"
+        style="color: rgba(255,255,255,.7)"
+      >
+        <span
+          v-for="(status, name) in toolStatuses"
+          :key="name"
+          class="flex items-center gap-1.5"
+        >
           <span
-            class="w-2 h-2 rounded-full"
-            :class="status && status.ok ? 'bg-green-500' : 'bg-red-500'"
-          ></span>
-          <span>{{ name }}</span>
+            class="w-[7px] h-[7px] rounded-full"
+            :class="status && status.ok ? 'bg-green-400' : 'bg-red-400'"
+          />
+          {{ name }}
         </span>
       </div>
+
+      <!-- Auto-detect tools button -->
       <button
-        class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        @click="showSettings = true"
-        title="系统设置"
+        class="h-[34px] px-3 rounded-lg flex items-center gap-1.5 transition-colors text-xs font-medium"
+        style="background: rgba(255,255,255,.12); color: #fff; border: none; cursor: pointer;"
+        :disabled="detecting"
+        :title="detecting ? '检测中...' : '自动检测工具路径'"
+        @click="onDetectTools"
       >
-        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <svg
+          v-if="!detecting"
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
+        <svg
+          v-else
+          class="w-4 h-4 animate-spin"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        {{ detecting ? '检测中' : '检测工具' }}
+      </button>
+
+      <!-- Server test button (only in server mode) -->
+      <button
+        v-if="store.mode === 'server'"
+        class="h-[34px] px-3 rounded-lg flex items-center gap-1.5 transition-colors text-xs font-medium"
+        :style="serverTestStyle"
+        :disabled="testingServer"
+        title="测试服务器连接"
+        @click="onTestServer"
+      >
+        <svg
+          v-if="!testingServer"
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"
+          />
+        </svg>
+        <svg
+          v-else
+          class="w-4 h-4 animate-spin"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        {{ testingServer ? '测试中' : '测试连接' }}
+      </button>
+
+      <!-- Settings button -->
+      <button
+        class="w-[34px] h-[34px] rounded-lg flex items-center justify-center transition-colors"
+        style="background: rgba(255,255,255,.12); color: #fff; border: none; cursor: pointer;"
+        title="设置"
+        @click="emit('open-settings')"
+      >
+        <svg
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+          />
+          <circle
+            cx="12"
+            cy="12"
+            r="3"
+          />
         </svg>
       </button>
     </div>
-  </div>
+  </header>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 import { useAppStore } from '@/stores/appStore'
+import { ipc } from '@/services/ipc'
+import type { UploadMode } from '@/types'
 
 const store = useAppStore()
-const showSettings = ref(false)
+const emit = defineEmits<{
+  'open-settings': []
+  'set-mode': [mode: UploadMode]
+}>()
 
-const modeLabel = computed(() => {
-  switch (store.mode) {
-    case 'svn': return 'SVN上传'
-    case 'server': return '服务器上传'
-    case 'local': return '本地输出'
-    default: return '未知'
-  }
-})
+const detecting = ref(false)
+const testingServer = ref(false)
 
-const modeBadgeClass = computed(() => {
-  switch (store.mode) {
-    case 'svn': return 'bg-blue-100 text-blue-800'
-    case 'server': return 'bg-purple-100 text-purple-800'
-    case 'local': return 'bg-gray-100 text-gray-800'
-    default: return 'bg-gray-100 text-gray-800'
-  }
-})
+const modes = [
+  { value: 'svn' as UploadMode, label: 'SVN 上传' },
+  { value: 'server' as UploadMode, label: '服务器上传' },
+  { value: 'local' as UploadMode, label: '本地输出' },
+]
 
 const toolStatuses = computed(() => {
-  if (!store.config) return {}
+  if (!store.config) return {} as Record<string, { ok: boolean }>
   return {
-    git: { ok: !!store.config.tools.git, message: store.config.tools.git || '未配置' },
-    bash: { ok: !!store.config.tools.bash, message: store.config.tools.bash || '未配置' },
-    svn: { ok: !!store.config.tools.svn, message: store.config.tools.svn || '未配置' },
+    Git: { ok: !!store.config.tools.git },
+    Bash: { ok: !!store.config.tools.bash },
+    ...(store.mode === 'svn' ? { SVN: { ok: !!store.config.tools.svn } } : {}),
   }
 })
+
+const serverTestStyle = computed(() => {
+  return {
+    background: 'rgba(255,255,255,.12)',
+    color: '#fff',
+    border: 'none',
+    cursor: 'pointer',
+  }
+})
+
+async function onDetectTools() {
+  if (!store.config || detecting.value) return
+  detecting.value = true
+  try {
+    const detection = await ipc.detectTools(JSON.parse(JSON.stringify(toRaw(store.config))))
+    if (detection.tools) {
+      const d = detection.tools as unknown as Record<string, { path?: string; version?: string } | string>
+      const getPath = (key: string) => {
+        const v = d[key]
+        return typeof v === 'string' ? v : (v && typeof v === 'object' && 'path' in v ? v.path || '' : '')
+      }
+      const git = getPath('git')
+      const bash = getPath('bash')
+      const svn = getPath('svn')
+      if (git) store.config.tools.git = git
+      if (bash) store.config.tools.bash = bash
+      if (svn && !store.config.tools.svn) store.config.tools.svn = svn
+    }
+  } catch (e) {
+    console.warn('Auto-detect tools failed:', e)
+  } finally {
+    detecting.value = false
+  }
+}
+
+async function onTestServer() {
+  if (!store.config || testingServer.value) return
+  const form = store.config.form
+  if (!form.serverAddress || !form.serverUsername) {
+    store.showToast('请先在设置中配置服务器地址和用户名', 'warning')
+    return
+  }
+  testingServer.value = true
+  try {
+    const result = await ipc.testServer(form.serverAddress, form.serverUsername, form.serverPassword)
+    if (result.success) {
+      store.showToast('服务器连接成功: ' + (result.message || 'OK'), 'success')
+    } else {
+      store.showToast('服务器连接失败: ' + (result.error || result.message || '未知错误'), 'error')
+    }
+  } catch (e: unknown) {
+    store.showToast('服务器连接测试失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+  } finally {
+    testingServer.value = false
+  }
+}
 </script>

@@ -10,7 +10,13 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from core.constants import ProjectInfo, PROJECT_DEFAULTS_PATH
+from core.constants import (
+    ProjectInfo,
+    PROJECT_DEFAULTS_PATH,
+    DEFAULT_BUILD_COMMAND,
+    DEFAULT_BUILD_COMMANDS,
+    DEFAULT_SERVER_UPLOAD_PATHS,
+)
 from core.config import load_json
 from git.branches import read_current_branch, read_branches
 
@@ -25,11 +31,17 @@ def _load_project_defaults() -> dict[str, dict]:
 
     Returns a dict keyed by project directory name, with values like::
 
-        {"default_svn_leaf": "zhbf-bedhead-frontend", ...}
+        {"defaultSvnLeaf": "zhbf-bedhead-frontend", "serverUploadPath": "/home/data/web", "buildCommand": "deploy.sh"}
     """
     if not PROJECT_DEFAULTS_PATH.exists():
         return {}
-    data = load_json(PROJECT_DEFAULTS_PATH, default={})
+    data = load_json(PROJECT_DEFAULTS_PATH, default=[])
+    if isinstance(data, list):
+        return {
+            item["projectName"]: item
+            for item in data
+            if isinstance(item, dict) and "projectName" in item
+        }
     if isinstance(data, dict):
         return data
     return {}
@@ -68,8 +80,30 @@ def discover_projects(
             logger.warning("Search directory does not exist: %s", base)
             continue
 
+        # If search_dir itself is a Git repository, discover it directly
+        if (base / ".git").exists():
+            name = base.name
+            current_branch = read_current_branch(base)
+            all_branches = read_branches(base)
+            proj_default = defaults.get(name, {})
+            default_svn_leaf = proj_default.get("defaultSvnLeaf") or proj_default.get("default_svn_leaf", name)
+            server_upload_path = proj_default.get("serverUploadPath") or proj_default.get("server_upload_path") or DEFAULT_SERVER_UPLOAD_PATHS.get(name, "")
+            build_command = proj_default.get("buildCommand") or proj_default.get("build_command") or DEFAULT_BUILD_COMMANDS.get(name, DEFAULT_BUILD_COMMAND)
+
+            projects.append(ProjectInfo(
+                name=name,
+                path=base,
+                current_branch=current_branch,
+                branches=all_branches,
+                default_svn_leaf=default_svn_leaf,
+                server_upload_path=server_upload_path,
+                build_command=build_command,
+            ))
+            logger.debug("Discovered root project: %s at %s (branch=%s)", name, base, current_branch)
+
+        # Also scan subdirectories for mono-repo / sub-project packages
         for child in sorted(base.iterdir()):
-            if not child.is_dir():
+            if not child.is_dir() or child.name == ".git":
                 continue
             git_dir = child / ".git"
             if not git_dir.exists():
@@ -78,7 +112,10 @@ def discover_projects(
             name = child.name
             current_branch = read_current_branch(child)
             all_branches = read_branches(child)
-            default_svn_leaf = defaults.get(name, {}).get("default_svn_leaf", name)
+            proj_default = defaults.get(name, {})
+            default_svn_leaf = proj_default.get("defaultSvnLeaf") or proj_default.get("default_svn_leaf", name)
+            server_upload_path = proj_default.get("serverUploadPath") or proj_default.get("server_upload_path") or DEFAULT_SERVER_UPLOAD_PATHS.get(name, "")
+            build_command = proj_default.get("buildCommand") or proj_default.get("build_command") or DEFAULT_BUILD_COMMANDS.get(name, DEFAULT_BUILD_COMMAND)
 
             projects.append(ProjectInfo(
                 name=name,
@@ -86,6 +123,8 @@ def discover_projects(
                 current_branch=current_branch,
                 branches=all_branches,
                 default_svn_leaf=default_svn_leaf,
+                server_upload_path=server_upload_path,
+                build_command=build_command,
             ))
             logger.debug("Discovered project: %s at %s (branch=%s)", name, child, current_branch)
 
@@ -105,7 +144,10 @@ def discover_single(project_path: str) -> Optional[ProjectInfo]:
     name = p.name
     current_branch = read_current_branch(p)
     all_branches = read_branches(p)
-    default_svn_leaf = defaults.get(name, {}).get("default_svn_leaf", name)
+    proj_default = defaults.get(name, {})
+    default_svn_leaf = proj_default.get("defaultSvnLeaf") or proj_default.get("default_svn_leaf", name)
+    server_upload_path = proj_default.get("serverUploadPath") or proj_default.get("server_upload_path") or DEFAULT_SERVER_UPLOAD_PATHS.get(name, "")
+    build_command = proj_default.get("buildCommand") or proj_default.get("build_command") or DEFAULT_BUILD_COMMANDS.get(name, DEFAULT_BUILD_COMMAND)
 
     return ProjectInfo(
         name=name,
@@ -113,4 +155,6 @@ def discover_single(project_path: str) -> Optional[ProjectInfo]:
         current_branch=current_branch,
         branches=all_branches,
         default_svn_leaf=default_svn_leaf,
+        server_upload_path=server_upload_path,
+        build_command=build_command,
     )

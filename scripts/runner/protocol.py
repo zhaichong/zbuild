@@ -13,16 +13,16 @@ from typing import Any, Optional
 
 
 def read_stdin_json() -> dict[str, Any]:
-    """Read a single JSON object from stdin and return it as a dict.
+    """Read a JSON object from stdin and return it as a dict.
 
-    Blocks until a complete line is available.  Returns an empty dict
-    if stdin is closed or the payload is not valid JSON.
+    Reads until EOF or newline to support both stream and single-shot payloads.
+    Returns an empty dict if stdin is closed or the payload is not valid JSON.
     """
     try:
-        line = sys.stdin.readline()
-        if not line:
+        raw = sys.stdin.read()
+        if not raw.strip():
             return {}
-        return json.loads(line.strip())
+        return json.loads(raw.strip())
     except (json.JSONDecodeError, EOFError, OSError):
         return {}
 
@@ -37,7 +37,7 @@ def emit(event: str, data: Optional[dict[str, Any]] = None) -> None:
     data:
         Optional payload dictionary.
     """
-    msg = {"event": event}
+    msg = {"type": event}
     if data:
         msg.update(data)
     try:
@@ -47,14 +47,20 @@ def emit(event: str, data: Optional[dict[str, Any]] = None) -> None:
         pass
 
 
-def emit_log(message: str, level: str = "info") -> None:
+def emit_log(message: str, level: str = "info", project: str = "") -> None:
     """Convenience: emit a log event."""
-    emit("log", {"level": level, "message": message})
+    payload: dict[str, Any] = {"level": level, "message": message}
+    if project:
+        payload["project"] = project
+    emit("log", payload)
 
 
-def emit_error(message: str) -> None:
+def emit_error(message: str, project: str = "") -> None:
     """Convenience: emit an error event."""
-    emit("error", {"message": message})
+    payload: dict[str, Any] = {"message": message}
+    if project:
+        payload["project"] = project
+    emit("error", payload)
 
 
 def emit_result(success: bool, data: Optional[dict[str, Any]] = None) -> None:
@@ -65,17 +71,23 @@ def emit_result(success: bool, data: Optional[dict[str, Any]] = None) -> None:
     emit("result", payload)
 
 
-def emit_step_start(step_name: str, step_index: int = 0) -> None:
+def emit_step_start(step_name: str, step_index: int = 0, project: str = "") -> None:
     """Convenience: emit a step-start event."""
-    emit("step-start", {"step": step_name, "index": step_index})
+    payload: dict[str, Any] = {"step": step_name, "index": step_index}
+    if project:
+        payload["project"] = project
+    emit("step-start", payload)
 
 
 def emit_step_end(step_name: str, success: bool, message: str = "",
-                  step_index: int = 0) -> None:
+                  step_index: int = 0, project: str = "") -> None:
     """Convenience: emit a step-end event."""
-    emit("step-end", {
+    payload: dict[str, Any] = {
         "step": step_name,
         "index": step_index,
         "success": success,
         "message": message,
-    })
+    }
+    if project:
+        payload["project"] = project
+    emit("step-end", payload)

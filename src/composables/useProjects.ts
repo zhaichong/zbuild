@@ -1,12 +1,13 @@
+import { toRaw } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import type { ProjectInfo, LocalChangeSummary } from '@/types'
 
 export async function refreshProjects(): Promise<ProjectInfo[]> {
   const store = useAppStore()
-  if (!store.config) return []
+  if (!store.config || !store.config.rootPath) return []
 
-  const projects = await ipc.discoverProjects(store.config.rootPath, store.config.tools)
+  const projects = await ipc.discoverProjects(store.config.rootPath, JSON.parse(JSON.stringify(toRaw(store.config.tools))))
   store.projects = projects
 
   for (const project of projects) {
@@ -14,8 +15,20 @@ export async function refreshProjects(): Promise<ProjectInfo[]> {
     if (project.defaultSvnLeaf) {
       store.projectSvnLeaves[project.projectName] = project.defaultSvnLeaf
     }
-    if (project.serverUploadPath) {
-      store.projectServerPaths[project.projectName] = project.serverUploadPath
+    const serverPath =
+      store.config.serverUploadPaths?.[project.projectName] ||
+      project.serverUploadPath ||
+      ''
+    if (serverPath) {
+      store.projectServerPaths[project.projectName] = serverPath
+    }
+    const buildCmd =
+      store.config.buildCommands?.[project.projectName] ||
+      project.buildCommand ||
+      store.config.buildCommand ||
+      'deploy.sh'
+    if (buildCmd) {
+      store.projectBuildCommands[project.projectName] = buildCmd
     }
   }
 
@@ -31,14 +44,19 @@ export async function refreshBranches(projectName: string): Promise<ProjectInfo>
 
   const updated = await ipc.refreshProjectBranches(
     project.repoPath,
-    store.config.tools,
-    store.config.serverUploadPaths,
+    JSON.parse(JSON.stringify(toRaw(store.config.tools))),
+    JSON.parse(JSON.stringify(toRaw(store.config.serverUploadPaths || {}))),
   )
 
   const index = store.projects.findIndex((p) => p.projectName === projectName)
   if (index >= 0) {
-    store.projects[index] = updated
-    store.projectBranches[projectName] = updated.currentBranch
+    const existing = store.projects[index]
+    store.projects[index] = {
+      ...existing,
+      branches: updated.branches.length > 0 ? updated.branches : existing.branches,
+      currentBranch: updated.currentBranch || existing.currentBranch,
+    }
+    store.projectBranches[projectName] = store.projects[index].currentBranch
   }
 
   return updated
@@ -50,5 +68,5 @@ export async function checkLocalChanges(
   const store = useAppStore()
   if (!store.config) return []
 
-  return await ipc.checkLocalChanges(store.config.rootPath, store.config.tools, projects)
+  return await ipc.checkLocalChanges(store.config.rootPath, JSON.parse(JSON.stringify(toRaw(store.config.tools))), projects)
 }

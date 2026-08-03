@@ -9,6 +9,11 @@ const countTextEl = document.getElementById('countText') as HTMLDivElement
 const dismissBtn = document.getElementById('dismissBtn') as HTMLButtonElement
 
 function updateUI(status: MiniStatus) {
+  const container = document.querySelector('.container')
+  if (container) {
+    container.className = `container ${status.state}`
+  }
+
   if (status.state === 'running') {
     titleEl.textContent = `正在处理: ${status.currentProject || '...'}`
     messageEl.textContent = status.message || '执行中...'
@@ -17,7 +22,7 @@ function updateUI(status: MiniStatus) {
     progressTextEl.textContent = `${status.completed} / ${status.total}`
     resultTextEl.style.display = 'none'
     countTextEl.textContent = `成功: ${status.successCount} | 失败: ${status.failureCount}`
-  } else if (status.state === 'success') {
+  } else if (status.state === 'complete') {
     titleEl.textContent = '执行完成'
     messageEl.textContent = '所有任务已成功完成'
     progressBarEl.style.width = '100%'
@@ -26,7 +31,7 @@ function updateUI(status: MiniStatus) {
     resultTextEl.className = 'result success'
     resultTextEl.textContent = `✓ 成功: ${status.successCount}`
     countTextEl.textContent = ''
-  } else if (status.state === 'failed') {
+  } else if (status.state === 'error') {
     titleEl.textContent = '执行失败'
     messageEl.textContent = status.message || '部分任务失败'
     progressBarEl.style.width = '100%'

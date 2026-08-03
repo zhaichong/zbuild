@@ -112,7 +112,7 @@ def get_steps(mode: str) -> list[StepDefinition]:
             StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1),
             StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0),
             StepDefinition(name="检查并安装项目依赖", fn=step_install_deps, max_retries=1),
-            StepDefinition(name="执行 deploy.sh 打包", fn=step_build, max_retries=1),
+            StepDefinition(name="执行项目打包", fn=step_build, max_retries=1),
             StepDefinition(name="选择最新 dist/*.tar.gz", fn=step_select_artifact, max_retries=0),
             StepDefinition(name="上传产物到服务器", fn=step_upload_server, max_retries=3, retry_delay=5.0),
         ]
@@ -122,7 +122,7 @@ def get_steps(mode: str) -> list[StepDefinition]:
             StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1),
             StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0),
             StepDefinition(name="检查并安装项目依赖", fn=step_install_deps, max_retries=1),
-            StepDefinition(name="执行 deploy.sh 打包", fn=step_build, max_retries=1),
+            StepDefinition(name="执行项目打包", fn=step_build, max_retries=1),
             StepDefinition(name="选择最新 dist/*.tar.gz", fn=step_select_artifact, max_retries=0),
             StepDefinition(name="跳过 SVN，准备本地输出", fn=lambda ctx: StepResult(success=True, message="Local mode"), max_retries=0),
             StepDefinition(name="复制产物到本地输出目录", fn=step_copy_local, max_retries=1),
@@ -135,7 +135,7 @@ def get_steps(mode: str) -> list[StepDefinition]:
             StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1),
             StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0),
             StepDefinition(name="检查并安装项目依赖", fn=step_install_deps, max_retries=1),
-            StepDefinition(name="执行 deploy.sh 打包", fn=step_build, max_retries=1),
+            StepDefinition(name="执行项目打包", fn=step_build, max_retries=1),
             StepDefinition(name="选择最新 dist/*.tar.gz", fn=step_select_artifact, max_retries=0),
             StepDefinition(name="上传产物到 SVN", fn=step_upload_svn, max_retries=2, retry_delay=5.0),
         ]

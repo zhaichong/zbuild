@@ -1,51 +1,74 @@
+import { toRaw } from 'vue'
 import type {
   AppConfig,
   ToolPaths,
   ToolDetectionResult,
   ProjectInfo,
   LocalChangeSummary,
+  AffectedProjectsResult,
   TaskTemplate,
   ExecutionRecord,
+  RunEvent,
 } from '@/types'
+
+/** Convert Vue proxy or reactive objects to plain JS objects for contextBridge structured-clone compatibility */
+function toPlainObject<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj
+  return JSON.parse(JSON.stringify(toRaw(obj)))
+}
 
 export const ipc = {
   getConfig: (): Promise<AppConfig> => window.tool.getConfig(),
 
-  saveConfig: (config: AppConfig): Promise<AppConfig> => window.tool.saveConfig(config),
+  saveConfig: (config: AppConfig): Promise<AppConfig> => window.tool.saveConfig(toPlainObject(config)),
 
   detectTools: (config: Partial<AppConfig>): Promise<ToolDetectionResult> =>
-    window.tool.detectTools(config),
+    window.tool.detectTools(toPlainObject(config)),
 
   discoverProjects: (rootPath: string, tools: ToolPaths): Promise<ProjectInfo[]> =>
-    window.tool.discoverProjects({ rootPath, tools }),
+    window.tool.discoverProjects(toPlainObject({ rootPath, tools })),
 
   refreshProjectBranches: (
     repoPath: string,
     tools: ToolPaths,
     serverUploadPaths?: Record<string, string>,
   ): Promise<ProjectInfo> =>
-    window.tool.refreshProjectBranches({ repoPath, tools, serverUploadPaths }),
+    window.tool.refreshProjectBranches(toPlainObject({ repoPath, tools, serverUploadPaths })),
 
   checkLocalChanges: (
     rootPath: string,
     tools: ToolPaths,
     projects: Array<{ project: string; branch: string }>,
   ): Promise<LocalChangeSummary[]> =>
-    window.tool.checkLocalChanges({ rootPath, tools, projects }),
+    window.tool.checkLocalChanges(toPlainObject({ rootPath, tools, projects })),
+
+  detectAffected: (
+    repoPath: string,
+    searchDirs: string[],
+    baseRef?: string,
+    headRef?: string,
+  ): Promise<AffectedProjectsResult> =>
+    window.tool.detectAffected(toPlainObject({ repoPath, searchDirs, baseRef, headRef })),
+
+  detectAffectedStaged: (
+    repoPath: string,
+    searchDirs: string[],
+  ): Promise<{ affectedProjects: string[] }> =>
+    window.tool.detectAffectedStaged(toPlainObject({ repoPath, searchDirs })),
 
   svnList: (
     svn: string,
     url: string,
     username: string,
     password: string,
-  ): Promise<string[]> => window.tool.svnList({ svn, url, username, password }),
+  ): Promise<string[]> => window.tool.svnList(toPlainObject({ svn, url, username, password })),
 
   testServer: (
     serverAddress: string,
     serverUsername: string,
     serverPassword: string,
-  ): Promise<{ ok: boolean; message: string }> =>
-    window.tool.testServer({ serverAddress, serverUsername, serverPassword }),
+  ): Promise<{ success: boolean; message?: string; error?: string }> =>
+    window.tool.testServer(toPlainObject({ serverAddress, serverUsername, serverPassword })),
 
   chooseDirectory: (currentPath?: string): Promise<string> =>
     window.tool.chooseDirectory(currentPath),
@@ -54,11 +77,11 @@ export const ipc = {
     window.tool.chooseExecutable(currentPath),
 
   startRun: (payload: Record<string, unknown>): Promise<boolean> =>
-    window.tool.startRun(payload),
+    window.tool.startRun(toPlainObject(payload)),
 
   stopRun: (): Promise<boolean> => window.tool.stopRun(),
 
-  onRunEvent: (handler: (event: any) => void): (() => void) => window.tool.onRunEvent(handler),
+  onRunEvent: (handler: (event: RunEvent) => void): (() => void) => window.tool.onRunEvent(handler),
 
   onRunExit: (handler: (event: { code: number }) => void): (() => void) =>
     window.tool.onRunExit(handler),
@@ -68,7 +91,7 @@ export const ipc = {
   getTemplate: (id: string): Promise<TaskTemplate> => window.tool.getTemplate(id),
 
   saveTemplate: (template: Partial<TaskTemplate>): Promise<TaskTemplate> =>
-    window.tool.saveTemplate(template),
+    window.tool.saveTemplate(toPlainObject(template)),
 
   deleteTemplate: (id: string): Promise<void> => window.tool.deleteTemplate(id),
 

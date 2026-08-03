@@ -42,10 +42,10 @@ class BuildCache:
     # Hash computation
     # ------------------------------------------------------------------
 
-    def compute_input_hash(self, project_path: Path | str) -> str:
+    def compute_input_hash(self, project_path: Path | str, build_command: str = "deploy.sh") -> str:
         """Compute a content hash from the project's build inputs.
 
-        Combines commit SHA, deploy.sh, package.json, and lock file
+        Combines commit SHA, build command/script, package.json, and lock file
         into a single SHA-256 hash.
         """
         project = Path(project_path)
@@ -55,9 +55,18 @@ class BuildCache:
         sha = get_commit_sha(project)
         h.update(f"commit:{sha}\n".encode())
 
-        # deploy.sh
-        deploy_sh = project / "deploy.sh"
-        if deploy_sh.is_file():
+        # Build command & script content
+        cmd_str = (build_command or "deploy.sh").strip()
+        h.update(f"build_command:{cmd_str}\n".encode())
+
+        normalized_cmd = cmd_str[2:] if cmd_str.startswith(("./", ".\\")) else cmd_str
+        script_file = project / normalized_cmd
+        if script_file.is_file():
+            h.update(f"script:{normalized_cmd}:{script_file.stat().st_size}\n".encode())
+            h.update(script_file.read_bytes())
+            h.update(b"\n")
+        elif (project / "deploy.sh").is_file():
+            deploy_sh = project / "deploy.sh"
             h.update(f"deploy.sh:{deploy_sh.stat().st_size}\n".encode())
             h.update(deploy_sh.read_bytes())
             h.update(b"\n")

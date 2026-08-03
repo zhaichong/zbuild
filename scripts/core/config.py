@@ -11,7 +11,14 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
-from core.constants import CONFIG_PATH, DEBUG_LOG_PATH, APP_DIR
+from core.constants import (
+    CONFIG_PATH,
+    DEBUG_LOG_PATH,
+    DATA_DIR,
+    DEFAULT_BUILD_COMMAND,
+    DEFAULT_BUILD_COMMANDS,
+    DEFAULT_SERVER_UPLOAD_PATHS,
+)
 from core.errors import ConfigError
 
 logger = logging.getLogger(__name__)
@@ -36,8 +43,17 @@ def save_json(path: Path, data: Any) -> None:
     """Atomically write *data* as formatted JSON to *path*."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    text = json.dumps(data, ensure_ascii=False, indent=2)
+    tmp.write_text(text, encoding="utf-8")
+    try:
+        tmp.replace(path)
+    except PermissionError:
+        path.write_text(text, encoding="utf-8")
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -66,18 +82,26 @@ def default_config() -> dict[str, Any]:
     return {
         "mode": "svn",
         "projects": [],
+        "root_path": "",
         "svn_root": "https://10.1.1.120/svn/智慧病房特殊订单",
+        "svn_credentials": {
+            "username": "",
+            "password": "",
+        },
         "server": {
             "host": "",
             "port": 22,
             "username": "",
             "password": "",
         },
-        "local_output": str(APP_DIR / "local-output"),
+        "local_output": str(DATA_DIR / "local-output"),
         "auto_pull": True,
         "auto_install_deps": True,
         "skip_svn_commit": False,
         "node_required_version": "14.21.3",
+        "build_command": DEFAULT_BUILD_COMMAND,
+        "build_commands": dict(DEFAULT_BUILD_COMMANDS),
+        "server_upload_paths": dict(DEFAULT_SERVER_UPLOAD_PATHS),
     }
 
 
@@ -98,6 +122,31 @@ def normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
     if config["mode"] not in ("svn", "server", "local"):
         config["mode"] = "svn"
 
+    # Normalize build_command (global fallback)
+    raw_build_cmd = raw.get("build_command")
+    if raw_build_cmd and isinstance(raw_build_cmd, str) and raw_build_cmd.strip():
+        config["build_command"] = raw_build_cmd.strip()
+    else:
+        config["build_command"] = DEFAULT_BUILD_COMMAND
+
+    # Normalize build_commands dict
+    build_commands = config.get("build_commands")
+    if not isinstance(build_commands, dict):
+        config["build_commands"] = dict(DEFAULT_BUILD_COMMANDS)
+    else:
+        merged_cmds = dict(DEFAULT_BUILD_COMMANDS)
+        merged_cmds.update({k: str(v).strip() for k, v in build_commands.items() if str(v).strip()})
+        config["build_commands"] = merged_cmds
+
+    # Normalize server_upload_paths dict
+    server_paths = config.get("server_upload_paths")
+    if not isinstance(server_paths, dict):
+        config["server_upload_paths"] = dict(DEFAULT_SERVER_UPLOAD_PATHS)
+    else:
+        merged_paths = dict(DEFAULT_SERVER_UPLOAD_PATHS)
+        merged_paths.update({k: str(v) for k, v in server_paths.items()})
+        config["server_upload_paths"] = merged_paths
+
     # Normalize projects list
     projects = config.get("projects", [])
     if not isinstance(projects, list):
@@ -112,17 +161,25 @@ def normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
                     "branch": "",
                     "svn_leaf": proj,
                     "enabled": True,
+                    "server_upload_path": config["server_upload_paths"].get(proj, ""),
+                    "build_command": config["build_commands"].get(proj, config["build_command"]),
                 })
             elif isinstance(proj, dict):
+                p_name = proj.get("name", "")
                 normalized_projects.append({
-                    "name": proj.get("name", ""),
+                    "name": p_name,
                     "path": proj.get("path", ""),
                     "branch": proj.get("branch", ""),
-                    "svn_leaf": proj.get("svn_leaf", proj.get("name", "")),
+                    "svn_leaf": proj.get("svn_leaf", p_name),
                     "enabled": proj.get("enabled", True),
-                    "server_upload_path": proj.get("server_upload_path", ""),
+                    "server_upload_path": proj.get("server_upload_path") or config["server_upload_paths"].get(p_name, ""),
+                    "build_command": proj.get("build_command") or config["build_commands"].get(p_name, config["build_command"]),
                 })
         config["projects"] = normalized_projects
+
+    # Ensure svn_credentials sub-dict
+    if not isinstance(config.get("svn_credentials"), dict):
+        config["svn_credentials"] = defaults.get("svn_credentials", {"username": "", "password": ""})
 
     # Ensure server sub-dict
     if not isinstance(config.get("server"), dict):

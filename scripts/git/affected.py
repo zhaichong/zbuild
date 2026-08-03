@@ -46,14 +46,34 @@ def _map_file_to_project(
     project_dirs:
         Mapping of project name -> project directory path.
     """
-    for name, pdir in project_dirs.items():
-        # Check if the file is inside this project directory
+    import os
+    norm_file = os.path.normpath(file_path).lower()
+
+    # Sort projects by path length descending so subprojects match before parent/root projects
+    sorted_projects = sorted(
+        project_dirs.items(),
+        key=lambda item: len(os.path.normpath(str(item[1]))),
+        reverse=True,
+    )
+
+    for name, pdir in sorted_projects:
+        pdir_str = str(pdir).strip()
+        norm_pdir = os.path.normpath(pdir_str).lower() if pdir_str else "."
+
+        if norm_pdir in (".", ""):
+            return name
+
+        if norm_file == norm_pdir or norm_file.startswith(norm_pdir + os.sep):
+            return name
+
         try:
-            Path(file_path).relative_to(pdir.name)
+            Path(file_path).relative_to(Path(pdir))
             return name
         except ValueError:
             continue
+
     return None
+
 
 
 def find_affected_projects(

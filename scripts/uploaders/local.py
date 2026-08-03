@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from core.constants import APP_DIR
-from uploaders.base import BaseUploader, UploadResult
+from uploaders.base import BaseUploader, UploadResult, as_log_fn
 
 
 class LocalUploader(BaseUploader):
@@ -28,8 +28,10 @@ class LocalUploader(BaseUploader):
         self,
         artifact: Path,
         config: dict[str, Any],
-        log: logging.Logger,
+        log: Any = None,
+        project_name: str = "",
     ) -> UploadResult:
+        log_fn = as_log_fn(log)
         output_dir = Path(config.get("local_output", str(APP_DIR / "local-output")))
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -37,7 +39,7 @@ class LocalUploader(BaseUploader):
         file_size = artifact.stat().st_size
         start_time = time.time()
 
-        log.info("Local copy: %s -> %s", artifact.name, dest)
+        log_fn(f"正在复制产物到本地目录: {artifact.name} -> {dest}")
 
         try:
             shutil.copy2(str(artifact), str(dest))

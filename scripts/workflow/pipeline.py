@@ -41,8 +41,19 @@ class Pipeline:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
         self.config = load_config()
-        # Override config with payload values
-        self.config.update({k: v for k, v in payload.items() if v is not None})
+        # Deep merge payload into config (don't overwrite nested dicts)
+        for k, v in payload.items():
+            if v is None:
+                continue
+            if isinstance(v, dict) and isinstance(self.config.get(k), dict):
+                self.config[k].update(v)
+            else:
+                self.config[k] = v
+
+        # Override allow_stash with payload's stash field if present
+        if "stash" in payload:
+            self.config["allow_stash"] = payload["stash"]
+
         self.mode = self.config.get("mode", "svn")
         self.history_store = HistoryStore()
 
@@ -59,11 +70,44 @@ class Pipeline:
         if not projects:
             raise ValueError("No projects configured for this run")
 
+        if not any(proj.get('enabled', True) for proj in projects):
+            raise ValueError('No enabled projects configured for this run')
+
         for proj in projects:
             if not proj.get("name"):
                 raise ValueError("Each project must have a 'name'")
             if not proj.get("path"):
                 raise ValueError(f"Project '{proj.get('name')}' must have a 'path'")
+
+        # Validate credentials based on mode
+        if self.mode == "svn":
+            svn_creds = self.config.get("svn_credentials", {})
+            if not svn_creds.get("username") or not svn_creds.get("password"):
+                raise ValueError("SVN mode requires username and password in svn_credentials")
+            if not self.config.get("svn_root"):
+                raise ValueError("SVN mode requires svn_root URL")
+            if not self.config.get("hospital_name"):
+                raise ValueError("SVN mode requires hospital_name")
+            if not self.config.get("order_no"):
+                raise ValueError("SVN mode requires order_no")
+        elif self.mode == "server":
+            server = self.config.get("server", {})
+            if not server.get("host"):
+                raise ValueError("Server mode requires server host address")
+            if not server.get("username") or not server.get("password"):
+                raise ValueError("Server mode requires server username and password")
+            configured_paths = self.config.get("server_upload_paths", {})
+            missing_paths = [
+                proj["name"]
+                for proj in projects
+                if proj.get("enabled", True)
+                and not proj.get("server_upload_path")
+                and not configured_paths.get(proj["name"])
+            ]
+            if missing_paths:
+                raise ValueError(
+                    "Server mode requires an upload path for: " + ", ".join(missing_paths)
+                )
 
     # ------------------------------------------------------------------
     # Single step execution with retry
@@ -89,7 +133,7 @@ class Pipeline:
         if step_def.skip_if and step_def.skip_if(ctx):
             record.status = StepStatus.SKIPPED
             record.message = "Skipped by condition"
-            emit_step_end(step_def.name, True, "Skipped", step_index)
+            emit_step_end(step_def.name, True, "Skipped", step_index, project=ctx.project_name)
             return record
 
         max_attempts = 1 + step_def.max_retries
@@ -101,11 +145,11 @@ class Pipeline:
 
             if attempt > 1:
                 record.status = StepStatus.RETRYING
-                emit_log(f"重试 {step_def.name} (第 {attempt} 次)", level="warn")
+                emit_log(f"重试 {step_def.name} (第 {attempt} 次)", level="warning", project=ctx.project_name)
             else:
                 record.status = StepStatus.RUNNING
 
-            emit_step_start(step_def.name, step_index)
+            emit_step_start(step_def.name, step_index, project=ctx.project_name)
 
             try:
                 result = step_def.fn(ctx)
@@ -119,11 +163,11 @@ class Pipeline:
                     level="error",
                     message=str(exc),
                 ))
-                emit_step_end(step_def.name, False, str(exc), step_index)
-                emit_log(f"{step_def.name} 异常: {exc}", level="error")
+                emit_step_end(step_def.name, False, str(exc), step_index, project=ctx.project_name)
+                emit_log(f"{step_def.name} 异常: {exc}", level="error", project=ctx.project_name)
 
                 if attempt < max_attempts:
-                    emit_log(f"等待 {delay:.1f}s 后重试...", level="info")
+                    emit_log(f"等待 {delay:.1f}s 后重试...", level="info", project=ctx.project_name)
                     time.sleep(delay)
                     delay *= 2  # exponential backoff
                     continue
@@ -145,7 +189,7 @@ class Pipeline:
                         else:
                             ctx.extra[key] = val
 
-                emit_step_end(step_def.name, True, result.message, step_index)
+                emit_step_end(step_def.name, True, result.message, step_index, project=ctx.project_name)
                 return record
             else:
                 record.message = result.message
@@ -154,11 +198,11 @@ class Pipeline:
                     level="error",
                     message=result.message,
                 ))
-                emit_step_end(step_def.name, False, result.message, step_index)
-                emit_log(f"{step_def.name} 失败: {result.message}", level="error")
+                emit_step_end(step_def.name, False, result.message, step_index, project=ctx.project_name)
+                emit_log(f"{step_def.name} 失败: {result.message}", level="error", project=ctx.project_name)
 
                 if attempt < max_attempts:
-                    emit_log(f"等待 {delay:.1f}s 后重试...", level="info")
+                    emit_log(f"等待 {delay:.1f}s 后重试...", level="info", project=ctx.project_name)
                     time.sleep(delay)
                     delay *= 2
                     continue
@@ -183,12 +227,25 @@ class Pipeline:
         project_path = Path(project_config["path"])
         branch = project_config.get("branch", "")
 
-        emit_log(f"开始处理项目: {name} (分支: {branch})")
+        steps = get_steps(self.mode)
+        step_names = [s.name for s in steps]
+
+        emit_log(f"开始处理项目: {name} (分支: {branch})", project=name)
+        emit("projectStart", {"project": name, "steps": step_names})
 
         proj_record = ProjectRunRecord(
             project_name=name,
             branch=branch,
             started_at=time.time(),
+        )
+
+        build_command = (
+            project_config.get("build_command")
+            or project_config.get("buildCommand")
+            or self.config.get("build_commands", {}).get(name)
+            or self.config.get("build_command")
+            or self.config.get("buildCommand")
+            or "deploy.sh"
         )
 
         ctx = StepContext(
@@ -197,23 +254,67 @@ class Pipeline:
             branch=branch,
             mode=self.mode,
             config=self.config,
+            extra={"build_command": build_command},
         )
 
         steps = get_steps(self.mode)
         all_ok = True
+        restore_error = ""
 
-        for idx, step_def in enumerate(steps):
-            step_record = self._run_step(step_def, ctx, idx)
-            proj_record.steps.append(step_record)
+        try:
+            for idx, step_def in enumerate(steps):
+                step_record = self._run_step(step_def, ctx, idx)
+                proj_record.steps.append(step_record)
 
-            if step_record.status == StepStatus.FAILED:
-                all_ok = False
-                proj_record.error_message = step_record.message
-                emit_log(f"项目 {name} 在步骤 '{step_def.name}' 失败: {step_record.message}", level="error")
-                break
+                if step_record.status == StepStatus.FAILED:
+                    all_ok = False
+                    proj_record.error_message = step_record.message
+                    emit_log(f"项目 {name} 在步骤 '{step_def.name}' 失败: {step_record.message}", level="error", project=name)
+                    break
 
-            if step_record.status == StepStatus.SKIPPED:
-                continue
+                if step_record.status == StepStatus.SKIPPED:
+                    continue
+        finally:
+            # Only restore original branch if explicitly configured (disabled by default)
+            if self.config.get("restore_branch", False):
+                original_branch = ctx.extra.get("original_branch")
+                if original_branch:
+                    emit_log(f"正在恢复项目 {name} 到原分支 {original_branch}...", project=name)
+                    try:
+                        from git.branches import read_current_branch, safe_git
+                        from tools.exec import run_process
+                        restored = True
+                        if read_current_branch(ctx.project_path) != original_branch:
+                            checkout = run_process(
+                                safe_git(ctx.project_path) + ["checkout", original_branch]
+                            )
+                            restored = checkout.returncode == 0
+                            if not restored:
+                                restore_error = f"恢复原分支失败: {checkout.stderr or checkout.stdout}"
+                                emit_log(f"项目 {name} {restore_error}", level="warning", project=name)
+                        if restored and ctx.extra.get("stashed"):
+                            # Clean up any working-tree changes left by a failed build
+                            # (e.g. deploy.sh copies vue.config.js and may not restore it on error).
+                            # We must discard these before stash pop, otherwise git will refuse
+                            # to pop because the file would be overwritten.
+                            run_process(safe_git(ctx.project_path) + ["checkout", "--", "."])
+                            pop_res = run_process(safe_git(ctx.project_path) + ["stash", "pop"])
+                            if pop_res.returncode == 0:
+                                emit_log(f"成功还原项目 {name} 的本地修改。", project=name)
+                            else:
+                                restore_error = f"恢复本地修改失败: {pop_res.stderr or pop_res.stdout}"
+                                emit_log(f"项目 {name} {restore_error}", level="warning", project=name)
+                    except Exception as exc:
+                        restore_error = f"恢复工作区异常: {exc}"
+                        emit_log(f"项目 {name} {restore_error}", level="warning", project=name)
+
+        if restore_error:
+            all_ok = False
+            proj_record.error_message = (
+                f"{proj_record.error_message}; {restore_error}"
+                if proj_record.error_message
+                else restore_error
+            )
 
         proj_record.finished_at = time.time()
         proj_record.success = all_ok
@@ -228,7 +329,12 @@ class Pipeline:
             proj_record.artifact = artifact
 
         status_str = "成功" if all_ok else "失败"
-        emit_log(f"项目 {name} 处理{status_str}")
+        emit_log(f"项目 {name} 处理{status_str}", project=name)
+        emit("projectResult", {
+            "project": name,
+            "success": all_ok,
+            "message": proj_record.error_message or status_str,
+        })
         return proj_record
 
     # ------------------------------------------------------------------
@@ -274,6 +380,15 @@ class Pipeline:
         status_str = "成功" if all_ok else "失败"
         duration = record.duration_seconds
         emit_log(f"=== 执行{status_str} (耗时: {duration:.1f}s) ===")
+
+        success_count = sum(1 for p in record.projects if p.success)
+        failure_count = len(record.projects) - success_count
+        emit("done", {
+            "total": len(record.projects),
+            "successCount": success_count,
+            "failureCount": failure_count,
+        })
+
         emit_result(all_ok, {
             "run_id": run_id,
             "duration": duration,

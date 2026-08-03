@@ -33,6 +33,10 @@ desktop.ini
 tmp/
 tools-cache/
 *.log
+references/tool-config.json
+references/build-history.json
+references/history/
+references/templates/
 
 # Electron packaged
 release/

@@ -3,6 +3,7 @@
 
 Handles the full SVN workflow: ensure the remote directory exists,
 check out a working copy, copy the artifact in, and commit.
+All SVN commands include authentication credentials.
 """
 from __future__ import annotations
 
@@ -13,21 +14,47 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
-from core.constants import DEFAULT_SVN_ROOT
+from core.constants import DEFAULT_SVN_ROOT, UPGRADE_DOC_NAME, UPGRADE_DOC_PATH
 from core.errors import UploadError
 from tools.exec import run_process
 from uploaders.base import BaseUploader, UploadResult
 
 
-def join_svn_url(*parts: str) -> str:
-    """Join SVN URL path segments, avoiding double slashes."""
-    result = parts[0]
-    for part in parts[1:]:
-        part = part.strip("/")
-        if part:
-            result = result.rstrip("/") + "/" + part
-    return result
+# ---------------------------------------------------------------------------
+# URL helpers
+# ---------------------------------------------------------------------------
+
+def join_svn_url(root: str, *segments: str) -> str:
+    """Join SVN URL with proper encoding, avoiding double slashes."""
+    decoded_segments = [unquote(segment).strip() for segment in segments]
+    if any(
+        part in (".", "..")
+        for segment in decoded_segments
+        for part in segment.replace(chr(92), "/").split("/")
+    ):
+        raise ValueError("SVN path segments cannot contain '.' or '..'")
+    split = urlsplit(root.rstrip("/"))
+    root_parts = [p for p in unquote(split.path).split("/") if p]
+    all_parts = root_parts + [s.strip().strip("/") for s in segments if s.strip()]
+    encoded_path = "/" + "/".join(quote(unquote(part), safe="") for part in all_parts)
+    return urlunsplit((split.scheme, split.netloc, encoded_path, "", ""))
+
+
+# ---------------------------------------------------------------------------
+# SVN auth args
+# ---------------------------------------------------------------------------
+
+def svn_args(username: str, password: str) -> list[str]:
+    """Return common SVN CLI arguments for non-interactive authentication."""
+    return [
+        "--non-interactive",
+        "--trust-server-cert",
+        "--no-auth-cache",
+        "--username", username,
+        "--password", password,
+    ]
 
 
 def _svn_exe(config: dict[str, Any]) -> str:
@@ -35,14 +62,52 @@ def _svn_exe(config: dict[str, Any]) -> str:
     return config.get("svn_exe", "svn")
 
 
-def list_svn_contents(svn_url: str, svn_exe: str = "svn") -> list[dict[str, str]]:
+def _as_log_fn(log):
+    """Normalize *log* into a callable accepting a single message string.
+
+    Callers may pass either a plain callable or a ``logging.Logger``;
+    a Logger is adapted via its ``info`` method so that internal
+    ``log("...")`` calls never fail with "'Logger' object is not callable".
+    """
+    if log is None or callable(log):
+        return log
+    info = getattr(log, "info", None)
+    if callable(info):
+        return lambda msg: info("%s", msg)
+    return None
+
+
+def _get_svn_creds(config: dict[str, Any]) -> tuple[str, str]:
+    """Extract SVN credentials from config."""
+    svn_creds = config.get("svn_credentials", {})
+    username = svn_creds.get("username", "")
+    password = svn_creds.get("password", "")
+    return username, password
+
+
+# ---------------------------------------------------------------------------
+# SVN operations
+# ---------------------------------------------------------------------------
+
+def svn_info(svn: str, url: str, username: str, password: str) -> bool:
+    """Check if an SVN URL exists (svn info)."""
+    r = run_process([svn, "info", url, *svn_args(username, password)], timeout=30)
+    return r.returncode == 0
+
+
+def list_svn_contents(
+    svn_url: str,
+    svn_exe: str = "svn",
+    username: str = "",
+    password: str = "",
+) -> list[dict[str, str]]:
     """List the contents of an SVN directory.
 
     Returns a list of dicts with 'name', 'kind' (file/dir), and 'rev'.
     """
     try:
         r = run_process(
-            [svn_exe, "list", "--xml", svn_url],
+            [svn_exe, "list", "--xml", svn_url, *svn_args(username, password)],
             timeout=30,
         )
         if r.returncode != 0:
@@ -76,93 +141,187 @@ def list_svn_contents(svn_url: str, svn_exe: str = "svn") -> list[dict[str, str]
         return []
 
 
-def ensure_svn_path(svn_url: str, svn_exe: str = "svn") -> bool:
-    """Ensure the SVN directory exists, creating it if necessary.
+def ensure_svn_path(
+    svn: str,
+    root: str,
+    segments: list[str],
+    username: str,
+    password: str,
+    log=None,
+) -> str:
+    """Ensure the SVN directory path exists, creating each segment if needed.
 
-    Tries ``svn mkdir -p`` which is a no-op if the path already exists.
+    Iterates through segments one by one, checking existence before creating.
+    Returns the final SVN URL.
     """
-    try:
-        r = run_process(
-            [svn_exe, "mkdir", "-p", "--parents", svn_url, "-m", "auto-create directory"],
+    log = _as_log_fn(log)
+    current: list[str] = []
+    for segment in segments:
+        current.append(segment)
+        url = join_svn_url(root, *current)
+        if svn_info(svn, url, username, password):
+            if log:
+                log(f"SVN目录已存在：{url}")
+            continue
+        if log:
+            log(f"创建SVN目录：{url}")
+        result = run_process(
+            [svn, "mkdir", url, "-m", f"Create remote folder {url}", *svn_args(username, password)],
             timeout=30,
         )
-        return r.returncode == 0
-    except Exception:
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr or result.stdout or f"svn mkdir failed: {url}")
+    return join_svn_url(root, *segments)
+
+
+def _is_same_project_artifact(old_name: str, new_name: str, project_name: str = "") -> bool:
+    """Check if old_name is an older artifact from the same project as new_name."""
+    if old_name == new_name:
         return False
+    if not old_name.endswith(".tar.gz"):
+        return False
+
+    def _get_prefixes(name: str) -> tuple[str, str]:
+        base = name[:-7] if name.endswith(".tar.gz") else name
+        prefix = base.split("_", 1)[0].lower()
+        short = prefix
+        if short.startswith("yarward-"):
+            short = short[len("yarward-"):]
+        if short.endswith("-frontend"):
+            short = short[:-len("-frontend")]
+        return prefix, short
+
+    target_prefixes = set()
+    if project_name:
+        p_clean = project_name.lower().strip()
+        target_prefixes.add(p_clean)
+        short_p = p_clean
+        if short_p.startswith("yarward-"):
+            short_p = short_p[len("yarward-"):]
+        if short_p.endswith("-frontend"):
+            short_p = short_p[:-len("-frontend")]
+        if short_p:
+            target_prefixes.add(short_p)
+
+    new_p, new_s = _get_prefixes(new_name)
+    if new_p:
+        target_prefixes.add(new_p)
+    if new_s:
+        target_prefixes.add(new_s)
+
+    old_p, old_s = _get_prefixes(old_name)
+    return (old_p in target_prefixes) or (bool(old_s) and old_s in target_prefixes)
 
 
 def upload_artifact(
     artifact_path: Path,
     svn_url: str,
     svn_exe: str = "svn",
+    username: str = "",
+    password: str = "",
     skip_commit: bool = False,
+    commit_message: str = "",
+    log=None,
+    project_name: str = "",
 ) -> UploadResult:
     """Upload an artifact to SVN by checking out, copying, and committing.
 
-    Parameters
-    ----------
-    artifact_path:
-        Path to the local artifact file.
-    svn_url:
-        Full SVN URL to upload to (including the filename).
-    svn_exe:
-        Path to the svn executable.
-    skip_commit:
-        If True, prepare the working copy but do not commit.
-
-    Returns
-    -------
-    UploadResult
+    Only removes old artifacts with the same project prefix (not all files).
+    Also copies the upgrade documentation if available.
     """
+    log = _as_log_fn(log)
     start_time = time.time()
     work_dir = None
 
     try:
         # Create a temporary working directory
         work_dir = tempfile.mkdtemp(prefix="zbuild-svn-")
-        parent_url = str(Path(svn_url).parent).replace("\\", "/")
-        # Fix URL: use svn URL joining, not filesystem path
         parent_url = svn_url.rsplit("/", 1)[0] if "/" in svn_url else svn_url
+
+        if log:
+            log(f"正在检出 SVN 目录: {parent_url} ...")
 
         # Checkout the parent directory
         r = run_process(
-            [svn_exe, "checkout", parent_url, work_dir],
+            [svn_exe, "checkout", parent_url, work_dir, *svn_args(username, password)],
             timeout=60,
         )
         if r.returncode != 0:
             # Directory might not exist, try creating it
-            if not ensure_svn_path(parent_url, svn_exe):
-                return UploadResult(
-                    success=False,
-                    message=f"SVN checkout failed: {r.stderr}",
-                )
+            try:
+                leaf_segment = parent_url.rsplit("/", 1)[-1]
+                ensure_svn_path(svn_exe, parent_url.rsplit("/", 1)[0], [leaf_segment], username, password, log)
+            except Exception:
+                pass
             r = run_process(
-                [svn_exe, "checkout", parent_url, work_dir],
+                [svn_exe, "checkout", parent_url, work_dir, *svn_args(username, password)],
                 timeout=60,
             )
             if r.returncode != 0:
+                err_msg = r.stderr or r.stdout
+                if log:
+                    log(f"SVN 检出失败: {err_msg}")
                 return UploadResult(
                     success=False,
-                    message=f"SVN checkout failed after mkdir: {r.stderr}",
+                    message=f"SVN checkout failed: {err_msg}",
                 )
 
-        # Clean the working directory (remove old files)
-        for item in Path(work_dir).iterdir():
-            if item.name == ".svn":
-                continue
-            if item.is_file():
-                item.unlink()
-            elif item.is_dir():
-                shutil.rmtree(item)
+        if log:
+            log("SVN 目录检出成功")
 
-        # Copy the artifact into the working copy
         dest_name = artifact_path.name
         dest_path = Path(work_dir) / dest_name
-        shutil.copy2(str(artifact_path), str(dest_path))
 
+        # Remove old artifacts with the SAME project prefix
+        for old_artifact in list(Path(work_dir).glob("*.tar.gz")):
+            if _is_same_project_artifact(old_artifact.name, dest_name, project_name):
+                if log:
+                    log(f"发现历史产物，准备清理: {old_artifact.name}")
+                # Check SVN status before deleting
+                status = run_process([svn_exe, "status", str(old_artifact)], cwd=work_dir)
+                status_text = status.stdout.strip()
+                if status.returncode == 0 and status_text.startswith("?"):
+                    # Unversioned file, just delete
+                    old_artifact.unlink()
+                    continue
+                if status.returncode == 0 and status_text.startswith("!"):
+                    # Already missing, skip
+                    continue
+                # Versioned file - use svn delete (with auth)
+                remove = run_process(
+                    [svn_exe, "delete", str(old_artifact), *svn_args(username, password)],
+                    cwd=work_dir,
+                )
+                if remove.returncode != 0 and "is not under version control" not in (remove.stderr or remove.stdout):
+                    raise RuntimeError(remove.stderr or remove.stdout)
+                if remove.returncode != 0 and old_artifact.exists():
+                    old_artifact.unlink()
+                if log:
+                    log(f"已清理历史产物: {old_artifact.name}")
+
+        # Copy the artifact into the working copy
+        shutil.copy2(str(artifact_path), str(dest_path))
         file_size = dest_path.stat().st_size
+        if log:
+            log(f"已写入最新构建产物: {dest_name} ({file_size / 1024 / 1024:.2f} MB)")
+
+        # Copy upgrade documentation if available
+        if UPGRADE_DOC_PATH.exists():
+            upgrade_target = Path(work_dir) / UPGRADE_DOC_NAME
+            if upgrade_target.exists():
+                if log:
+                    log(f"升级说明已存在，跳过上传: {UPGRADE_DOC_NAME}")
+            else:
+                shutil.copy2(str(UPGRADE_DOC_PATH), str(upgrade_target))
+                if log:
+                    log(f"补充上传升级说明: {UPGRADE_DOC_NAME}")
+        else:
+            if log:
+                log(f"未找到升级说明文件，跳过补充: {UPGRADE_DOC_PATH}")
 
         if skip_commit:
+            if log:
+                log("已配置跳过提交 (skip_svn_commit=True)")
             return UploadResult(
                 success=True,
                 target_url=svn_url,
@@ -172,33 +331,69 @@ def upload_artifact(
             )
 
         # SVN add + commit
+        if log:
+            log("正在添加文件到 SVN (svn add)...")
         r = run_process(
-            [svn_exe, "add", "--force", str(dest_path)],
+            [svn_exe, "add", ".", "--force", *svn_args(username, password)],
             cwd=work_dir,
         )
-
-        commit_msg = f"上传构建产物: {dest_name}"
-        r = run_process(
-            [svn_exe, "commit", "-m", commit_msg, work_dir],
-            timeout=120,
-        )
         if r.returncode != 0:
+            err_msg = r.stderr or r.stdout
+            if log:
+                log(f"SVN add 失败: {err_msg}")
             return UploadResult(
                 success=False,
                 target_url=svn_url,
-                message=f"SVN commit failed: {r.stderr}",
+                message=f"SVN add failed: {err_msg}",
                 duration_seconds=time.time() - start_time,
             )
+
+        commit_msg = commit_message or f"上传构建产物: {dest_name}"
+        if log:
+            log(f"正在提交到 SVN: {commit_msg} ...")
+
+        r = run_process(
+            [svn_exe, "commit", ".", "-m", commit_msg, *svn_args(username, password)],
+            cwd=work_dir,
+            timeout=120,
+        )
+        if r.returncode != 0:
+            err_msg = r.stderr or r.stdout
+            if log:
+                log(f"SVN commit 失败: {err_msg}")
+            return UploadResult(
+                success=False,
+                target_url=svn_url,
+                message=f"SVN commit failed: {err_msg}",
+                duration_seconds=time.time() - start_time,
+            )
+
+        commit_out = (r.stdout or "").strip()
+        if log:
+            if commit_out:
+                for line in commit_out.splitlines():
+                    if line.strip():
+                        log(f"SVN: {line.strip()}")
+            else:
+                log("SVN: 提交完成（工作副本无文件变更）")
+
+        rev_info = ""
+        for line in commit_out.splitlines():
+            if "revision" in line.lower() or "版本" in line:
+                rev_info = f" ({line.strip()})"
+                break
 
         return UploadResult(
             success=True,
             target_url=svn_url,
-            message=f"已提交到 SVN: {dest_name}",
+            message=f"已成功提交到 SVN: {dest_name}{rev_info}",
             bytes_uploaded=file_size,
             duration_seconds=time.time() - start_time,
         )
 
     except Exception as exc:
+        if log:
+            log(f"SVN 上传异常: {exc}")
         return UploadResult(
             success=False,
             target_url=svn_url,
@@ -215,7 +410,7 @@ class SvnUploader(BaseUploader):
     """Upload artifacts to SVN.
 
     The SVN URL is constructed from the config's ``svn_root`` and the
-    project's ``svn_leaf`` name.
+    project's ``svn_leaf`` name.  All SVN commands include authentication.
     """
 
     max_retries = 2
@@ -224,23 +419,76 @@ class SvnUploader(BaseUploader):
         self,
         artifact: Path,
         config: dict[str, Any],
-        log: logging.Logger,
+        log: Any = None,
+        project_name: str = "",
     ) -> UploadResult:
+        log_fn = _as_log_fn(log)
         svn_root = config.get("svn_root", DEFAULT_SVN_ROOT)
         svn_exe = _svn_exe(config)
         skip_commit = config.get("skip_svn_commit", False)
+        username, password = _get_svn_creds(config)
+        hospital_name = config.get("hospital_name", "")
+        order_no = config.get("order_no", "")
 
-        # Determine the SVN leaf name from the project config
-        projects = config.get("projects", [])
+        if not username or not password:
+            if log_fn:
+                log_fn("警告：SVN 凭据未配置，上传可能会失败")
+
+        # Determine the SVN leaf name from the matching project config
         svn_leaf = ""
-        for proj in projects:
-            if proj.get("name"):
-                svn_leaf = proj.get("svn_leaf", proj["name"])
+        proj_branch = ""
+        for proj in config.get("projects", []):
+            if proj.get("name") == project_name:
+                svn_leaf = proj.get("svn_leaf", project_name)
+                proj_branch = proj.get("branch", "")
                 break
+        if not svn_leaf and project_name:
+            svn_leaf = project_name
         if not svn_leaf:
             svn_leaf = artifact.stem.replace(".tar", "")
 
-        svn_url = join_svn_url(svn_root, svn_leaf, artifact.name)
-        log.info("SVN upload: %s -> %s", artifact.name, svn_url)
+        # Build SVN URL with hospital/order hierarchy:
+        # svn_root/hospital_name/order_no/svn_leaf/artifact
+        path_segments = []
+        if hospital_name:
+            path_segments.append(hospital_name)
+        if order_no:
+            path_segments.append(order_no)
+        if svn_leaf:
+            path_segments.append(svn_leaf)
 
-        return upload_artifact(artifact, svn_url, svn_exe, skip_commit)
+        # Ensure the directory path exists
+        if path_segments:
+            dir_url = join_svn_url(svn_root, *path_segments)
+            try:
+                ensure_svn_path(svn_exe, svn_root, path_segments, username, password, log_fn)
+            except Exception as exc:
+                if log_fn:
+                    log_fn(f"SVN 目录创建失败: {exc}")
+                return UploadResult(
+                    success=False,
+                    message=f"SVN目录创建失败: {exc}",
+                )
+        else:
+            dir_url = svn_root
+
+        svn_url = join_svn_url(dir_url, artifact.name)
+        if log_fn:
+            log_fn(f"SVN 上传目标: {svn_url}")
+
+        # Build rich commit message with full context
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        commit_msg = (
+            f"Auto upload {project_name} branch {proj_branch} "
+            f"hospital {hospital_name} order {order_no} at {timestamp}"
+        )
+
+        return upload_artifact(
+            artifact, svn_url, svn_exe,
+            username=username,
+            password=password,
+            skip_commit=skip_commit,
+            commit_message=commit_msg,
+            log=log_fn,
+            project_name=project_name,
+        )

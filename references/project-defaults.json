@@ -2,21 +2,37 @@
   {
     "projectName": "yarward-ntv-frontend",
     "defaultSvnLeaf": "前端",
-    "serverUploadPath": "/home/data/web"
+    "serverUploadPath": "/home/data/web",
+    "buildCommand": "deploy.sh"
   },
   {
     "projectName": "yarward-web-frontend",
     "defaultSvnLeaf": "前端",
-    "serverUploadPath": "/home/data/web"
+    "serverUploadPath": "/home/data/web",
+    "buildCommand": "deploy.sh"
   },
   {
     "projectName": "zhbf-bedhead-frontend",
     "defaultSvnLeaf": "前端",
-    "serverUploadPath": "/home/data/web/a10"
+    "serverUploadPath": "/home/data/web/a10",
+    "buildCommand": "deploy.sh"
   },
   {
     "projectName": "zhbf-fontend",
     "defaultSvnLeaf": "前端",
-    "serverUploadPath": "/home/data/web/a10"
+    "serverUploadPath": "/home/data/web/a10",
+    "buildCommand": "deploy.sh"
+  },
+  {
+    "projectName": "zbuild",
+    "defaultSvnLeaf": "前端",
+    "serverUploadPath": "/home/data/web",
+    "buildCommand": "deploy.sh"
+  },
+  {
+    "projectName": "zhbf-web",
+    "defaultSvnLeaf": "前端",
+    "serverUploadPath": "/home/data/web",
+    "buildCommand": "deploy.sh"
   }
 ]

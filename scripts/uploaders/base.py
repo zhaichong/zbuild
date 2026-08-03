@@ -10,7 +10,19 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
+
+
+def as_log_fn(log: Any) -> Callable[[str], None]:
+    """Normalize a logger or callable into a single-argument log function."""
+    if log is None:
+        return lambda msg: None
+    if callable(log):
+        return log
+    info = getattr(log, "info", None)
+    if callable(info):
+        return lambda msg: info("%s", msg)
+    return lambda msg: None
 
 
 @dataclass
@@ -43,6 +55,7 @@ class BaseUploader(ABC):
         artifact: Path,
         config: dict[str, Any],
         log: logging.Logger,
+        project_name: str = "",
     ) -> UploadResult:
         """Upload an artifact to the destination.
 
@@ -54,6 +67,9 @@ class BaseUploader(ABC):
             The full tool configuration dict.
         log:
             Logger instance for emitting progress messages.
+        project_name:
+            Name of the project being uploaded, used to look up
+            project-specific settings from config['projects'].
 
         Returns
         -------

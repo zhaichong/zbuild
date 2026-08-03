@@ -6,10 +6,10 @@ import type {
   ProjectRunState,
   LogEntry,
   TaskTemplate,
-  ExecutionRecord,
   StepState,
   StepStatusType,
   UploadMode,
+  ToastInfo,
 } from '@/types'
 
 export const useAppStore = defineStore('app', () => {
@@ -19,12 +19,12 @@ export const useAppStore = defineStore('app', () => {
   const projectBranches = ref<Record<string, string>>({})
   const projectSvnLeaves = ref<Record<string, string>>({})
   const projectServerPaths = ref<Record<string, string>>({})
+  const projectBuildCommands = ref<Record<string, string>>({})
   const running = ref(false)
-  const failedProjects = ref<Set<string>>(new Set())
   const projectStates = ref<Record<string, ProjectRunState>>({})
   const logs = ref<LogEntry[]>([])
   const templates = ref<TaskTemplate[]>([])
-  const historyRecords = ref<ExecutionRecord[]>([])
+  const toasts = ref<ToastInfo[]>([])
 
   const mode = computed<UploadMode>(() => {
     if (!config.value) return 'svn'
@@ -43,6 +43,14 @@ export const useAppStore = defineStore('app', () => {
     return Object.values(projectStates.value).filter((p) => p.status === 'failed').length
   })
 
+  function showToast(message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info', duration = 3000) {
+    const id = Math.random().toString(36).substring(2, 9)
+    toasts.value.push({ id, message, type, duration })
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t) => t.id !== id)
+    }, duration)
+  }
+
   function addLog(entry: LogEntry) {
     logs.value.push(entry)
   }
@@ -53,7 +61,6 @@ export const useAppStore = defineStore('app', () => {
 
   function resetRunState() {
     running.value = false
-    failedProjects.value.clear()
     projectStates.value = {}
     clearLogs()
   }
@@ -104,10 +111,6 @@ export const useAppStore = defineStore('app', () => {
     if (status === 'failed') {
       state.status = 'failed'
       state.statusClass = 'text-red-600'
-      failedProjects.value.add(projectName)
-    } else if (status === 'done') {
-      state.status = 'done'
-      state.statusClass = 'text-green-600'
     } else if (status === 'running') {
       state.status = 'running'
       state.statusClass = 'text-blue-600'
@@ -121,16 +124,17 @@ export const useAppStore = defineStore('app', () => {
     projectBranches,
     projectSvnLeaves,
     projectServerPaths,
+    projectBuildCommands,
     running,
-    failedProjects,
     projectStates,
     logs,
     templates,
-    historyRecords,
     mode,
     selectedCount,
     successCount,
     failureCount,
+    toasts,
+    showToast,
     addLog,
     clearLogs,
     resetRunState,

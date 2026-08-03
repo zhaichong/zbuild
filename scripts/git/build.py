@@ -33,42 +33,142 @@ def build_project(
     project_path: Path | str,
     *,
     bash_exe: str = "bash",
+    build_command: str = "deploy.sh",
     on_line: Optional[callable] = None,
 ) -> tuple[subprocess.CompletedProcess, Optional[Path]]:
-    """Run deploy.sh in the project directory.
+    """Run the configured build command/script in the project directory.
 
     Returns (completed_process, artifact_path) where artifact_path is
-    the newest ``dist/*.tar.gz`` if one was created.
+    the newest ``dist/*.tar.gz`` produced by *this* build.
 
     Raises
     ------
     BuildError
-        If deploy.sh is not found or fails.
+        If the build script is not found, fails, or finishes without producing
+        a fresh ``dist/*.tar.gz`` (a pre-existing tarball is never
+        accepted as the build result).
     """
     project = Path(project_path)
-    deploy_sh = project / "deploy.sh"
+    cmd_str = (build_command or "deploy.sh").strip()
 
-    if not deploy_sh.is_file():
-        raise BuildError(f"deploy.sh not found in {project}")
+    # Determine command args and handle CRLF normalization if target is a shell script
+    converted_crlf = False
+    script_file_to_restore: Optional[Path] = None
+    original_bytes: Optional[bytes] = None
 
-    logger.info("Running deploy.sh in %s", project)
+    normalized_path_str = cmd_str
+    if normalized_path_str.startswith(("./", ".\\")):
+        normalized_path_str = normalized_path_str[2:]
 
-    result = run_process_stream(
-        [bash_exe, "deploy.sh"],
-        cwd=project,
-        on_line=on_line,
-        timeout=600,  # 10 minute timeout
-    )
+    candidate_file = project / normalized_path_str
 
+    if candidate_file.is_file() or cmd_str.endswith(".sh") or cmd_str.startswith("./"):
+        if not candidate_file.is_file():
+            raise BuildError(f"打包脚本 {cmd_str} 未找到 in {project}")
+
+        # If it's a shell script, normalize CRLF -> LF
+        if candidate_file.suffix.lower() == ".sh" or "sh" in candidate_file.name:
+            original_bytes = candidate_file.read_bytes()
+            lf_bytes = original_bytes.replace(b"\r\n", b"\n")
+            converted_crlf = lf_bytes != original_bytes
+            if converted_crlf:
+                candidate_file.write_bytes(lf_bytes)
+                script_file_to_restore = candidate_file
+
+            rel_script = candidate_file.relative_to(project).as_posix()
+            run_cmd = [bash_exe, rel_script]
+        else:
+            run_cmd = [str(candidate_file)]
+    else:
+        import shlex
+        try:
+            parts = shlex.split(cmd_str, posix=False)
+        except Exception:
+            parts = cmd_str.split()
+
+        if not parts:
+            parts = [bash_exe, "deploy.sh"]
+
+        if parts[0].lower() in ("bash", "sh") and len(parts) > 1:
+            target_sh = parts[1]
+            if target_sh.startswith(("./", ".\\")):
+                target_sh = target_sh[2:]
+            target_sh_file = project / target_sh
+            if target_sh_file.is_file():
+                original_bytes = target_sh_file.read_bytes()
+                lf_bytes = original_bytes.replace(b"\r\n", b"\n")
+                converted_crlf = lf_bytes != original_bytes
+                if converted_crlf:
+                    target_sh_file.write_bytes(lf_bytes)
+                    script_file_to_restore = target_sh_file
+            run_cmd = [bash_exe] + parts[1:]
+        else:
+            run_cmd = parts
+
+    # Capture a snapshot of the dist/ directory before the build starts
+    pre_snapshot = artifact_snapshot(project)
+    build_start = time.time()
+
+    logger.info("Running build command '%s' in %s", cmd_str, project)
+
+    # Inject configured Node.js path to environment
+    from git.deps import _node_env
+    env = _node_env()
+
+    try:
+        result = run_process_stream(
+            run_cmd,
+            cwd=project,
+            env=env,
+            on_line=on_line,
+            timeout=600,  # 10 minute timeout
+        )
+    finally:
+        if converted_crlf and script_file_to_restore and original_bytes is not None:
+            try:
+                script_file_to_restore.write_bytes(original_bytes)
+            except Exception:
+                logger.warning("Failed to restore %s line endings", script_file_to_restore)
+
+    # A non-zero build is never publishable, even if it left a partial archive.
     if result.returncode != 0:
         raise BuildError(
-            f"deploy.sh failed (exit {result.returncode}): "
+            f"打包命令 '{cmd_str}' 执行失败 (exit {result.returncode}): "
             f"{result.stdout[-500:] if result.stdout else ''}"
         )
 
-    # Find the newest tar.gz in dist/
-    artifact = latest_artifact(project)
+    # Find the newest tar.gz that changed during the build
+    artifact = latest_changed_artifact(project, pre_snapshot)
+
+    # Also accept a tarball rewritten during this build with identical
+    # content (reproducible build) - freshness is proven by its mtime.
+    if not artifact:
+        artifact = _fresh_artifact(project, build_start)
+
+    # Never fall back to a pre-existing tarball
+    if not artifact:
+        raise BuildError(
+            f"打包命令 '{cmd_str}' 执行结束，但 dist/ 中没有产生新的 .tar.gz 产物。"
+            "构建可能已静默失败，请检查上面的构建日志。"
+            + (f"\n输出尾部: {result.stdout[-300:]}" if result.stdout else "")
+        )
+
     return result, artifact
+
+
+def _fresh_artifact(project_path: Path | str, since: float) -> Optional[Path]:
+    """Return the newest dist/*.tar.gz modified at or after *since*."""
+    project = Path(project_path)
+    dist_dir = project / "dist"
+    if not dist_dir.is_dir():
+        return None
+
+    tarballs = sorted(dist_dir.glob("*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for tb in tarballs:
+        # 1s tolerance for filesystem mtime granularity
+        if tb.stat().st_mtime >= since - 1:
+            return tb
+    return None
 
 
 def fix_known_bad_deploy_tar(project_path: Path | str) -> Optional[Path]:

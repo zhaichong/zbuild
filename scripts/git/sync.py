@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 from pathlib import Path
 
 from tools.exec import run_process
@@ -14,24 +15,53 @@ logger = logging.getLogger(__name__)
 def pull_latest(project_path: Path | str) -> tuple[bool, str]:
     """Pull the latest code for the current branch.
 
+    If there are local uncommitted changes (e.g. vue.config.js modified by
+    deploy.sh), they are automatically stashed before the pull and restored
+    afterwards so that the rebase does not fail.
+
     Returns (success, message).
     """
+    git = safe_git(project_path)
+    stashed = False
+
     try:
+        # Check for unstaged / staged changes
+        status_r = run_process(git + ["status", "--porcelain"], timeout=10)
+        if status_r.returncode == 0 and status_r.stdout.strip():
+            # There are local modifications – stash them first
+            stash_r = run_process(
+                git + ["stash", "push", "-u", "-m", "zbuild-auto-stash"],
+                timeout=30,
+            )
+            if stash_r.returncode == 0 and "No local changes" not in stash_r.stdout:
+                stashed = True
+                logger.debug("Auto-stashed local changes before pull: %s", stash_r.stdout.strip())
+
         r = run_process(
-            safe_git(project_path) + ["pull", "--rebase"],
+            git + ["pull", "--rebase"],
             timeout=60,
         )
         if r.returncode == 0:
             output = r.stdout.strip()
+            if stashed:
+                # Restore stashed changes
+                pop_r = run_process(git + ["stash", "pop"], timeout=30)
+                if pop_r.returncode != 0:
+                    logger.warning("Failed to restore stash: %s", pop_r.stderr.strip())
             if "Already up to date" in output:
                 return True, "Already up to date"
             return True, output
         else:
-            return False, r.stderr.strip()
+            err = r.stderr.strip() or r.stdout.strip()
+            if stashed:
+                # Try to restore even on failure
+                run_process(git + ["stash", "pop"], timeout=30)
+            return False, err
     except subprocess.TimeoutExpired:
         return False, "Pull timed out after 60 seconds"
     except Exception as exc:
         return False, str(exc)
+
 
 
 def latest_commit_info(project_path: Path | str) -> dict[str, str]:
@@ -58,7 +88,3 @@ def latest_commit_info(project_path: Path | str) -> dict[str, str]:
     except Exception:
         pass
     return info
-
-
-# Need subprocess for TimeoutExpired
-import subprocess

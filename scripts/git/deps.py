@@ -55,12 +55,53 @@ def dependency_install_command(project_path: Path | str) -> list[str]:
 
 
 def _node_env() -> dict[str, str]:
-    """Build environment variables with bundled Node on PATH."""
-    env: dict[str, str] = {}
-    node = bundled_node()
-    if node:
-        node_dir = str(Path(node).parent)
-        env["PATH"] = f"{node_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    """Build environment variables guaranteeing Node.js 14 on PATH.
+
+    Also isolates npm's global prefix so stock ``npm.cmd`` / ``npm`` wrappers
+    cannot re-route onto a foreign newer npm (e.g. Volta Node 22 / npm 10)
+    when one is present under the user global prefix.
+    """
+    from tools.bundled import find_node14_dir, node_shim_dir, npm_isolated_prefix_dir
+
+    env = os.environ.copy()
+
+    # 1. Node shims directory (node, npm, npx wrappers → node + local npm-cli.js)
+    shim_dir = node_shim_dir()
+
+    # 2. Node 14 binary directory
+    node14_dir = find_node14_dir()
+
+    paths_to_prepend: list[str] = [str(shim_dir)]
+    if node14_dir:
+        paths_to_prepend.append(str(node14_dir))
+
+    # Prepend shims and Node 14 directory to PATH and Path
+    current_path = env.get("PATH", "") or env.get("Path", "")
+    new_path = os.pathsep.join(paths_to_prepend + [current_path])
+    env["PATH"] = new_path
+    env["Path"] = new_path
+
+    # Point npm and node helpers directly to Node 14
+    node_exe = bundled_node()
+    if node_exe:
+        env["npm_node_execpath"] = node_exe
+        env["NODE_EXE"] = node_exe
+
+    # Isolate global prefix so stock npm launchers do not pick up npm 10+ from
+    # %AppData%\npm or a Volta Node 18+/22 image (which crash under Node 14).
+    prefix = str(npm_isolated_prefix_dir())
+    env["npm_config_prefix"] = prefix
+    # Clear any user/project override that would reintroduce a foreign npm.
+    env.pop("NPM_CONFIG_PREFIX", None)
+    env["NPM_CONFIG_PREFIX"] = prefix
+
+    # Strip --openssl-legacy-provider from NODE_OPTIONS.
+    # This flag is only valid for Node >= 17 (OpenSSL 3) and causes Node 14 to
+    # abort immediately with "not allowed in NODE_OPTIONS".
+    _raw_opts = env.get("NODE_OPTIONS", "")
+    _cleaned = " ".join(f for f in _raw_opts.split() if f != "--openssl-legacy-provider")
+    env["NODE_OPTIONS"] = _cleaned
+
     return env
 
 

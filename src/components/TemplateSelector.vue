@@ -1,31 +1,35 @@
 <template>
-  <div class="bg-surface rounded-lg shadow-sm p-4">
-    <div class="flex items-center gap-3">
-      <label class="text-sm font-medium text-gray-700">任务模板</label>
-      <select
-        v-model="selectedTemplateId"
-        class="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-        @change="onTemplateChange"
+  <div class="card px-4 py-3 flex items-center gap-3">
+    <label class="text-sm font-medium text-text-2 whitespace-nowrap">模板</label>
+    <select
+      v-model="selectedTemplateId"
+      class="flex-1 form-input"
+      @change="onTemplateChange"
+    >
+      <option value="">
+        -- 选择模板 --
+      </option>
+      <option
+        v-for="t in store.templates"
+        :key="t.id"
+        :value="t.id"
       >
-        <option value="">-- 选择模板 --</option>
-        <option v-for="t in store.templates" :key="t.id" :value="t.id">
-          {{ t.name }}
-        </option>
-      </select>
-      <button
-        class="px-3 py-2 text-sm bg-primary text-white rounded-lg hover:opacity-90 transition-opacity"
-        @click="onSaveAsTemplate"
-      >
-        保存为模板
-      </button>
-      <button
-        v-if="selectedTemplateId"
-        class="px-3 py-2 text-sm bg-error text-white rounded-lg hover:opacity-90 transition-opacity"
-        @click="onDeleteTemplate"
-      >
-        删除模板
-      </button>
-    </div>
+        {{ t.name }}
+      </option>
+    </select>
+    <button
+      class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-primary text-white hover:opacity-90 transition-opacity"
+      @click="onSaveAsTemplate"
+    >
+      保存模板
+    </button>
+    <button
+      v-if="selectedTemplateId"
+      class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-error-light text-error hover:bg-red-100 transition-colors"
+      @click="onDeleteTemplate"
+    >
+      删除
+    </button>
   </div>
 </template>
 

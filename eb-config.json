@@ -1,0 +1,34 @@
+{
+  "appId": "com.zbuild.app",
+  "productName": "特殊订单打包工具",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "scripts/**/*",
+    "references/**/*",
+    "!**/__pycache__/**",
+    "!**/*.pyc"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": true,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "特殊订单打包工具"
+  },
+  "": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json"
+}

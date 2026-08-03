@@ -7,12 +7,44 @@ for commands whose stdout/stderr should be forwarded line-by-line.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import threading
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 logger = logging.getLogger(__name__)
+
+_SECRET_FLAGS = {"--password", "--secret", "--token", "--api-key", "--api_key"}
+
+
+def _redacted_args(args: Sequence[str]) -> list[str]:
+    """Return command arguments safe for diagnostic logging."""
+    redacted: list[str] = []
+    hide_next = False
+    for value in args:
+        text = str(value)
+        lower = text.lower()
+        if hide_next:
+            redacted.append("***")
+            hide_next = False
+            continue
+        if lower in _SECRET_FLAGS:
+            redacted.append(text)
+            hide_next = True
+            continue
+        matched = next((flag for flag in _SECRET_FLAGS if lower.startswith(flag + "=")), None)
+        redacted.append(text.split("=", 1)[0] + "=***" if matched else text)
+    return redacted
+
+
+def _startupinfo():
+    """Return a STARTUPINFO object to hide console windows on Windows."""
+    if os.name == "nt":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        return si
+    return None
 
 
 def run_process(
@@ -46,7 +78,7 @@ def run_process(
     if env:
         merged_env = {**os.environ, **env}
 
-    logger.debug("run_process: %s (cwd=%s)", args, cwd)
+    logger.debug("run_process: %s (cwd=%s)", _redacted_args(args), cwd)
     result = subprocess.run(
         list(args),
         cwd=str(cwd) if cwd else None,
@@ -54,7 +86,9 @@ def run_process(
         capture_output=True,
         text=True,
         encoding=encoding,
+        errors="replace",
         timeout=timeout,
+        startupinfo=_startupinfo(),
     )
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
@@ -100,7 +134,7 @@ def run_process_stream(
     if env:
         merged_env = {**os.environ, **env}
 
-    logger.debug("run_process_stream: %s (cwd=%s)", args, cwd)
+    logger.debug("run_process_stream: %s (cwd=%s)", _redacted_args(args), cwd)
 
     proc = subprocess.Popen(
         list(args),
@@ -110,6 +144,8 @@ def run_process_stream(
         stderr=subprocess.STDOUT,
         text=True,
         encoding=encoding,
+        errors="replace",
+        startupinfo=_startupinfo(),
     )
 
     lines: list[str] = []

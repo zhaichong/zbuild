@@ -23,9 +23,9 @@ def cmd_template_list(payload: dict[str, Any]) -> dict[str, Any]:
 @register("template-get")
 def cmd_template_get(payload: dict[str, Any]) -> dict[str, Any]:
     """Get a single template by ID."""
-    template_id = payload.get("template_id", "")
+    template_id = payload.get("id", "")
     if not template_id:
-        return {"success": False, "error": "Missing 'template_id'"}
+        return {"success": False, "error": "Missing 'id'"}
 
     store = TemplateStore()
     template = store.get(template_id)
@@ -44,7 +44,7 @@ def cmd_template_save(payload: dict[str, Any]) -> dict[str, Any]:
     config = payload.get("config", {})
     mode = payload.get("mode", "svn")
     description = payload.get("description", "")
-    template_id = payload.get("template_id", "")
+    template_id = payload.get("id", "")
 
     store = TemplateStore()
 
@@ -74,9 +74,9 @@ def cmd_template_save(payload: dict[str, Any]) -> dict[str, Any]:
 @register("template-delete")
 def cmd_template_delete(payload: dict[str, Any]) -> dict[str, Any]:
     """Delete a template by ID."""
-    template_id = payload.get("template_id", "")
+    template_id = payload.get("id", "")
     if not template_id:
-        return {"success": False, "error": "Missing 'template_id'"}
+        return {"success": False, "error": "Missing 'id'"}
 
     store = TemplateStore()
     deleted = store.delete(template_id)

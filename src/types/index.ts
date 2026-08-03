@@ -4,6 +4,8 @@ export interface ToolPaths {
   git: string
   bash: string
   svn: string
+  node?: string
+  npm?: string
 }
 
 export interface FormConfig {
@@ -19,6 +21,8 @@ export interface FormConfig {
 export interface AppConfig {
   rootPath: string
   svnRootUrl: string
+  buildCommand?: string
+  buildCommands?: Record<string, string>
   tools: ToolPaths
   uploadAfterBuild: boolean
   uploadToServer: boolean
@@ -34,6 +38,7 @@ export interface ProjectInfo {
   branches: string[]
   defaultSvnLeaf?: string
   serverUploadPath?: string
+  buildCommand?: string
 }
 
 export interface ToolStatus {
@@ -55,6 +60,12 @@ export interface LocalChangeSummary {
   project?: string
   repoPath?: string
   branch?: string
+}
+
+export interface AffectedProjectsResult {
+  affectedProjects: string[]
+  baseRef: string
+  headRef: string
 }
 
 export type StepStatusType = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'retrying'
@@ -103,14 +114,15 @@ export interface LogEntry {
 
 export type RunEvent =
   | { type: 'log'; message: string; level: LogEntry['level']; project?: string }
-  | { type: 'step'; step: string; status: StepStatusType; message?: string; project?: string }
-  | { type: 'projectStart'; project: string }
+  | { type: 'step-start' | 'step-end'; step: string; index?: number; success?: boolean; message?: string; project?: string }
+  | { type: 'projectStart'; project: string; steps?: string[] }
   | { type: 'projectResult'; project: string; success: boolean; message?: string }
-  | { type: 'done' }
+  | { type: 'done'; total?: number; successCount?: number; failureCount?: number }
   | { type: 'error'; message: string }
+  | { type: 'result'; success: boolean; [key: string]: unknown }
 
 export interface MiniStatus {
-  state: 'running' | 'success' | 'failed'
+  state: 'idle' | 'running' | 'complete' | 'error'
   total: number
   completed: number
   successCount: number
@@ -118,3 +130,11 @@ export interface MiniStatus {
   currentProject?: string
   message?: string
 }
+
+export interface ToastInfo {
+  id: string
+  message: string
+  type: 'info' | 'success' | 'error' | 'warning'
+  duration?: number
+}
+

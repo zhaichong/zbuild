@@ -7,9 +7,15 @@ by ``main()`` based on ``sys.argv[1]``.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import sys
 import traceback
 from typing import Any, Callable
+
+# Ensure the scripts directory is in sys.path
+_scripts_dir = str(Path(__file__).resolve().parent.parent)
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 
 from runner.protocol import emit, emit_error, emit_result, read_stdin_json
 
@@ -72,6 +78,17 @@ def main() -> None:
 
     # Read payload from stdin
     payload = read_stdin_json()
+
+    # Apply configured git/bash/node paths before any command runs.
+    # Electron often starts with a minimal PATH (no Git), which made
+    # discover/refresh-branches return empty branch lists while still
+    # finding repos via the filesystem.
+    try:
+        from tools.env_setup import apply_tools_env
+
+        apply_tools_env(payload if isinstance(payload, dict) else {})
+    except Exception:
+        pass
 
     try:
         result = fn(payload)

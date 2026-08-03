@@ -11,8 +11,8 @@
         box-sizing: border-box;
       }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: transparent;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -21,125 +21,261 @@
       }
       .container {
         background: white;
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        max-width: 400px;
-        width: 90%;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        width: calc(100% - 16px);
+        height: calc(100% - 16px);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        transition: all 0.3s ease;
       }
+      
+      /* Mascot / Robot Styles */
       .mascot {
-        width: 80px;
-        height: 80px;
-        margin: 0 auto 16px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+      }
+      .robot-icon {
+        width: 100%;
+        height: 100%;
+      }
+      
+      /* Robot Animations */
+      .antenna-glow {
+        animation: pulse 1.2s infinite alternate;
+      }
+      @keyframes pulse {
+        0% { fill: #4f46e5; opacity: 0.6; r: 2px; }
+        100% { fill: #818cf8; opacity: 1; r: 3.5px; }
+      }
+      
+      .robot-eye {
+        animation: blink 4s infinite;
+      }
+      .left-eye {
+        transform-origin: 19px 20px;
+      }
+      .right-eye {
+        transform-origin: 29px 20px;
+      }
+      @keyframes blink {
+        0%, 96%, 100% { transform: scaleY(1); }
+        98% { transform: scaleY(0.1); }
+      }
+
+      /* Running state float animation */
+      .container.running .robot-icon {
+        animation: float 2s ease-in-out infinite;
+      }
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-2px); }
+      }
+
+      /* Success state styles */
+      .container.complete {
+        border-color: rgba(34, 197, 94, 0.3);
+      }
+      .container.complete .robot-eye {
+        fill: #22c55e;
+        animation: none;
+        transform: scaleY(1);
+      }
+      .container.complete .antenna-glow {
+        fill: #22c55e;
+        animation: none;
+        r: 3px;
+      }
+      .container.complete .robot-head {
+        stroke: #22c55e;
+        fill: url(#paint_success);
+      }
+
+      /* Error state styles */
+      .container.error {
+        border-color: rgba(239, 68, 68, 0.3);
+        animation: shake 0.5s ease-in-out;
+      }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        20%, 60% { transform: translateX(-4px); }
+        40%, 80% { transform: translateX(4px); }
+      }
+      .container.error .robot-eye {
+        fill: #ef4444;
+        animation: none;
+        transform: scaleY(1);
+      }
+      .container.error .antenna-glow {
+        fill: #ef4444;
+        animation: none;
+        r: 3px;
+      }
+      .container.error .robot-head {
+        stroke: #ef4444;
+        fill: url(#paint_error);
+      }
+
+      /* Rest of layout */
+      .bubble {
+        margin-left: 48px;
+        padding-right: 20px; /* space for close button */
+        margin-bottom: 12px;
+      }
+      .title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .message {
+        font-size: 12px;
+        color: #64748b;
+        line-height: 1.4;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .progress-bar {
+        width: 100%;
+        height: 6px;
+        background: #e2e8f0;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 6px;
+        margin-top: auto;
+      }
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+        transition: width 0.3s ease;
+      }
+      .progress-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+        color: #94a3b8;
+      }
+      .progress-text {
+        font-weight: 500;
+      }
+      .count {
+        font-weight: 500;
+      }
+      .result {
+        margin-top: 10px;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        text-align: center;
+        font-weight: 500;
+      }
+      .result.success {
+        background: #dcfce7;
+        color: #15803d;
+      }
+      .result.error {
+        background: #fee2e2;
+        color: #b91c1c;
+      }
+      .dismiss-btn {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: transparent;
+        color: #94a3b8;
+        border: none;
+        font-size: 20px;
+        font-weight: 300;
+        cursor: pointer;
+        width: 20px;
+        height: 20px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 40px;
-        animation: bounce 2s infinite;
-      }
-      @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-      }
-      .bubble {
-        background: #f0f4ff;
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 16px;
-        position: relative;
-      }
-      .bubble::after {
-        content: '';
-        position: absolute;
-        top: -8px;
-        left: 50%;
-        transform: translateX(-50%);
-        border: 8px solid transparent;
-        border-bottom-color: #f0f4ff;
-        border-top: none;
-      }
-      .title {
-        font-size: 18px;
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 8px;
-      }
-      .message {
-        font-size: 14px;
-        color: #666;
-        line-height: 1.5;
-      }
-      .progress-bar {
-        width: 100%;
-        height: 8px;
-        background: #e0e0e0;
-        border-radius: 4px;
-        overflow: hidden;
-        margin-bottom: 8px;
-      }
-      .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        transition: width 0.3s ease;
-      }
-      .progress-text {
-        font-size: 12px;
-        color: #999;
-        text-align: center;
-      }
-      .result {
-        margin-top: 16px;
-        padding: 12px;
-        border-radius: 8px;
-        font-size: 14px;
-        text-align: center;
-      }
-      .result.success {
-        background: #d4edda;
-        color: #155724;
-      }
-      .result.error {
-        background: #f8d7da;
-        color: #721c24;
-      }
-      .count {
-        margin-top: 8px;
-        font-size: 12px;
-        color: #666;
-      }
-      .dismiss-btn {
-        margin-top: 16px;
-        width: 100%;
-        padding: 10px;
-        background: #667eea;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 14px;
-        cursor: pointer;
-        transition: background 0.2s;
+        transition: all 0.2s;
+        z-index: 10;
       }
       .dismiss-btn:hover {
-        background: #5568d3;
+        background: #f1f5f9;
+        color: #475569;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <div class="mascot">📦</div>
+      <button class="dismiss-btn" id="dismissBtn" title="关闭">×</button>
+      
+      <!-- Robot Mascot SVG -->
+      <div class="mascot">
+        <svg class="robot-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Antenna -->
+          <rect x="23" y="4" width="2" height="6" fill="#818cf8" rx="1" />
+          <circle class="antenna-glow" cx="24" cy="4" r="3" fill="#4f46e5" />
+          
+          <!-- Ears -->
+          <rect x="6" y="18" width="3" height="8" rx="1.5" fill="#94a3b8" />
+          <rect x="39" y="18" width="3" height="8" rx="1.5" fill="#94a3b8" />
+
+          <!-- Head/Face -->
+          <rect class="robot-head" x="9" y="10" width="30" height="24" rx="6" fill="url(#paint_normal)" stroke="#4f46e5" stroke-width="1.5" />
+          
+          <!-- Screen -->
+          <rect x="13" y="14" width="22" height="15" rx="3" fill="#0f172a" />
+          
+          <!-- Eyes -->
+          <ellipse class="robot-eye left-eye" cx="19" cy="21" rx="2" ry="2.5" fill="#38bdf8" />
+          <ellipse class="robot-eye right-eye" cx="29" cy="21" rx="2" ry="2.5" fill="#38bdf8" />
+          
+          <!-- Mouth -->
+          <path d="M21 26 C 21 26, 24 28, 27 26" stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round" fill="none" />
+          
+          <!-- Gradients -->
+          <defs>
+            <linearGradient id="paint_normal" x1="9" y1="10" x2="39" y2="34" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#f8fafc" />
+              <stop offset="1" stop-color="#e2e8f0" />
+            </linearGradient>
+            <linearGradient id="paint_success" x1="9" y1="10" x2="39" y2="34" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#f0fdf4" />
+              <stop offset="1" stop-color="#bbf7d0" />
+            </linearGradient>
+            <linearGradient id="paint_error" x1="9" y1="10" x2="39" y2="34" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#fef2f2" />
+              <stop offset="1" stop-color="#fecaca" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
       <div class="bubble">
         <div class="title" id="title">准备执行...</div>
         <div class="message" id="message">正在等待任务开始</div>
       </div>
+      
       <div class="progress-bar">
         <div class="progress-fill" id="progressBar" style="width: 0%"></div>
       </div>
-      <div class="progress-text" id="progressText">0 / 0</div>
+      <div class="progress-row">
+        <div class="progress-text" id="progressText">0 / 0</div>
+        <div class="count" id="countText"></div>
+      </div>
       <div class="result" id="resultText" style="display: none;"></div>
-      <div class="count" id="countText"></div>
-      <button class="dismiss-btn" id="dismissBtn">关闭</button>
     </div>
     <script type="module" src="/src/mini.ts"></script>
   </body>

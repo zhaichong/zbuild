@@ -1,6 +1,6 @@
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
-import type { AppConfig, ToolDetectionResult } from '@/types'
+import type { AppConfig } from '@/types'
 
 export async function saveConfig(config: AppConfig): Promise<AppConfig> {
   const store = useAppStore()
@@ -9,7 +9,3 @@ export async function saveConfig(config: AppConfig): Promise<AppConfig> {
   return saved
 }
 
-export async function detectTools(config: Partial<AppConfig>): Promise<ToolDetectionResult> {
-  const result = await ipc.detectTools(config)
-  return result
-}

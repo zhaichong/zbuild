@@ -21,9 +21,9 @@ def cmd_history_list(payload: dict[str, Any]) -> dict[str, Any]:
 @register("history-get")
 def cmd_history_get(payload: dict[str, Any]) -> dict[str, Any]:
     """Get a single execution record by run_id."""
-    run_id = payload.get("run_id", "")
+    run_id = payload.get("id", "")
     if not run_id:
-        return {"success": False, "error": "Missing 'run_id'"}
+        return {"success": False, "error": "Missing 'id'"}
 
     store = HistoryStore()
     record = store.get(run_id)

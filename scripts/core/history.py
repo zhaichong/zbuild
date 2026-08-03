@@ -16,6 +16,22 @@ from core.constants import HISTORY_DIR
 from core.models import ExecutionRecord
 
 
+_SECRET_KEYS = {"password", "secret", "token", "api_key"}
+
+
+def _without_secrets(value: Any) -> Any:
+    """Return a JSON-safe copy with credential fields removed."""
+    if isinstance(value, dict):
+        return {
+            key: _without_secrets(item)
+            for key, item in value.items()
+            if key.lower() not in _SECRET_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_secrets(item) for item in value]
+    return value
+
+
 class HistoryStore:
     """CRUD operations for execution history records.
 
@@ -59,9 +75,11 @@ class HistoryStore:
         if not record.started_at:
             record.started_at = time.time()
 
+        record_data = record.to_dict()
+        record_data["config_snapshot"] = _without_secrets(record.config_snapshot)
         path = self.history_dir / f"{record.run_id}.json"
         path.write_text(
-            json.dumps(record.to_dict(), ensure_ascii=False, indent=2),
+            json.dumps(record_data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
@@ -73,15 +91,19 @@ class HistoryStore:
             "started_at": record.started_at,
             "success": record.success,
             "project_count": len(record.projects),
+            "projects": [p.to_dict() for p in record.projects],
+            "config_snapshot": record_data["config_snapshot"],
         })
         self._save_index(index)
         return record.run_id
 
     def update(self, record: ExecutionRecord) -> None:
         """Overwrite an existing execution record and refresh the index."""
+        record_data = record.to_dict()
+        record_data["config_snapshot"] = _without_secrets(record.config_snapshot)
         path = self.history_dir / f"{record.run_id}.json"
         path.write_text(
-            json.dumps(record.to_dict(), ensure_ascii=False, indent=2),
+            json.dumps(record_data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
@@ -90,6 +112,9 @@ class HistoryStore:
             if entry.get("run_id") == record.run_id:
                 entry["success"] = record.success
                 entry["finished_at"] = record.finished_at
+                entry["project_count"] = len(record.projects)
+                entry["projects"] = [p.to_dict() for p in record.projects]
+                entry["config_snapshot"] = record_data["config_snapshot"]
                 if record.started_at and record.finished_at:
                     entry["duration_seconds"] = record.finished_at - record.started_at
                 break

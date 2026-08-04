@@ -80,38 +80,363 @@
               </select>
             </div>
 
-            <!-- Step 4: Device Select -->
-            <div class="space-y-1.5">
-              <label class="block text-xs font-semibold text-slate-700">
-                4. 匹配终端设备 (wnBedHead/wnBedSide)
+            <!-- Mode Selector Tabs -->
+            <div class="pt-1">
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+                4. 选择功能模式
               </label>
-              <select
-                v-model="selectedDeviceId"
-                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-xs text-slate-800 outline-none transition-all disabled:opacity-50 cursor-pointer"
-                :disabled="devices.length === 0"
-              >
-                <option value="" disabled>
-                  {{ devices.length > 0 ? '-- 请选择终端设备 --' : '请先选择护理单元' }}
-                </option>
-                <option v-for="dev in devices" :key="dev.deviceId" :value="dev.deviceId">
-                  {{ dev.deviceName || dev.deviceId }} [床号: {{ dev.bedName || '未指定' }}]
-                </option>
-              </select>
+              <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                <button
+                  type="button"
+                  class="py-1.5 rounded-lg transition-all cursor-pointer"
+                  :class="activeMode === 'device' ? 'bg-white text-blue-600 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-700'"
+                  @click="activeMode = 'device'"
+                >
+                  匹配终端设备
+                </button>
+                <button
+                  type="button"
+                  class="py-1.5 rounded-lg transition-all cursor-pointer"
+                  :class="activeMode === 'generateData' ? 'bg-white text-blue-600 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-700'"
+                  @click="activeMode = 'generateData'"
+                >
+                  创建数据库数据
+                </button>
+              </div>
             </div>
 
-            <!-- Submit Action -->
-            <div class="pt-2">
-              <button
-                type="button"
-                class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                :disabled="extracting || !selectedDeviceId"
-                @click="onStartExtract"
-              >
-                <svg v-if="extracting" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span>{{ extracting ? '数据提取与匹配中...' : '🚀 开始智能提取数据链路' }}</span>
-              </button>
+            <!-- Mode 1: Device Matching -->
+            <div v-if="activeMode === 'device'" class="space-y-4">
+              <div class="space-y-1.5">
+                <label class="block text-xs font-semibold text-slate-700">
+                  匹配终端设备 (wnBedHead/wnBedSide)
+                </label>
+                <select
+                  v-model="selectedDeviceId"
+                  class="w-full px-3 py-2 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-xs text-slate-800 outline-none transition-all disabled:opacity-50 cursor-pointer"
+                  :disabled="devices.length === 0"
+                >
+                  <option value="" disabled>
+                    {{ devices.length > 0 ? '-- 请选择终端设备 --' : '请先选择护理单元' }}
+                  </option>
+                  <option v-for="dev in devices" :key="dev.deviceId" :value="dev.deviceId">
+                    {{ dev.deviceName || dev.deviceId }} [床号: {{ dev.bedName || '未指定' }}]
+                  </option>
+                </select>
+              </div>
+
+              <div class="pt-2">
+                <button
+                  type="button"
+                  class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  :disabled="extracting || !selectedDeviceId"
+                  @click="onStartExtract"
+                >
+                  <svg v-if="extracting" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>{{ extracting ? '数据提取与匹配中...' : '🚀 开始智能提取数据链路' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode 2: Generate DB Mock Data -->
+            <div v-else class="space-y-3 bg-slate-50/80 border border-slate-200/60 rounded-xl p-3.5">
+              <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                  </svg>
+                  数据库账户及目标配置
+                </span>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-md text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    :disabled="testingDbConn || !dbHost.trim()"
+                    @click="onTestDbConnection"
+                  >
+                    <svg v-if="testingDbConn" class="w-3 h-3 animate-spin text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>{{ testingDbConn ? '测试中...' : '测试连通性' }}</span>
+                  </button>
+                  <span class="text-[10px] text-slate-400 font-mono">YHDB</span>
+                </div>
+              </div>
+
+              <!-- DB Host & Port -->
+              <div class="grid grid-cols-3 gap-2">
+                <div class="col-span-2 space-y-1">
+                  <label class="block text-[11px] font-semibold text-slate-600">目标 Host</label>
+                  <input
+                    v-model="dbHost"
+                    type="text"
+                    class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono outline-none focus:border-blue-500"
+                    placeholder="192.168.78.63"
+                  >
+                </div>
+                <div class="space-y-1">
+                  <label class="block text-[11px] font-semibold text-slate-600">端口</label>
+                  <input
+                    v-model="dbPort"
+                    type="text"
+                    class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono outline-none focus:border-blue-500"
+                    placeholder="3306"
+                  >
+                </div>
+              </div>
+
+              <!-- DB User & Pwd -->
+              <div class="grid grid-cols-2 gap-2">
+                <div class="space-y-1">
+                  <label class="block text-[11px] font-semibold text-slate-600">数据库账户</label>
+                  <input
+                    v-model="dbUser"
+                    type="text"
+                    class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono outline-none focus:border-blue-500"
+                    placeholder="root"
+                  >
+                </div>
+                <div class="space-y-1">
+                  <label class="block text-[11px] font-semibold text-slate-600">数据库密码</label>
+                  <input
+                    v-model="dbPass"
+                    type="password"
+                    class="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono outline-none focus:border-blue-500"
+                    placeholder="密码"
+                  >
+                </div>
+              </div>
+
+              <!-- Task Options -->
+              <div class="space-y-2 pt-1 border-t border-slate-200">
+                <span class="block text-[11px] font-bold text-slate-700">造数选项配置</span>
+
+                <!-- Option 1: Patient Data -->
+                <div class="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2 text-xs">
+                  <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      v-model="createPatient"
+                      type="checkbox"
+                      class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    >
+                    <span>1. 创建患者数据</span>
+                  </label>
+                  <div v-if="createPatient" class="flex items-center gap-1">
+                    <span class="text-[11px] text-slate-500">数量:</span>
+                    <input
+                      v-model.number="patientCount"
+                      type="number"
+                      min="1"
+                      max="45"
+                      class="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-center text-xs outline-none focus:border-blue-500 font-mono"
+                    >
+                    <span class="text-[11px] text-slate-500">条</span>
+                  </div>
+                </div>
+
+                <!-- Option 2: Board Data -->
+                <div class="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2 text-xs">
+                  <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      v-model="createBoard"
+                      type="checkbox"
+                      class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    >
+                    <span>2. 创建看板数据 (bo_switch/td_device)</span>
+                  </label>
+
+                  <div v-if="createBoard" class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-[11px] text-slate-500">模式:</span>
+                    <select
+                      v-model.number="boardTouchMode"
+                      class="px-1.5 py-0.5 border border-slate-300 rounded text-xs outline-none focus:border-blue-500 bg-slate-50 cursor-pointer font-semibold"
+                    >
+                      <option :value="0">0 非触屏</option>
+                      <option :value="1">1 触屏</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Option 3: Fee Data -->
+                <div class="bg-white border border-slate-200 rounded-lg p-2 text-xs space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                      <input
+                        v-model="createFee"
+                        type="checkbox"
+                        class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      >
+                      <span>3. 创建费用相关数据</span>
+                    </label>
+                    <div v-if="createFee" class="flex items-center gap-1">
+                      <span class="text-[11px] text-slate-500">数量:</span>
+                      <input
+                        v-model.number="feeCount"
+                        type="number"
+                        min="1"
+                        max="100"
+                        class="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-center text-xs outline-none focus:border-blue-500 font-mono"
+                      >
+                      <span class="text-[11px] text-slate-500">条</span>
+                    </div>
+                  </div>
+                  <div v-if="createFee" class="flex items-center gap-2 pt-1 border-t border-slate-100">
+                    <span class="text-[11px] text-slate-500 shrink-0">指定患者ID:</span>
+                    <input
+                      v-model="feePatientId"
+                      type="text"
+                      placeholder="留空自动关联生成的患者"
+                      class="w-full px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-xs outline-none focus:border-blue-500 font-mono"
+                    >
+                  </div>
+                </div>
+
+                <!-- Option 4: Examine Data -->
+                <div class="bg-white border border-slate-200 rounded-lg p-2 text-xs space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                      <input
+                        v-model="createExamine"
+                        type="checkbox"
+                        class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      >
+                      <span>4. 创建检查检验数据</span>
+                    </label>
+                    <div v-if="createExamine" class="flex items-center gap-1">
+                      <span class="text-[11px] text-slate-500">数量:</span>
+                      <input
+                        v-model.number="examineCount"
+                        type="number"
+                        min="1"
+                        max="100"
+                        class="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-center text-xs outline-none focus:border-blue-500 font-mono"
+                      >
+                      <span class="text-[11px] text-slate-500">条</span>
+                    </div>
+                  </div>
+                  <div v-if="createExamine" class="flex items-center gap-2 pt-1 border-t border-slate-100">
+                    <span class="text-[11px] text-slate-500 shrink-0">指定患者ID:</span>
+                    <input
+                      v-model="examinePatientId"
+                      type="text"
+                      placeholder="留空自动关联生成的患者"
+                      class="w-full px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-xs outline-none focus:border-blue-500 font-mono"
+                    >
+                  </div>
+                </div>
+
+                <!-- Option 5: Simple Doctor Advice Data -->
+                <div class="bg-white border border-slate-200 rounded-lg p-2 text-xs space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                      <input
+                        v-model="createAdvice"
+                        type="checkbox"
+                        class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      >
+                      <span>5. 创建简版医嘱数据</span>
+                    </label>
+                    <div v-if="createAdvice" class="flex items-center gap-1">
+                      <span class="text-[11px] text-slate-500">数量:</span>
+                      <input
+                        v-model.number="adviceCount"
+                        type="number"
+                        min="1"
+                        max="100"
+                        class="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-center text-xs outline-none focus:border-blue-500 font-mono"
+                      >
+                      <span class="text-[11px] text-slate-500">条</span>
+                    </div>
+                  </div>
+                  <div v-if="createAdvice" class="flex items-center gap-2 pt-1 border-t border-slate-100">
+                    <span class="text-[11px] text-slate-500 shrink-0">指定患者ID:</span>
+                    <input
+                      v-model="advicePatientId"
+                      type="text"
+                      placeholder="留空自动关联生成的患者"
+                      class="w-full px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-xs outline-none focus:border-blue-500 font-mono"
+                    >
+                  </div>
+                </div>
+
+                <!-- Option 6: Operation Data -->
+                <div class="bg-white border border-slate-200 rounded-lg p-2 text-xs space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                      <input
+                        v-model="createOperation"
+                        type="checkbox"
+                        class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      >
+                      <span>6. 创建手术部分数据</span>
+                    </label>
+                    <div v-if="createOperation" class="flex items-center gap-1">
+                      <span class="text-[11px] text-slate-500">数量:</span>
+                      <input
+                        v-model.number="operationCount"
+                        type="number"
+                        min="1"
+                        max="100"
+                        class="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-center text-xs outline-none focus:border-blue-500 font-mono"
+                      >
+                      <span class="text-[11px] text-slate-500">条</span>
+                    </div>
+                  </div>
+                  <div v-if="createOperation" class="flex items-center gap-2 pt-1 border-t border-slate-100">
+                    <span class="text-[11px] text-slate-500 shrink-0">指定患者ID:</span>
+                    <input
+                      v-model="operationPatientId"
+                      type="text"
+                      placeholder="留空自动关联生成的患者"
+                      class="w-full px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-xs outline-none focus:border-blue-500 font-mono"
+                    >
+                  </div>
+                </div>
+
+                <!-- Option 7: Incremental & Ignore -->
+                <div class="flex items-center justify-between bg-emerald-50/60 border border-emerald-200/80 rounded-lg p-2 text-xs">
+                  <label class="flex items-center gap-2 cursor-pointer font-medium text-emerald-900">
+                    <input
+                      v-model="useIgnore"
+                      type="checkbox"
+                      class="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    >
+                    <span>增量防护与冲突跳过 (INSERT IGNORE)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Dual Submit Action Buttons -->
+              <div class="pt-1 space-y-2">
+                <button
+                  type="button"
+                  class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  :disabled="executingDb || !selectedOrgId || !selectedDeptId || (!createPatient && !createBoard && !createFee && !createExamine && !createAdvice && !createOperation)"
+                  @click="onDirectExecuteDb"
+                >
+                  <svg v-if="executingDb" class="w-4 h-4 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span>{{ executingDb ? '正在写入数据库中...' : '🚀 直接连接数据库并写入数据' }}</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200"
+                  :disabled="!selectedOrgId || !selectedDeptId || (!createPatient && !createBoard && !createFee && !createExamine && !createAdvice && !createOperation)"
+                  @click="onGenerateMockData"
+                >
+                  <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>📋 仅生成 SQL 脚本 (供手动复制)</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -172,8 +497,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useAppStore } from '@/stores/appStore'
+import { ipc } from '@/services/ipc'
 import {
   fetchOrgs,
   fetchDepts,
@@ -183,12 +509,64 @@ import {
   type DeptItem,
   type DeviceItem,
 } from '@/services/mockQuery'
+import { generateMockDataSQL } from '@/services/mockDataGenerator'
 
 const store = useAppStore()
 
 const baseUrl = ref('http://192.168.78.63')
 const connecting = ref(false)
 const extracting = ref(false)
+
+const activeMode = ref<'device' | 'generateData'>('device')
+
+// DB Connection Config
+const dbHost = ref('192.168.78.63')
+const dbPort = ref('3306')
+const dbUser = ref('root')
+const dbPass = ref('')
+const testingDbConn = ref(false)
+const executingDb = ref(false)
+
+// Mock Data Options
+const createPatient = ref(true)
+const patientCount = ref(10)
+const createBoard = ref(true)
+const boardTouchMode = ref(0)
+
+const createFee = ref(false)
+const feeCount = ref(10)
+const feePatientId = ref('')
+
+const createExamine = ref(false)
+const examineCount = ref(10)
+const examinePatientId = ref('')
+
+const createAdvice = ref(false)
+const adviceCount = ref(10)
+const advicePatientId = ref('')
+
+const createOperation = ref(false)
+const operationCount = ref(10)
+const operationPatientId = ref('')
+
+const useIgnore = ref(true)
+
+// Sync dbHost automatically when baseUrl changes
+watch(
+  baseUrl,
+  (newVal) => {
+    try {
+      const u = new URL(newVal.startsWith('http') ? newVal : `http://${newVal}`)
+      if (u.hostname) {
+        dbHost.value = u.hostname
+      }
+    } catch {
+      // fallback if invalid URL format
+      dbHost.value = newVal.replace(/https?:\/\//, '').split(':')[0].split('/')[0]
+    }
+  },
+  { immediate: true },
+)
 
 const orgs = ref<OrgItem[]>([])
 const depts = ref<DeptItem[]>([])
@@ -287,10 +665,139 @@ async function onStartExtract() {
   }
 }
 
+async function onTestDbConnection() {
+  if (!dbHost.value.trim()) {
+    store.showToast('请输入目标数据库 Host', 'error')
+    return
+  }
+  testingDbConn.value = true
+
+  try {
+    const res = await ipc.testDbConnection(dbHost.value.trim(), dbPort.value || 3306)
+    if (res.success) {
+      store.showToast(res.message || `数据库 [${dbHost.value.trim()}:${dbPort.value || 3306}] 网络连通测试成功！`, 'success')
+      formattedResult.value = `[${new Date().toLocaleTimeString()}] ✅ 连通性测试通过！\n目标数据库网络端口 [${dbHost.value.trim()}:${dbPort.value || 3306}] 可正常握手接入。\n账户: ${dbUser.value || 'root'}`
+    } else {
+      store.showToast(res.error || '连通失败，请检查主机/端口', 'error')
+      formattedResult.value = `[${new Date().toLocaleTimeString()}] ❌ 连通性测试失败！\n原因: ${res.error || '连接超时或被拒绝'}`
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    store.showToast(`测试失败: ${msg}`, 'error')
+  } finally {
+    testingDbConn.value = false
+  }
+}
+
+async function onDirectExecuteDb() {
+  if (!selectedOrgId.value || !selectedDeptId.value) {
+    store.showToast('请先选择机构和护理单元', 'error')
+    return
+  }
+  if (!createPatient.value && !createBoard.value && !createFee.value && !createExamine.value && !createAdvice.value && !createOperation.value) {
+    store.showToast('请至少勾选一个造数选项', 'error')
+    return
+  }
+  if (!dbHost.value.trim()) {
+    store.showToast('请输入目标数据库 Host', 'error')
+    return
+  }
+
+  executingDb.value = true
+  formattedResult.value = `[${new Date().toLocaleTimeString()}] 正在建立 MySQL 数据库连接并批量执行数据插入...\n`
+
+  try {
+    const resMock = generateMockDataSQL({
+      orgId: selectedOrgId.value,
+      deptId: selectedDeptId.value,
+      createPatient: createPatient.value,
+      patientCount: patientCount.value || 10,
+      createBoard: createBoard.value,
+      boardTouchMode: boardTouchMode.value,
+      createFee: createFee.value,
+      feeCount: feeCount.value || 10,
+      feePatientId: feePatientId.value,
+      createExamine: createExamine.value,
+      examineCount: examineCount.value || 10,
+      examinePatientId: examinePatientId.value,
+      createAdvice: createAdvice.value,
+      adviceCount: adviceCount.value || 10,
+      advicePatientId: advicePatientId.value,
+      createOperation: createOperation.value,
+      operationCount: operationCount.value || 10,
+      operationPatientId: operationPatientId.value,
+      useIgnore: useIgnore.value,
+    })
+
+    const execRes = await ipc.executeDbSql({
+      host: dbHost.value.trim(),
+      port: dbPort.value || 3306,
+      user: dbUser.value || 'root',
+      password: dbPass.value || '',
+      database: 'YHDB',
+      sqlStatements: resMock.rawStatements,
+    })
+
+    if (execRes.success) {
+      formattedResult.value = `${resMock.summaryText}\n\n===== 直连数据库执行结果日志 =====\n${execRes.logs}`
+      store.showToast(`数据已成功真正写入数据库！(写入 ${execRes.successCount || 0} 条，跳过 ${execRes.skippedCount || 0} 条)`, 'success')
+    } else {
+      formattedResult.value = `[${new Date().toLocaleTimeString()}] ❌ 数据库写入失败！\n${execRes.logs || execRes.error}\n\n-- 您可以拷贝下方生成的 SQL 语句尝试手动在 Navicat 中执行：\n\n${resMock.sqlText}`
+      store.showToast(`写入数据库失败: ${execRes.error}`, 'error')
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    store.showToast(`执行异常: ${msg}`, 'error')
+  } finally {
+    executingDb.value = false
+  }
+}
+
+function onGenerateMockData() {
+  if (!selectedOrgId.value || !selectedDeptId.value) {
+    store.showToast('请先选择机构和护理单元', 'error')
+    return
+  }
+  if (!createPatient.value && !createBoard.value && !createFee.value && !createExamine.value && !createAdvice.value && !createOperation.value) {
+    store.showToast('请至少勾选一个造数选项', 'error')
+    return
+  }
+
+  try {
+    const res = generateMockDataSQL({
+      orgId: selectedOrgId.value,
+      deptId: selectedDeptId.value,
+      createPatient: createPatient.value,
+      patientCount: patientCount.value || 10,
+      createBoard: createBoard.value,
+      boardTouchMode: boardTouchMode.value,
+      createFee: createFee.value,
+      feeCount: feeCount.value || 10,
+      feePatientId: feePatientId.value,
+      createExamine: createExamine.value,
+      examineCount: examineCount.value || 10,
+      examinePatientId: examinePatientId.value,
+      createAdvice: createAdvice.value,
+      adviceCount: adviceCount.value || 10,
+      advicePatientId: advicePatientId.value,
+      createOperation: createOperation.value,
+      operationCount: operationCount.value || 10,
+      operationPatientId: operationPatientId.value,
+      useIgnore: useIgnore.value,
+    })
+
+    formattedResult.value = `${res.summaryText}\n\n-- ===================================================\n-- 以下为生成的 SQL 语句脚本（可直接复制在数据库中执行）\n-- ===================================================\n\n${res.sqlText}`
+    store.showToast('造数 SQL 脚本成功生成！', 'success')
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    store.showToast(`造数失败: ${msg}`, 'error')
+  }
+}
+
 function copyResult() {
   if (!formattedResult.value) return
   navigator.clipboard.writeText(formattedResult.value)
-  store.showToast('提取结果已复制到剪贴板', 'success')
+  store.showToast('结果已复制到剪贴板', 'success')
 }
 </script>
 

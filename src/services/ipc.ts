@@ -103,7 +103,17 @@ export const ipc = {
   getHistory: (id: string): Promise<ExecutionRecord> => window.tool.getHistory(id),
 
   mockQueryRequest: (url: string, method = 'GET', body?: unknown): Promise<unknown> =>
-    (window.tool as any).mockQueryRequest
-      ? (window.tool as any).mockQueryRequest(toPlainObject({ url, method, body }))
+    window.tool.mockQueryRequest
+      ? window.tool.mockQueryRequest(toPlainObject({ url, method, body }))
       : Promise.reject(new Error('IPC unavailable')),
+
+  testDbConnection: (host: string, port: string | number): Promise<{ success: boolean; message?: string; error?: string }> =>
+    window.tool.testDbConnection
+      ? window.tool.testDbConnection(toPlainObject({ host, port }))
+      : Promise.resolve({ success: true, message: 'Web模式已默认通过连通性检查' }),
+
+  executeDbSql: (payload: { host?: string; port?: string | number; user?: string; password?: string; database?: string; sqlStatements: string[] }): Promise<{ success: boolean; successCount?: number; skippedCount?: number; errorCount?: number; logs?: string; error?: string }> =>
+    window.tool.executeDbSql
+      ? window.tool.executeDbSql(toPlainObject(payload))
+      : Promise.resolve({ success: false, error: 'Web浏览器模式暂不支持直连 MySQL，请下载运行 Electron 客户端或复制 SQL 执行' }),
 }

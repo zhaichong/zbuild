@@ -25,6 +25,9 @@ declare global {
       deleteTemplate: (id: string) => Promise<void>
       listHistory: () => Promise<ExecutionRecord[]>
       getHistory: (id: string) => Promise<ExecutionRecord>
+      mockQueryRequest?: (payload: unknown) => Promise<unknown>
+      testDbConnection?: (payload: unknown) => Promise<{ success: boolean; message?: string; error?: string }>
+      executeDbSql?: (payload: unknown) => Promise<{ success: boolean; successCount?: number; skippedCount?: number; errorCount?: number; logs?: string; error?: string }>
     }
     mini: {
       onStatus: (handler: (status: MiniStatus) => void) => () => void

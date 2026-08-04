@@ -1,6 +1,6 @@
 {
   "appId": "com.zbuild.app",
-  "productName": "特殊订单打包工具",
+  "productName": "智慧病房系统构建与调试工具",
   "directories": {
     "output": "release"
   },
@@ -28,7 +28,7 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "特殊订单打包工具"
+    "shortcutName": "智慧病房系统构建与调试工具"
   },
   "": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json"
 }

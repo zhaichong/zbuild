@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const os = require('os');
+const net = require('net');
 const { resolvePython } = require('./runtime');
 
 // ---- Asar-aware resource resolution ----
@@ -680,6 +681,126 @@ ipcMain.handle('mini:open-main', async () => {
   return true;
 });
 ipcMain.handle('mini:dismiss', async () => { miniDismissed = true; closeMiniWindow(); return true; });
+
+// DB Connection Test
+ipcMain.handle('db:test-connection', async (_event, payload) => {
+  const host = (payload && payload.host) || '127.0.0.1';
+  const port = parseInt((payload && payload.port) || '3306', 10);
+
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+
+    socket.setTimeout(4000);
+
+    socket.on('connect', () => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ success: true, message: `成功连接目标 ${host}:${port}` });
+    });
+
+    socket.on('timeout', () => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ success: false, error: `连接超时: 无法访问目标 ${host}:${port}` });
+    });
+
+    socket.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ success: false, error: `连接失败 (${err.code || err.message || '网络无法到达'})` });
+    });
+
+    try {
+      socket.connect(port, host);
+    } catch (err) {
+      if (settled) return;
+      settled = true;
+      resolve({ success: false, error: `连接异常: ${err.message}` });
+    }
+  });
+});
+
+// Direct MySQL Execute SQL Handler
+const mysql = require('mysql2/promise');
+
+ipcMain.handle('db:execute-sql', async (_event, payload) => {
+  const host = (payload && payload.host) || '127.0.0.1';
+  const port = parseInt((payload && payload.port) || '3306', 10);
+  const user = (payload && payload.user) || 'root';
+  const password = (payload && payload.password) || '';
+  const database = (payload && payload.database) || 'YHDB';
+  const sqlStatements = (payload && payload.sqlStatements) || [];
+
+  const logs = [];
+  let successCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+
+  let connection = null;
+  try {
+    connection = await mysql.createConnection({
+      host,
+      port,
+      user,
+      password,
+      database,
+      connectTimeout: 5000,
+    });
+
+    logs.push(`[${new Date().toLocaleTimeString()}] 已连接数据库 ${user}@${host}:${port}/${database}`);
+
+    for (let i = 0; i < sqlStatements.length; i++) {
+      const sql = sqlStatements[i].trim();
+      if (!sql || sql.startsWith('--')) continue;
+
+      try {
+        const [result] = await connection.query(sql);
+        const affected = result ? (result.affectedRows || 0) : 0;
+        const warning = result ? (result.warningStatus || 0) : 0;
+
+        if (affected > 0) {
+          successCount++;
+          logs.push(`✅ [${i + 1}/${sqlStatements.length}] 成功写入 ${affected} 行`);
+        } else if (warning > 0 || affected === 0) {
+          skippedCount++;
+          logs.push(`⚠️ [${i + 1}/${sqlStatements.length}] 已存在(重复)被自动跳过`);
+        }
+      } catch (err) {
+        errorCount++;
+        logs.push(`❌ [${i + 1}/${sqlStatements.length}] 跳过异常行: ${err.message}`);
+      }
+    }
+
+    logs.push(`\n===================================`);
+    logs.push(`🎉 数据插入完成统计：`);
+    logs.push(`- 成功写入库中: ${successCount} 条`);
+    logs.push(`- 撞重忽略跳过: ${skippedCount} 条`);
+    logs.push(`- 异常报错跳过: ${errorCount} 条`);
+    logs.push(`===================================`);
+
+    return {
+      success: true,
+      successCount,
+      skippedCount,
+      errorCount,
+      logs: logs.join('\n'),
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `无法建立 MySQL 数据库连接 (${err.message})`,
+      logs: `❌ 无法连接数据库 ${user}@${host}:${port}/${database}\n原因: ${err.message}`,
+    };
+  } finally {
+    if (connection) {
+      try { await connection.end(); } catch (_) {}
+    }
+  }
+});
 
 // ---- App lifecycle ----
 process.on('uncaughtException', (err) => { debugLog('uncaughtException: ' + (err && err.stack || err)); });

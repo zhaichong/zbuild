@@ -63,6 +63,12 @@ contextBridge.exposeInMainWorld('tool', {
 
   // mock query request
   mockQueryRequest: (payload) => ipcRenderer.invoke('mock-query:request', parsePayload(payload)),
+
+  // db test connection
+  testDbConnection: (payload) => ipcRenderer.invoke('db:test-connection', parsePayload(payload)),
+
+  // db execute sql
+  executeDbSql: (payload) => ipcRenderer.invoke('db:execute-sql', parsePayload(payload)),
 });
 
 contextBridge.exposeInMainWorld('mini', {

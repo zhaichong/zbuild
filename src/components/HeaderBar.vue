@@ -1,25 +1,30 @@
 <template>
   <header class="app-header">
     <div class="flex items-center gap-3">
-      <!-- App Hub Launcher Button -->
+      <!-- App Hub Launcher / Return Button -->
       <button
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none"
-        :style="activeApp === 'portal' ? 'background: #fff; color: #1e40af; shadow: 0 1px 2px rgba(0,0,0,0.1)' : 'background: rgba(255,255,255,0.15); color: #fff;'"
-        title="打开应用中心大厅"
+        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none"
+        :style="activeApp === 'portal' ? 'background: #fff; color: #1e40af;' : 'background: rgba(255,255,255,0.18); color: #fff;'"
+        :title="activeApp === 'portal' ? '当前在开发者中心' : '返回开发者中心'"
         @click="emit('switch-app', activeApp === 'portal' ? 'zbuild' : 'portal')"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- Return / Back Icon when in sub-app -->
+        <svg v-if="activeApp !== 'portal'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        <!-- Grid Icon when in portal -->
+        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
         </svg>
-        <span>应用大厅</span>
+        <span>{{ activeApp === 'portal' ? '开发者中心' : '返回' }}</span>
       </button>
 
       <span class="text-white/30 text-xs">/</span>
 
       <h1 class="text-sm font-semibold tracking-wide flex items-center gap-2">
         <span v-if="activeApp === 'mock-query'">终端数据链路提取控制台</span>
-        <span v-else-if="activeApp === 'portal'">开发者应用中心 & 工具矩阵</span>
-        <span v-else>特殊订单打包上传</span>
+        <span v-else-if="activeApp === 'portal'">开发者中心</span>
+        <span v-else>智慧病房系统构建与调试工具</span>
       </h1>
 
       <div v-if="activeApp === 'zbuild'" class="mode-switch">

@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """Command: detect-tools."""
-from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from runner.cli import register
 from tools.detect import detect_tools
 
 
 @register("detect-tools")
-def cmd_detect_tools(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_detect_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Detect all required external tools and return their status."""
     # Frontend may send Partial<AppConfig> with {tools: {git, bash, svn}}
     # or legacy {extra_paths: [...]} format.

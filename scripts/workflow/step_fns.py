@@ -3,14 +3,13 @@
 
 Each function takes a ``StepContext`` and returns a ``StepResult``.
 """
-from __future__ import annotations
 
 import logging
 import importlib.util
 import shutil
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from workflow.steps import StepContext, StepResult
 from core.errors import ToolError, BuildError, GitError, DependencyError, UploadError
@@ -30,7 +29,7 @@ def step_check_tools(ctx: StepContext) -> StepResult:
     tools = detect_tools(config=ctx.config)
     ctx.tools = tools
 
-    missing: list[str] = []
+    missing: List[str] = []
 
     git_path = tools.get("git", {}).get("path", "")
     if not git_path:

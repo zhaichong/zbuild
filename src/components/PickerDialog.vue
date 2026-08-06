@@ -17,7 +17,7 @@
           {{ title }}
         </h2>
         <button
-          class="text-text-3 hover:text-text-2 transition-colors p-1 rounded-lg hover:bg-border-light"
+          class="text-text-3 hover:text-text-2 transition-colors p-1 rounded-lg hover:bg-border-light cursor-pointer"
           @click="visible = false"
         >
           <svg
@@ -57,8 +57,9 @@
             v-model="searchQuery"
             type="text"
             class="w-full pl-8 pr-3 py-2 text-sm rounded-xl border border-border-light bg-bg-base text-text-1 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-colors"
-            placeholder="搜索..."
+            placeholder="搜索关键词，点击项目或按回车确定..."
             autofocus
+            @keydown.enter.prevent="handleOk"
           >
         </div>
       </div>
@@ -75,8 +76,8 @@
           v-for="item in filteredItems"
           :key="item"
           class="px-3 py-2 text-sm rounded-xl cursor-pointer transition-colors"
-          :class="selectedValue === item
-            ? 'bg-primary/10 text-primary font-medium'
+          :class="effectiveSelectedValue === item
+            ? 'bg-primary/10 text-primary font-medium border border-primary/20'
             : 'text-text-1 hover:bg-border-light'"
           @click="selectItem(item)"
           @dblclick="confirmItem(item)"
@@ -88,14 +89,14 @@
       <!-- Footer -->
       <div class="flex items-center justify-end gap-3 px-5 py-3 border-t border-border-light">
         <button
-          class="px-4 py-2 text-sm rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
+          class="px-4 py-2 text-sm rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors cursor-pointer"
           @click="visible = false"
         >
           取消
         </button>
         <button
-          class="px-5 py-2 text-sm rounded-xl bg-primary text-white hover:opacity-90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="!selectedValue"
+          class="px-5 py-2 text-sm rounded-xl bg-primary text-white hover:opacity-90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          :disabled="!effectiveSelectedValue"
           @click="handleOk"
         >
           确定
@@ -120,9 +121,23 @@ const selectedValue = ref('')
 const searchInput = ref<HTMLInputElement>()
 
 const filteredItems = computed(() => {
-  if (!searchQuery.value) return props.items
-  const q = searchQuery.value.toLowerCase()
-  return props.items.filter((item) => item.toLowerCase().includes(q))
+  if (!searchQuery.value.trim()) return props.items || []
+  const q = searchQuery.value.trim().toLowerCase()
+  return (props.items || []).filter((item) => item.toLowerCase().includes(q))
+})
+
+// 计算有效的当前选中项（支持搜索框手动高亮、匹配第一项或直接输入）
+const effectiveSelectedValue = computed(() => {
+  if (selectedValue.value && filteredItems.value.includes(selectedValue.value)) {
+    return selectedValue.value
+  }
+  if (filteredItems.value.length > 0) {
+    return filteredItems.value[0]
+  }
+  if (searchQuery.value.trim()) {
+    return searchQuery.value.trim()
+  }
+  return selectedValue.value || ''
 })
 
 watch(
@@ -131,6 +146,12 @@ watch(
     selectedValue.value = val || ''
   },
 )
+
+watch(filteredItems, (list) => {
+  if (list.length > 0 && (!selectedValue.value || !list.includes(selectedValue.value))) {
+    selectedValue.value = list[0]
+  }
+})
 
 function selectItem(item: string) {
   selectedValue.value = item
@@ -143,8 +164,9 @@ function confirmItem(item: string) {
 }
 
 function handleOk() {
-  if (selectedValue.value) {
-    emit('choose', selectedValue.value)
+  const val = effectiveSelectedValue.value
+  if (val) {
+    emit('choose', val)
     visible.value = false
   }
 }

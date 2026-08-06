@@ -4,12 +4,11 @@
 All functions accept a project path and use the system ``git`` command
 (or the bundled version) to query and manipulate branches.
 """
-from __future__ import annotations
 
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Union
 
 from core.errors import GitError
 from tools.exec import run_process
@@ -17,7 +16,7 @@ from tools.exec import run_process
 logger = logging.getLogger(__name__)
 
 
-def safe_git(project_path: Path | str) -> list[str]:
+def safe_git(project_path: Union[Path, str]) -> List[str]:
     """Return the base git command list for the given project.
 
     Uses ``git`` from PATH; callers can override by setting GIT_EXECUTABLE.
@@ -31,7 +30,7 @@ def safe_git(project_path: Path | str) -> list[str]:
 # Read operations
 # ---------------------------------------------------------------------------
 
-def read_current_branch(project_path: Path | str) -> str:
+def read_current_branch(project_path: Union[Path, str]) -> str:
     """Return the current branch name, or empty string on failure."""
     try:
         r = run_process(
@@ -46,7 +45,7 @@ def read_current_branch(project_path: Path | str) -> str:
     return ""
 
 
-def read_branches(project_path: Path | str) -> list[str]:
+def read_branches(project_path: Union[Path, str]) -> List[str]:
     """Return all local branch names."""
     try:
         r = run_process(
@@ -59,7 +58,7 @@ def read_branches(project_path: Path | str) -> list[str]:
     return []
 
 
-def fetch_remote_branches(project_path: Path | str) -> list[str]:
+def fetch_remote_branches(project_path: Union[Path, str]) -> List[str]:
     """Fetch from origin and return remote branch names (without origin/ prefix)."""
     try:
         r = run_process(
@@ -90,7 +89,7 @@ def fetch_remote_branches(project_path: Path | str) -> list[str]:
     return []
 
 
-def refresh_project_branches(project_path: Path | str) -> list[str]:
+def refresh_project_branches(project_path: Union[Path, str]) -> List[str]:
     """Fetch remote branches and return combined local + remote branch list."""
     local = read_branches(project_path)
     remote = fetch_remote_branches(project_path)
@@ -102,9 +101,9 @@ def refresh_project_branches(project_path: Path | str) -> list[str]:
 # Local changes detection
 # ---------------------------------------------------------------------------
 
-def local_changes(project_path: Path | str) -> dict[str, list[str]]:
+def local_changes(project_path: Union[Path, str]) -> Dict[str, List[str]]:
     """Return a dict with 'staged', 'unstaged', and 'untracked' file lists."""
-    result: dict[str, list[str]] = {"staged": [], "unstaged": [], "untracked": []}
+    result: Dict[str, List[str]] = {"staged": [], "unstaged": [], "untracked": []}
     try:
         r = run_process(
             safe_git(project_path) + ["status", "--porcelain"],
@@ -128,7 +127,7 @@ def local_changes(project_path: Path | str) -> dict[str, list[str]]:
     return result
 
 
-def local_changes_summary(project_path: Path | str) -> dict:
+def local_changes_summary(project_path: Union[Path, str]) -> dict:
     """Return a summary dict with has_changes flag and counts."""
     changes = local_changes(project_path)
     has_changes = bool(changes["staged"] or changes["unstaged"] or changes["untracked"])
@@ -147,7 +146,7 @@ def local_changes_summary(project_path: Path | str) -> dict:
 # Stash / branch switching
 # ---------------------------------------------------------------------------
 
-def stash_local_changes(project_path: Path | str) -> dict | bool:
+def stash_local_changes(project_path: Union[Path, str]) -> Union[dict, bool]:
     """Stash any local changes (including untracked files).
 
     Returns a stash record dict with details, or False if nothing to stash.
@@ -173,10 +172,10 @@ def stash_local_changes(project_path: Path | str) -> dict | bool:
 
 
 def ensure_branch(
-    project_path: Path | str,
+    project_path: Union[Path, str],
     target_branch: str,
     allow_stash: bool = True,
-) -> dict | bool:
+) -> Union[dict, bool]:
     """Switch to *target_branch*, fetching remote first and stashing if needed.
 
     Parameters

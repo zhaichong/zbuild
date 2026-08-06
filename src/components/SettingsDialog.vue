@@ -245,7 +245,7 @@
                 <!-- 打包产物获取目录 -->
                 <div class="pt-2 border-t border-border/60">
                   <div class="flex items-center justify-between mb-1.5 gap-2">
-                    <label class="block text-xs text-text-3 font-medium">默认全局打包产物目录（多个用逗号分隔）</label>
+                    <label class="block text-xs text-text-3 font-medium">默认全局打包产物目录（支持多个，用逗号分隔）</label>
                     <button
                       type="button"
                       class="text-xs text-primary hover:text-primary-dark font-medium flex items-center gap-1 transition-colors shrink-0"
@@ -271,10 +271,10 @@
                     v-model="globalArtifactPathsInput"
                     type="text"
                     class="w-full form-input font-mono text-xs"
-                    placeholder="例如: dist, build, target, output, release"
+                    placeholder="例如: dist, release, output, build, target, ."
                   >
                   <p class="mt-1.5 text-[11px] text-text-3 leading-relaxed">
-                    由于版本或框架不同，打包产物输出目录可能不同。构建后将在配置的目录中自动查找最新的产物包（<code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">.tar.gz</code> / <code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">.zip</code>）。
+                    💡 <strong>多分支与多产物路径匹配</strong>：针对不同 Git 分支打包产物位置不同的情况（如有的分支产物在 <code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">dist</code>，有的在 <code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">release</code> / <code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">output</code> 或分支子目录），支持在此配置多个候选目录（用逗号分隔）。构建后系统将自动按配置目录及各分支子目录自动抓取最新的产物压缩包（<code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">.tar.gz</code> / <code class="px-1 py-0.5 rounded bg-slate-100 font-mono text-text-2">.zip</code>）。
                   </p>
 
                   <!-- 各项目独立产物目录列表 -->
@@ -637,7 +637,7 @@ const newArtifactPathValue = ref('dist')
 
 const globalArtifactPathsInput = computed({
   get() {
-    return (store.config?.artifactPaths || ['dist']).join(', ')
+    return (store.config?.artifactPaths || ['dist', 'release', 'build', 'output', 'target']).join(', ')
   },
   set(val: string) {
     if (!store.config) return
@@ -675,7 +675,7 @@ function initConfigDefaults() {
     store.config.buildCommands = {}
   }
   if (!store.config.artifactPaths || !store.config.artifactPaths.length) {
-    store.config.artifactPaths = ['dist']
+    store.config.artifactPaths = ['dist', 'release', 'build', 'output', 'target']
   }
   if (!store.config.projectArtifactPaths) {
     store.config.projectArtifactPaths = {}

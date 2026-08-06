@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """Data models for build tracking, execution records, and templates."""
-from __future__ import annotations
 
 import enum
 import hashlib
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +37,7 @@ class LogEntry:
     level: str          # "info" | "warn" | "error" | "debug"
     message: str
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "timestamp": self.timestamp,
             "level": self.level,
@@ -46,7 +45,7 @@ class LogEntry:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LogEntry":
+    def from_dict(cls, data: Dict[str, Any]) -> "LogEntry":
         return cls(
             timestamp=data["timestamp"],
             level=data["level"],
@@ -69,9 +68,9 @@ class StepRecord:
     finished_at: Optional[float] = None
     duration_seconds: float = 0.0
     message: str = ""
-    logs: list[LogEntry] = field(default_factory=list)
+    logs: List[LogEntry] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "name": self.name,
             "status": self.status.value,
@@ -85,7 +84,7 @@ class StepRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "StepRecord":
+    def from_dict(cls, data: Dict[str, Any]) -> "StepRecord":
         return cls(
             name=data["name"],
             status=StepStatus(data.get("status", "pending")),
@@ -124,7 +123,7 @@ class BuildArtifact:
         self.size_bytes = p.stat().st_size
         return self.sha256
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "path": self.path,
             "sha256": self.sha256,
@@ -133,7 +132,7 @@ class BuildArtifact:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BuildArtifact":
+    def from_dict(cls, data: Dict[str, Any]) -> "BuildArtifact":
         return cls(
             path=data["path"],
             sha256=data.get("sha256", ""),
@@ -151,7 +150,7 @@ class ProjectRunRecord:
     """Execution record for a single project within a run."""
     project_name: str
     branch: str
-    steps: list[StepRecord] = field(default_factory=list)
+    steps: List[StepRecord] = field(default_factory=list)
     artifact: Optional[BuildArtifact] = None
     target_url: str = ""
     success: bool = False
@@ -159,7 +158,7 @@ class ProjectRunRecord:
     finished_at: Optional[float] = None
     error_message: str = ""
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "project_name": self.project_name,
             "branch": self.branch,
@@ -173,7 +172,7 @@ class ProjectRunRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ProjectRunRecord":
+    def from_dict(cls, data: Dict[str, Any]) -> "ProjectRunRecord":
         return cls(
             project_name=data["project_name"],
             branch=data["branch"],
@@ -196,11 +195,11 @@ class ExecutionRecord:
     """Top-level record for a complete pipeline execution."""
     run_id: str
     mode: str               # "svn" | "server" | "local"
-    projects: list[ProjectRunRecord] = field(default_factory=list)
+    projects: List[ProjectRunRecord] = field(default_factory=list)
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     success: bool = False
-    config_snapshot: dict[str, Any] = field(default_factory=dict)
+    config_snapshot: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def duration_seconds(self) -> float:
@@ -208,7 +207,7 @@ class ExecutionRecord:
             return self.finished_at - self.started_at
         return 0.0
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "run_id": self.run_id,
             "mode": self.mode,
@@ -221,7 +220,7 @@ class ExecutionRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExecutionRecord":
+    def from_dict(cls, data: Dict[str, Any]) -> "ExecutionRecord":
         return cls(
             run_id=data["run_id"],
             mode=data["mode"],
@@ -244,11 +243,11 @@ class TaskTemplate:
     name: str
     description: str = ""
     mode: str = "svn"
-    config: dict[str, Any] = field(default_factory=dict)
+    config: Dict[str, Any] = field(default_factory=dict)
     created_at: float = 0.0
     updated_at: float = 0.0
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "template_id": self.template_id,
             "name": self.name,
@@ -260,7 +259,7 @@ class TaskTemplate:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TaskTemplate":
+    def from_dict(cls, data: Dict[str, Any]) -> "TaskTemplate":
         return cls(
             template_id=data["template_id"],
             name=data["name"],
@@ -273,7 +272,7 @@ class TaskTemplate:
 
     @classmethod
     def from_current_config(cls, template_id: str, name: str,
-                            config: dict[str, Any], mode: str = "svn",
+                            config: Dict[str, Any], mode: str = "svn",
                             description: str = "") -> "TaskTemplate":
         """Create a template snapshot from the current configuration."""
         now = time.time()

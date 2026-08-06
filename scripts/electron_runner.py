@@ -12,7 +12,6 @@ Usage (from Electron)::
 The command receives a JSON payload on stdin and emits JSON events
 on stdout (see ``runner.protocol``).
 """
-from __future__ import annotations
 
 import os
 import sys

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Build operations: run deploy.sh, select artifacts, compute snapshots."""
-from __future__ import annotations
 
 import glob
 import hashlib
@@ -9,16 +8,17 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 from core.errors import BuildError
+from git.build_cmd import resolve_run_argv
 from tools.exec import run_process, run_process_stream
 from git.branches import safe_git
 
 logger = logging.getLogger(__name__)
 
 
-def get_commit_sha(project_path: Path | str) -> str:
+def get_commit_sha(project_path: Union[Path, str]) -> str:
     """Return the current HEAD commit SHA."""
     try:
         r = run_process(safe_git(project_path) + ["rev-parse", "HEAD"])
@@ -30,47 +30,70 @@ def get_commit_sha(project_path: Path | str) -> str:
 
 
 def resolve_candidate_dirs(
-    project_path: Path | str,
-    candidate_paths: list[str] | str | None = None,
-) -> list[Path]:
+    project_path: Union[Path, str],
+    candidate_paths: Union[List[str], Optional[str]] = None,
+) -> List[Path]:
     """Return list of candidate output directory Paths for a project.
 
     `candidate_paths` can be a list of relative strings (e.g. ['dist', 'build', 'target'])
-    or a comma/semicolon separated string ('dist, build, target').
-    Defaults to ['dist'] if empty or None.
+    or a comma/semicolon separated string ('dist, build, target, output, .').
+    Defaults to ['dist', 'release', 'build', 'output', 'target'] if empty or None.
     """
     project = Path(project_path)
+    default_dirs = ["dist", "release", "build", "output", "target"]
+
     if candidate_paths is None:
-        raw_list = ["dist"]
+        raw_list = default_dirs
     elif isinstance(candidate_paths, str):
         raw_list = [p.strip() for p in candidate_paths.replace(";", ",").split(",") if p.strip()]
     else:
-        raw_list = [str(p).strip() for p in candidate_paths if str(p).strip()]
+        raw_list = []
+        for item in candidate_paths:
+            if isinstance(item, str):
+                raw_list.extend([p.strip() for p in item.replace(";", ",").split(",") if p.strip()])
+            elif item:
+                raw_list.append(str(item).strip())
 
     if not raw_list:
-        raw_list = ["dist"]
+        raw_list = default_dirs
 
     dirs = []
     for rel_p in raw_list:
-        p = project / rel_p
-        dirs.append(p)
+        if "*" in rel_p or "?" in rel_p:
+            matched = [p for p in project.glob(rel_p) if p.is_dir()]
+            if matched:
+                dirs.extend(matched)
+            else:
+                dirs.append(project / rel_p)
+        else:
+            dirs.append(project / rel_p)
     return dirs
 
 
 def _find_all_tarballs(
-    project_path: Path | str,
-    candidate_paths: list[str] | str | None = None,
-) -> list[Path]:
-    """Find all tarballs / zip files in candidate output directories."""
+    project_path: Union[Path, str],
+    candidate_paths: Union[List[str], Optional[str]] = None,
+) -> List[Path]:
+    """Find all tarballs / zip files in candidate output directories and subdirectories."""
     project = Path(project_path)
     dirs = resolve_candidate_dirs(project, candidate_paths)
-    found: list[Path] = []
-    seen: set[Path] = set()
+    found: List[Path] = []
+    seen: Set[Path] = set()
 
     for d in dirs:
         if d.is_dir():
             for ext in ("*.tar.gz", "*.tgz", "*.tar", "*.zip"):
+                # 1. 搜寻当前产物目录直下产物
                 for tb in d.glob(ext):
+                    if tb not in seen:
+                        seen.add(tb)
+                        found.append(tb)
+                # 2. 搜寻分支独立子目录产物 (支持如 dist/branch_name/*.tar.gz)
+                for tb in d.glob(f"*/{ext}"):
+                    if tb not in seen:
+                        seen.add(tb)
+                        found.append(tb)
+                for tb in d.glob(f"*/*/{ext}"):
                     if tb not in seen:
                         seen.add(tb)
                         found.append(tb)
@@ -84,74 +107,47 @@ def _find_all_tarballs(
 
 
 def build_project(
-    project_path: Path | str,
+    project_path: Union[Path, str],
     *,
     bash_exe: str = "bash",
     build_command: str = "deploy.sh",
-    artifact_paths: list[str] | str | None = None,
+    artifact_paths: Union[List[str], Optional[str]] = None,
     on_line: Optional[callable] = None,
-) -> tuple[subprocess.CompletedProcess, Optional[Path]]:
+) -> Tuple[subprocess.CompletedProcess, Optional[Path]]:
     """Run the configured build command/script in the project directory.
 
     Returns (completed_process, artifact_path) where artifact_path is
     the newest tarball produced by *this* build in the candidate search paths.
     """
     project = Path(project_path)
-    cmd_str = (build_command or "deploy.sh").strip()
+    run_cmd, cmd_str = resolve_run_argv(project, build_command, bash_exe=bash_exe)
 
-    # Determine command args and handle CRLF normalization if target is a shell script
+    # Normalize CRLF -> LF for shell scripts under the project (Windows checkouts)
     converted_crlf = False
     script_file_to_restore: Optional[Path] = None
     original_bytes: Optional[bytes] = None
 
-    normalized_path_str = cmd_str
-    if normalized_path_str.startswith(("./", ".\\")):
-        normalized_path_str = normalized_path_str[2:]
+    script_token = None
+    if len(run_cmd) >= 2 and Path(str(run_cmd[0]).replace("\\", "/")).name.lower().startswith(
+        ("bash", "sh")
+    ):
+        script_token = next((a for a in run_cmd[1:] if not str(a).startswith("-")), None)
+    elif len(run_cmd) == 1 and str(run_cmd[0]).lower().endswith((".sh", ".bash")):
+        script_token = run_cmd[0]
 
-    candidate_file = project / normalized_path_str
-
-    if candidate_file.is_file() or cmd_str.endswith(".sh") or cmd_str.startswith("./"):
-        if not candidate_file.is_file():
-            raise BuildError(f"打包脚本 {cmd_str} 未找到 in {project}")
-
-        # If it's a shell script, normalize CRLF -> LF
-        if candidate_file.suffix.lower() == ".sh" or "sh" in candidate_file.name:
-            original_bytes = candidate_file.read_bytes()
+    if script_token:
+        script_path = Path(script_token)
+        if not script_path.is_absolute():
+            script_path = project / script_path
+        if script_path.is_file() and (
+            script_path.suffix.lower() in {".sh", ".bash"} or "sh" in script_path.name.lower()
+        ):
+            original_bytes = script_path.read_bytes()
             lf_bytes = original_bytes.replace(b"\r\n", b"\n")
             converted_crlf = lf_bytes != original_bytes
             if converted_crlf:
-                candidate_file.write_bytes(lf_bytes)
-                script_file_to_restore = candidate_file
-
-            rel_script = candidate_file.relative_to(project).as_posix()
-            run_cmd = [bash_exe, rel_script]
-        else:
-            run_cmd = [str(candidate_file)]
-    else:
-        import shlex
-        try:
-            parts = shlex.split(cmd_str, posix=False)
-        except Exception:
-            parts = cmd_str.split()
-
-        if not parts:
-            parts = [bash_exe, "deploy.sh"]
-
-        if parts[0].lower() in ("bash", "sh") and len(parts) > 1:
-            target_sh = parts[1]
-            if target_sh.startswith(("./", ".\\")):
-                target_sh = target_sh[2:]
-            target_sh_file = project / target_sh
-            if target_sh_file.is_file():
-                original_bytes = target_sh_file.read_bytes()
-                lf_bytes = original_bytes.replace(b"\r\n", b"\n")
-                converted_crlf = lf_bytes != original_bytes
-                if converted_crlf:
-                    target_sh_file.write_bytes(lf_bytes)
-                    script_file_to_restore = target_sh_file
-            run_cmd = [bash_exe] + parts[1:]
-        else:
-            run_cmd = parts
+                script_path.write_bytes(lf_bytes)
+                script_file_to_restore = script_path
 
     # Capture a snapshot of candidate directories before the build starts
     pre_snapshot = artifact_snapshot(project, candidate_paths=artifact_paths)
@@ -206,9 +202,9 @@ def build_project(
 
 
 def _fresh_artifact(
-    project_path: Path | str,
+    project_path: Union[Path, str],
     since: float,
-    candidate_paths: list[str] | str | None = None,
+    candidate_paths: Union[List[str], Optional[str]] = None,
 ) -> Optional[Path]:
     """Return the newest tarball modified at or after *since*."""
     tarballs = _find_all_tarballs(project_path, candidate_paths)
@@ -220,8 +216,8 @@ def _fresh_artifact(
 
 
 def fix_known_bad_deploy_tar(
-    project_path: Path | str,
-    candidate_paths: list[str] | str | None = None,
+    project_path: Union[Path, str],
+    candidate_paths: Union[List[str], Optional[str]] = None,
 ) -> Optional[Path]:
     """Attempt to fix a known issue where deploy.sh produces a bad tar."""
     tarballs = _find_all_tarballs(project_path, candidate_paths)
@@ -242,16 +238,16 @@ def fix_known_bad_deploy_tar(
 
 
 def artifact_snapshot(
-    project_path: Path | str,
-    candidate_paths: list[str] | str | None = None,
-) -> dict[str, str]:
+    project_path: Union[Path, str],
+    candidate_paths: Union[List[str], Optional[str]] = None,
+) -> Dict[str, str]:
     """Return a snapshot of tarballs in candidate directories.
 
     Returns dict mapping relative_filepath -> sha256.
     """
     project = Path(project_path)
     tarballs = _find_all_tarballs(project, candidate_paths)
-    snapshot: dict[str, str] = {}
+    snapshot: Dict[str, str] = {}
 
     for tarball in tarballs:
         h = hashlib.sha256()
@@ -265,9 +261,9 @@ def artifact_snapshot(
 
 
 def latest_changed_artifact(
-    project_path: Path | str,
-    before_snapshot: dict[str, str],
-    candidate_paths: list[str] | str | None = None,
+    project_path: Union[Path, str],
+    before_snapshot: Dict[str, str],
+    candidate_paths: Union[List[str], Optional[str]] = None,
 ) -> Optional[Path]:
     """Return the newest tarball across candidate dirs that differs from before_snapshot."""
     project = Path(project_path)
@@ -286,8 +282,8 @@ def latest_changed_artifact(
 
 
 def latest_artifact(
-    project_path: Path | str,
-    candidate_paths: list[str] | str | None = None,
+    project_path: Union[Path, str],
+    candidate_paths: Union[List[str], Optional[str]] = None,
 ) -> Optional[Path]:
     """Return the newest tarball across candidate output directories, or None."""
     tarballs = _find_all_tarballs(project_path, candidate_paths)

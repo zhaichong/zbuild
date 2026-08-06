@@ -38,6 +38,17 @@ references/build-history.json
 references/history/
 references/templates/
 
+# Bundled runtimes (download via tools/setup_runtime.ps1 — do not commit)
+runtime/python/
+runtime/node/node_modules/
+runtime/**/*.exe
+runtime/**/*.dll
+runtime/**/*.pyd
+runtime/**/*.zip
+
+# Local security material (SSH TOFU store when ZBUILD_DATA_DIR unset)
+ssh_known_hosts
+
 # Electron packaged
 release/
 out/

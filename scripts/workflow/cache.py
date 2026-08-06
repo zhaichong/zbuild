@@ -5,14 +5,13 @@ Inspired by Turborepo's caching strategy: computes a hash of the
 input files (commit SHA + deploy.sh + package.json) and uses it
 to skip redundant rebuilds.
 """
-from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from core.constants import APP_DIR
 from git.build import get_commit_sha
@@ -42,7 +41,7 @@ class BuildCache:
     # Hash computation
     # ------------------------------------------------------------------
 
-    def compute_input_hash(self, project_path: Path | str, build_command: str = "deploy.sh") -> str:
+    def compute_input_hash(self, project_path: Union[Path, str], build_command: str = "deploy.sh") -> str:
         """Compute a content hash from the project's build inputs.
 
         Combines commit SHA, build command/script, package.json, and lock file

@@ -4,13 +4,12 @@
 Consolidated from the original process.py and electron_runner.py
 detection logic.
 """
-from __future__ import annotations
 
 import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from tools.exec import run_process
 
@@ -26,7 +25,7 @@ def command_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def validate_executable(path: str | Path, expected_name: str = "") -> tuple[bool, str]:
+def validate_executable(path: Union[str, Path], expected_name: str = "") -> Tuple[bool, str]:
     """Return (ok, message) if *path* points to a working executable.
 
     Checks file existence, optionally verifies the name matches, and
@@ -54,8 +53,7 @@ def validate_executable(path: str | Path, expected_name: str = "") -> tuple[bool
         return False, f"运行 --version 失败: {exc}"
 
 
-# Windows candidate paths for common tool installations
-_WINDOWS_CANDIDATES: dict[str, list[str]] = {
+_WINDOWS_CANDIDATES: Dict[str, List[str]] = {
     "git": [
         r"C:\Program Files\Git\cmd\git.exe",
         r"C:\Program Files\Git\bin\git.exe",
@@ -85,9 +83,70 @@ _WINDOWS_CANDIDATES: dict[str, list[str]] = {
 }
 
 
+def get_windows_candidates(name: str) -> List[str]:
+    candidates = list(_WINDOWS_CANDIDATES.get(name, []))
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    user_profile = os.environ.get("USERPROFILE", "")
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+
+    bases = [b for b in (local_app_data, user_profile, program_files, program_files_x86) if b]
+
+    if name == "git":
+        for b in bases:
+            candidates.extend([
+                os.path.join(b, "Programs", "Git", "cmd", "git.exe"),
+                os.path.join(b, "Programs", "Git", "bin", "git.exe"),
+                os.path.join(b, "Git", "cmd", "git.exe"),
+                os.path.join(b, "Git", "bin", "git.exe"),
+            ])
+    elif name == "bash":
+        for b in bases:
+            candidates.extend([
+                os.path.join(b, "Programs", "Git", "bin", "bash.exe"),
+                os.path.join(b, "Programs", "Git", "usr", "bin", "bash.exe"),
+                os.path.join(b, "Git", "bin", "bash.exe"),
+                os.path.join(b, "Git", "usr", "bin", "bash.exe"),
+            ])
+    elif name == "svn":
+        for b in bases:
+            candidates.extend([
+                os.path.join(b, "TortoiseSVN", "bin", "svn.exe"),
+                os.path.join(b, "SlikSvn", "bin", "svn.exe"),
+                os.path.join(b, "Programs", "TortoiseSVN", "bin", "svn.exe"),
+                os.path.join(b, "Programs", "SlikSvn", "bin", "svn.exe"),
+            ])
+    elif name in ("node", "npm"):
+        ext = ".exe" if name == "node" else ".cmd"
+        for b in bases:
+            candidates.extend([
+                os.path.join(b, "nodejs", f"{name}{ext}"),
+                os.path.join(b, "Programs", "nodejs", f"{name}{ext}"),
+            ])
+
+    for root in [r"C:", r"D:", r"D:\application", r"E:"]:
+        if name == "git":
+            candidates.extend([os.path.join(root, "Git", "cmd", "git.exe"), os.path.join(root, "Git", "bin", "git.exe")])
+        elif name == "bash":
+            candidates.extend([os.path.join(root, "Git", "bin", "bash.exe"), os.path.join(root, "Git", "usr", "bin", "bash.exe")])
+        elif name == "svn":
+            candidates.extend([os.path.join(root, "SlikSvn", "bin", "svn.exe"), os.path.join(root, "TortoiseSVN", "bin", "svn.exe")])
+        elif name in ("node", "npm"):
+            ext = ".exe" if name == "node" else ".cmd"
+            candidates.append(os.path.join(root, "nodejs", f"{name}{ext}"))
+
+    seen = set()
+    res = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            res.append(c)
+    return res
+
+
 def find_tool(
     name: str,
-    extra_paths: Optional[list[str | Path]] = None,
+    extra_paths: Optional[List[Union[str, Path]]] = None,
     configured_path: str = "",
 ) -> Optional[str]:
     """Locate an executable by name.
@@ -123,9 +182,9 @@ def find_tool(
             elif candidate.is_file() and os.access(candidate, os.X_OK):
                 return str(candidate)
 
-    # 3. Hardcoded Windows candidate paths
+    # 3. Dynamic Windows candidate paths
     if os.name == "nt":
-        for candidate in _WINDOWS_CANDIDATES.get(name, []):
+        for candidate in get_windows_candidates(name):
             if Path(candidate).is_file():
                 return candidate
 
@@ -158,9 +217,9 @@ def bash_from_git(git_path: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def detect_tools(
-    config: Optional[dict[str, Any]] = None,
-    extra_paths: Optional[list[str | Path]] = None,
-) -> dict[str, Any]:
+    config: Optional[Dict[str, Any]] = None,
+    extra_paths: Optional[List[Union[str, Path]]] = None,
+) -> Dict[str, Any]:
     """Detect all required external tools and return a status dict.
 
     Parameters
@@ -175,7 +234,7 @@ def detect_tools(
     Returns a dictionary with keys: git, bash, svn, node, npm, npx.
     Each value is a dict with ``path`` (str or None) and ``version`` (str or None).
     """
-    result: dict[str, Any] = {}
+    result: Dict[str, Any] = {}
 
     # Extract user-configured tool paths from config
     cfg_tools = (config or {}).get("tools", {}) if isinstance(config, dict) else {}

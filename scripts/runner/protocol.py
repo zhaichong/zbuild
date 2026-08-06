@@ -5,14 +5,13 @@ The Electron frontend launches Python scripts as child processes and
 communicates via newline-delimited JSON on stdin/stdout.  This module
 provides helpers for both sides of that protocol.
 """
-from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 
-def read_stdin_json() -> dict[str, Any]:
+def read_stdin_json() -> Dict[str, Any]:
     """Read a JSON object from stdin and return it as a dict.
 
     Reads until EOF or newline to support both stream and single-shot payloads.
@@ -27,7 +26,7 @@ def read_stdin_json() -> dict[str, Any]:
         return {}
 
 
-def emit(event: str, data: Optional[dict[str, Any]] = None) -> None:
+def emit(event: str, data: Optional[Dict[str, Any]] = None) -> None:
     """Write a JSON event line to stdout for the Electron frontend.
 
     Parameters
@@ -49,7 +48,7 @@ def emit(event: str, data: Optional[dict[str, Any]] = None) -> None:
 
 def emit_log(message: str, level: str = "info", project: str = "") -> None:
     """Convenience: emit a log event."""
-    payload: dict[str, Any] = {"level": level, "message": message}
+    payload: Dict[str, Any] = {"level": level, "message": message}
     if project:
         payload["project"] = project
     emit("log", payload)
@@ -57,13 +56,13 @@ def emit_log(message: str, level: str = "info", project: str = "") -> None:
 
 def emit_error(message: str, project: str = "") -> None:
     """Convenience: emit an error event."""
-    payload: dict[str, Any] = {"message": message}
+    payload: Dict[str, Any] = {"message": message}
     if project:
         payload["project"] = project
     emit("error", payload)
 
 
-def emit_result(success: bool, data: Optional[dict[str, Any]] = None) -> None:
+def emit_result(success: bool, data: Optional[Dict[str, Any]] = None) -> None:
     """Convenience: emit a final result event."""
     payload = {"success": success}
     if data:
@@ -73,7 +72,7 @@ def emit_result(success: bool, data: Optional[dict[str, Any]] = None) -> None:
 
 def emit_step_start(step_name: str, step_index: int = 0, project: str = "") -> None:
     """Convenience: emit a step-start event."""
-    payload: dict[str, Any] = {"step": step_name, "index": step_index}
+    payload: Dict[str, Any] = {"step": step_name, "index": step_index}
     if project:
         payload["project"] = project
     emit("step-start", payload)
@@ -82,7 +81,7 @@ def emit_step_start(step_name: str, step_index: int = 0, project: str = "") -> N
 def emit_step_end(step_name: str, success: bool, message: str = "",
                   step_index: int = 0, project: str = "") -> None:
     """Convenience: emit a step-end event."""
-    payload: dict[str, Any] = {
+    payload: Dict[str, Any] = {
         "step": step_name,
         "index": step_index,
         "success": success,

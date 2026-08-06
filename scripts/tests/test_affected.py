@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Tests for git.affected module."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path

@@ -4,23 +4,22 @@
 Provides ``run_process`` for one-shot commands and ``run_process_stream``
 for commands whose stdout/stderr should be forwarded line-by-line.
 """
-from __future__ import annotations
 
 import logging
 import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 logger = logging.getLogger(__name__)
 
 _SECRET_FLAGS = {"--password", "--secret", "--token", "--api-key", "--api_key"}
 
 
-def _redacted_args(args: Sequence[str]) -> list[str]:
+def _redacted_args(args: Sequence[str]) -> List[str]:
     """Return command arguments safe for diagnostic logging."""
-    redacted: list[str] = []
+    redacted: List[str] = []
     hide_next = False
     for value in args:
         text = str(value)
@@ -50,8 +49,8 @@ def _startupinfo():
 def run_process(
     args: Sequence[str],
     *,
-    cwd: Optional[Path | str] = None,
-    env: Optional[dict[str, str]] = None,
+    cwd: Union[Path, str, None] = None,
+    env: Optional[Dict[str, str]] = None,
     timeout: Optional[float] = None,
     encoding: str = "utf-8",
     check: bool = False,
@@ -100,8 +99,8 @@ def run_process(
 def run_process_stream(
     args: Sequence[str],
     *,
-    cwd: Optional[Path | str] = None,
-    env: Optional[dict[str, str]] = None,
+    cwd: Union[Path, str, None] = None,
+    env: Optional[Dict[str, str]] = None,
     timeout: Optional[float] = None,
     encoding: str = "utf-8",
     on_line: Optional[Callable[[str], None]] = None,
@@ -148,7 +147,7 @@ def run_process_stream(
         startupinfo=_startupinfo(),
     )
 
-    lines: list[str] = []
+    lines: List[str] = []
 
     def _reader():
         assert proc.stdout is not None

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Git sync operations: pull latest, commit info."""
-from __future__ import annotations
 
 import logging
 import subprocess
@@ -8,11 +7,12 @@ from pathlib import Path
 
 from tools.exec import run_process
 from git.branches import safe_git
+from typing import Dict, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
 
-def pull_latest(project_path: Path | str) -> tuple[bool, str]:
+def pull_latest(project_path: Union[Path, str]) -> Tuple[bool, str]:
     """Pull the latest code for the current branch.
 
     If there are local uncommitted changes (e.g. vue.config.js modified by
@@ -64,12 +64,12 @@ def pull_latest(project_path: Path | str) -> tuple[bool, str]:
 
 
 
-def latest_commit_info(project_path: Path | str) -> dict[str, str]:
+def latest_commit_info(project_path: Union[Path, str]) -> Dict[str, str]:
     """Return info about the latest commit.
 
     Returns dict with keys: sha, author, date, message.
     """
-    info: dict[str, str] = {"sha": "", "author": "", "date": "", "message": ""}
+    info: Dict[str, str] = {"sha": "", "author": "", "date": "", "message": ""}
     try:
         r = run_process(
             safe_git(project_path) + [

@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 """Utility for creating order output directories and Excel test submission forms based on the official template.
 """
-from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
 
-def find_template_file(order_dir_base: str | Path | None = None) -> Optional[Path]:
+def find_template_file(order_dir_base: Union[str, Optional[Path]] = None) -> Optional[Path]:
     """Find the official 提测单 .xlsx template file."""
     # 1. Check local references directory inside zbuild
     pkg_dir = Path(__file__).resolve().parents[2]
@@ -39,17 +38,81 @@ def find_template_file(order_dir_base: str | Path | None = None) -> Optional[Pat
     return None
 
 
+def find_docx_template_file(order_dir_base: Union[str, Optional[Path]] = None) -> Optional[Path]:
+    """Find the official 全部升级说明.docx template file."""
+    # 1. Check exact user specified path
+    exact_p = Path(r"D:\yh\特殊订单\升级说明+提测单\全部升级说明.docx")
+    if exact_p.exists():
+        return exact_p
+
+    # 2. Check bundled references inside zbuild
+    pkg_dir = Path(__file__).resolve().parents[2]
+    bundled_docx = pkg_dir / "references" / "全部升级说明.docx"
+    if bundled_docx.exists():
+        return bundled_docx
+
+    scripts_dir = Path(__file__).resolve().parents[1]
+    bundled_docx2 = scripts_dir / "references" / "全部升级说明.docx"
+    if bundled_docx2.exists():
+        return bundled_docx2
+
+    # 3. Check in order_dir_base and surrounding paths
+    if order_dir_base:
+        base = Path(order_dir_base)
+        for cand in [
+            base.parent / "升级说明+提测单" / "全部升级说明.docx",
+            base / "升级说明+提测单" / "全部升级说明.docx",
+            base / "全部升级说明.docx",
+        ]:
+            if cand.exists():
+                return cand
+        matches = list(base.rglob("*升级说明.docx"))
+        if matches:
+            return matches[0]
+
+    return None
+
+
+def _format_change_notes(order_notes:Optional[str], projects: List[Dict[str, Any]]) -> str:
+    """Format change notes for cell B12 of the Excel test submission form."""
+    if order_notes and str(order_notes).strip():
+        import re
+        raw_lines = [line.strip() for line in str(order_notes).strip().splitlines() if line.strip()]
+        formatted = []
+        for idx, line in enumerate(raw_lines, start=1):
+            if re.match(r"^\d+[、.．\s]", line):
+                formatted.append(line)
+            else:
+                formatted.append(f"{idx}、{line}")
+        return "\n".join(formatted)
+
+    lines = []
+    if projects:
+        for idx, p in enumerate(projects, start=1):
+            p_name = p.get("name") or p.get("projectName") or ""
+            p_branch = p.get("branch") or p.get("currentBranch") or ""
+            if p_branch:
+                lines.append(f"{idx}、{p_name} ({p_branch})")
+            else:
+                lines.append(f"{idx}、{p_name}")
+    else:
+        lines.append("1、特殊订单需求更新")
+    return "\n".join(lines)
+
+
 def create_order_directory(
-    order_dir_base: str | Path,
+    order_dir_base: Union[str, Path],
     order_no: str,
     hospital_name: str,
-    projects: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Create the order directory and test submission Excel file (.xlsx) by filling in the official template.
+    projects:Optional[List[Dict[str, Any]]] = None,
+    order_notes:Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create the order directory, test submission Excel file (.xlsx) and upgrade docx file (.docx).
 
     Naming rule:
       Folder: {order_dir_base}/{order_no}-{hospital_name}
       Excel:  {folder_name}医院提测单.xlsx
+      Docx:   全部升级说明.docx
     """
     if not order_dir_base:
         return {"success": False, "message": "未配置提测目录根路径"}
@@ -80,20 +143,45 @@ def create_order_directory(
     try:
         tmpl_path = find_template_file(order_dir_base)
         if tmpl_path and tmpl_path.exists():
-            _fill_excel_template(tmpl_path, excel_path, folder_name, projects or [])
+            _fill_excel_template(tmpl_path, excel_path, folder_name, projects or [], order_notes=order_notes)
             excel_created = True
         else:
-            _generate_fallback_excel(excel_path, folder_name, projects or [])
+            _generate_fallback_excel(excel_path, folder_name, projects or [], order_notes=order_notes)
             excel_created = True
     except Exception as e:
         logger.warning(f"生成 Excel 提测单失败: {e}")
+
+    # Copy Upgrade Explanation Docx file (全部升级说明.docx)
+    docx_created = False
+    docx_path = None
+    try:
+        dest_docx = target_dir / "全部升级说明.docx"
+        if dest_docx.exists():
+            docx_created = False
+            docx_path = dest_docx
+            logger.info(f"提测目录中已存在全部升级说明.docx，无需再次创建/覆盖: {dest_docx}")
+        else:
+            docx_tmpl = find_docx_template_file(order_dir_base)
+            if docx_tmpl and docx_tmpl.exists():
+                import shutil
+                shutil.copy2(docx_tmpl, dest_docx)
+                docx_created = True
+                docx_path = dest_docx
+    except Exception as e:
+        logger.warning(f"复制升级说明 Word 文档失败: {e}")
+
+    files_msg = f"{excel_name}"
+    if docx_created and docx_path:
+        files_msg += f", {docx_path.name}"
 
     return {
         "success": True,
         "dir": str(target_dir),
         "excel": str(excel_path),
         "excel_created": excel_created,
-        "message": f"成功创建目录: {target_dir}（包含文件: {excel_name}）",
+        "docx": str(docx_path) if docx_path else "",
+        "docx_created": docx_created,
+        "message": f"成功创建目录: {target_dir}（包含文件: {files_msg}）",
     }
 
 
@@ -101,9 +189,10 @@ def _fill_excel_template(
     tmpl_path: Path,
     output_path: Path,
     folder_name: str,
-    projects: list[dict[str, Any]],
+    projects: List[Dict[str, Any]],
+    order_notes:Optional[str] = None,
 ) -> None:
-    """Load the official template file and fill in B6 (folder name) and B12 (changed projects)."""
+    """Load the official template file and fill in B6 (folder name) and B12 (changed projects / notes)."""
     import openpyxl
 
     wb = openpyxl.load_workbook(tmpl_path)
@@ -122,19 +211,7 @@ def _fill_excel_template(
     ws["B6"] = folder_name
 
     # B12: 产品主要更改项目
-    lines = []
-    if projects:
-        for idx, p in enumerate(projects, start=1):
-            p_name = p.get("name") or p.get("projectName") or ""
-            p_branch = p.get("branch") or p.get("currentBranch") or ""
-            if p_branch:
-                lines.append(f"{idx}、{p_name} ({p_branch})")
-            else:
-                lines.append(f"{idx}、{p_name}")
-    else:
-        lines.append("1、特殊订单需求更新")
-
-    ws["B12"] = "\n".join(lines)
+    ws["B12"] = _format_change_notes(order_notes, projects or [])
 
     wb.save(output_path)
 
@@ -142,12 +219,12 @@ def _fill_excel_template(
 def _generate_fallback_excel(
     filepath: Path,
     folder_name: str,
-    projects: list[dict[str, Any]],
+    projects: List[Dict[str, Any]],
+    order_notes:Optional[str] = None,
 ) -> None:
     """Fallback generator if template is missing."""
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     except ImportError:
         filepath.touch(exist_ok=True)
         return
@@ -174,16 +251,7 @@ def _generate_fallback_excel(
     ws["B10"] = "■不需要            □需要"
     ws["A11"] = "产品主要更改项目"
 
-    lines = []
-    if projects:
-        for idx, p in enumerate(projects, start=1):
-            p_name = p.get("name") or p.get("projectName") or ""
-            p_branch = p.get("branch") or p.get("currentBranch") or ""
-            lines.append(f"{idx}、{p_name} ({p_branch})" if p_branch else f"{idx}、{p_name}")
-    else:
-        lines.append("1、特殊订单需求更新")
-
     ws["A12"] = 1
-    ws["B12"] = "\n".join(lines)
+    ws["B12"] = _format_change_notes(order_notes, projects or [])
 
     wb.save(filepath)

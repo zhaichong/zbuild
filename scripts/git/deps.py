@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """Dependency management: install project dependencies (npm/pnpm/yarn)."""
-from __future__ import annotations
 
 import hashlib
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Union
 
 from core.errors import DependencyError
 from tools.exec import run_process, run_process_stream
@@ -21,14 +20,14 @@ from tools.bundled import (
 logger = logging.getLogger(__name__)
 
 
-def dependency_fingerprint(project_path: Path | str) -> str:
+def dependency_fingerprint(project_path: Union[Path, str]) -> str:
     """Compute a fingerprint of the dependency specification.
 
     Combines hashes of package.json, package-lock.json (or equivalent),
     and any .npmrc to detect when dependencies need reinstalling.
     """
     project = Path(project_path)
-    parts: list[str] = []
+    parts: List[str] = []
 
     for name in ("package.json", "package-lock.json", "pnpm-lock.yaml",
                  "yarn.lock", ".npmrc"):
@@ -41,7 +40,7 @@ def dependency_fingerprint(project_path: Path | str) -> str:
     return "|".join(parts) if parts else ""
 
 
-def dependency_install_command(project_path: Path | str) -> list[str]:
+def dependency_install_command(project_path: Union[Path, str]) -> List[str]:
     """Return the command to install dependencies for the project."""
     project = Path(project_path)
     pm = package_manager_executable(project)
@@ -54,7 +53,7 @@ def dependency_install_command(project_path: Path | str) -> list[str]:
         return [pm, "ci"]
 
 
-def _node_env() -> dict[str, str]:
+def _node_env() -> Dict[str, str]:
     """Build environment variables guaranteeing Node.js 14 on PATH.
 
     Also isolates npm's global prefix so stock ``npm.cmd`` / ``npm`` wrappers
@@ -71,7 +70,7 @@ def _node_env() -> dict[str, str]:
     # 2. Node 14 binary directory
     node14_dir = find_node14_dir()
 
-    paths_to_prepend: list[str] = [str(shim_dir)]
+    paths_to_prepend: List[str] = [str(shim_dir)]
     if node14_dir:
         paths_to_prepend.append(str(node14_dir))
 
@@ -106,7 +105,7 @@ def _node_env() -> dict[str, str]:
 
 
 def ensure_dependencies(
-    project_path: Path | str,
+    project_path: Union[Path, str],
     *,
     force: bool = False,
     on_line: Optional[callable] = None,

@@ -4,16 +4,24 @@
 CRUD operations for TaskTemplate JSON files stored in TEMPLATES_DIR.
 Templates allow users to save and reuse pipeline configurations.
 """
-from __future__ import annotations
 
 import json
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from core.constants import TEMPLATES_DIR
 from core.models import TaskTemplate
+from core.secrets import without_secrets
+
+
+def _template_payload(template: TaskTemplate) -> Dict[str, Any]:
+    """Serialize a template with credentials stripped from config."""
+    data = template.to_dict()
+    if isinstance(data.get("config"), dict):
+        data["config"] = without_secrets(data["config"])
+    return data
 
 
 class TemplateStore:
@@ -39,9 +47,12 @@ class TemplateStore:
             template.created_at = now
             template.updated_at = now
 
+        # Keep in-memory template free of secrets so callers never re-save them.
+        if isinstance(template.config, dict):
+            template.config = without_secrets(template.config)
         path = self.templates_dir / f"{template.template_id}.json"
         path.write_text(
-            json.dumps(template.to_dict(), ensure_ascii=False, indent=2),
+            json.dumps(_template_payload(template), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         return template.template_id
@@ -53,17 +64,23 @@ class TemplateStore:
             return None
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            return TaskTemplate.from_dict(data)
+            tpl = TaskTemplate.from_dict(data)
+            if isinstance(tpl.config, dict):
+                tpl.config = without_secrets(tpl.config)
+            return tpl
         except (json.JSONDecodeError, KeyError, OSError):
             return None
 
-    def list(self) -> list[TaskTemplate]:
+    def list(self) -> List[TaskTemplate]:
         """Return all templates, sorted by creation time (newest first)."""
-        templates: list[TaskTemplate] = []
+        templates: List[TaskTemplate] = []
         for path in self.templates_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                templates.append(TaskTemplate.from_dict(data))
+                tpl = TaskTemplate.from_dict(data)
+                if isinstance(tpl.config, dict):
+                    tpl.config = without_secrets(tpl.config)
+                templates.append(tpl)
             except (json.JSONDecodeError, KeyError, OSError):
                 continue
         templates.sort(key=lambda t: t.created_at, reverse=True)
@@ -75,8 +92,10 @@ class TemplateStore:
         if not path.exists():
             return False
         template.updated_at = time.time()
+        if isinstance(template.config, dict):
+            template.config = without_secrets(template.config)
         path.write_text(
-            json.dumps(template.to_dict(), ensure_ascii=False, indent=2),
+            json.dumps(_template_payload(template), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         return True
@@ -90,7 +109,7 @@ class TemplateStore:
         return True
 
     @classmethod
-    def from_current_config(cls, name: str, config: dict[str, Any],
+    def from_current_config(cls, name: str, config: Dict[str, Any],
                             mode: str = "svn", description: str = "",
                             templates_dir: Optional[Path] = None) -> TaskTemplate:
         """Create a template from the current configuration and save it."""

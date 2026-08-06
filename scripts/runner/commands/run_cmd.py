@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """Command: run - delegates to the Pipeline."""
-from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from runner.cli import register
 from runner.protocol import emit, emit_log, emit_result
 
 
 @register("run")
-def cmd_run(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_run(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the full build-and-upload pipeline.
 
     The payload contains the complete configuration for this run,

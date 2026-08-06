@@ -229,7 +229,7 @@ import { refreshProjects } from '@/composables/useProjects'
 import { setupRunListeners, startRun, stopRun } from '@/composables/usePipeline'
 import { checkLocalChanges } from '@/composables/useProjects'
 import { saveConfig } from '@/composables/useConfig'
-import type { UploadMode, LocalChangeSummary } from '@/types'
+import type { UploadMode, LocalChangeSummary, AppConfig } from '@/types'
 
 const currentApp = ref<'zbuild' | 'portal' | 'mock-query'>('portal')
 
@@ -522,32 +522,85 @@ function onStashContinue() {
   }
 }
 
+const defaultConfig: AppConfig = {
+  rootPath: '',
+  svnRootUrl: 'https://10.1.1.120/svn/智慧病房特殊订单',
+  buildCommand: 'deploy.sh',
+  buildCommands: {},
+  artifactPaths: ['dist', 'release', 'build', 'output', 'target'],
+  projectArtifactPaths: {},
+  orderDirPath: '',
+  selectedProjects: [],
+  projectBranches: {},
+  projectSvnLeaves: {},
+  projectServerPaths: {},
+  projectBuildCommands: {},
+  tools: {
+    git: '',
+    bash: '',
+    svn: '',
+    node: '',
+    npm: '',
+  },
+  uploadAfterBuild: true,
+  uploadToServer: false,
+  localOutputDir: '',
+  serverUploadPaths: {},
+  form: {
+    hospitalName: '',
+    orderNo: '',
+    orderNotes: '',
+    createOrderDir: false,
+    svnUsername: '',
+    svnPassword: '',
+    serverAddress: '',
+    serverUsername: '',
+    serverPassword: '',
+  },
+}
+
 onMounted(async () => {
   try {
-    store.config = await ipc.getConfig()
-    // Auto-detect tools - always run detection to ensure paths are set
-    if (store.config) {
-      try {
-        const detection = await ipc.detectTools(JSON.parse(JSON.stringify(toRaw(store.config))))
-        if (detection.tools) {
-          const d = detection.tools as unknown as Record<string, { path?: string; version?: string } | string>
-          const getPath = (key: string) => {
-            const v = d[key]
-            return typeof v === 'string' ? v : (v && typeof v === 'object' && 'path' in v ? v.path || '' : '')
-          }
-          // Prefer detected paths so discover/refresh always receive a real git.exe
-          // (Electron desktop launches often lack Git on PATH).
-          const git = getPath('git')
-          const bash = getPath('bash')
-          const svn = getPath('svn')
-          if (git) store.config.tools.git = git
-          if (bash) store.config.tools.bash = bash
-          if (svn && !store.config.tools.svn) store.config.tools.svn = svn
-        }
-      } catch (e) {
-        console.warn('Auto-detect tools failed:', e)
-      }
+    try {
+      store.config = await ipc.getConfig()
+    } catch (e) {
+      console.error('Failed to get config from backend:', e)
+      store.config = JSON.parse(JSON.stringify(defaultConfig))
+      store.showToast('配置读取失败，已启用默认配置。请检查环境', 'warning')
     }
+
+    if (!store.config) {
+      store.config = JSON.parse(JSON.stringify(defaultConfig))
+    }
+    const cfg = store.config!
+    if (!cfg.tools) {
+      cfg.tools = { git: '', bash: '', svn: '', node: '', npm: '' }
+    }
+
+    // Auto-detect tools - always run detection to ensure paths are set
+    try {
+      const detection = await ipc.detectTools(JSON.parse(JSON.stringify(toRaw(cfg))))
+      if (detection && detection.tools) {
+        const d = detection.tools as unknown as Record<string, { path?: string; version?: string } | string>
+        const getPath = (key: string) => {
+          const v = d[key]
+          return typeof v === 'string' ? v : (v && typeof v === 'object' && 'path' in v ? v.path || '' : '')
+        }
+        const git = getPath('git')
+        const bash = getPath('bash')
+        const svn = getPath('svn')
+        const node = getPath('node')
+        const npm = getPath('npm')
+        if (git) cfg.tools.git = git
+        if (bash) cfg.tools.bash = bash
+        if (svn) cfg.tools.svn = svn
+        if (node && !cfg.tools.node) cfg.tools.node = node
+        if (npm && !cfg.tools.npm) cfg.tools.npm = npm
+      }
+    } catch (e) {
+      console.warn('Auto-detect tools failed:', e)
+    }
+
     try {
       await refreshProjects()
     } catch (e) {

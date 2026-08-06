@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """Commands: discover, refresh-branches, check-local-changes."""
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 from runner.cli import register
 from git.discover import discover_projects
@@ -11,7 +10,7 @@ from git.branches import refresh_project_branches, local_changes_summary, read_c
 
 
 @register("discover")
-def cmd_discover(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_discover(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Discover all configured projects and return their metadata."""
     root_path = payload.get("rootPath", "")
     if not root_path:
@@ -36,7 +35,7 @@ def cmd_discover(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("refresh-branches")
-def cmd_refresh_branches(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_refresh_branches(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Refresh the branch list for a specific project."""
     project_path = payload.get("repoPath", "")
     if not project_path:
@@ -51,7 +50,7 @@ def cmd_refresh_branches(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("check-local-changes")
-def cmd_check_local_changes(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_check_local_changes(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Check for uncommitted local changes across projects."""
     projects = payload.get("projects", [])
     if not projects:

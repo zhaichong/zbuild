@@ -11,6 +11,7 @@ export interface ToolPaths {
 export interface FormConfig {
   hospitalName: string
   orderNo: string
+  orderNotes?: string
   createOrderDir?: boolean
   svnUsername: string
   svnPassword: string
@@ -27,6 +28,11 @@ export interface AppConfig {
   artifactPaths?: string[]
   projectArtifactPaths?: Record<string, string>
   orderDirPath?: string
+  selectedProjects?: string[]
+  projectBranches?: Record<string, string>
+  projectSvnLeaves?: Record<string, string>
+  projectServerPaths?: Record<string, string>
+  projectBuildCommands?: Record<string, string>
   tools: ToolPaths
   uploadAfterBuild: boolean
   uploadToServer: boolean
@@ -43,6 +49,7 @@ export interface ProjectInfo {
   defaultSvnLeaf?: string
   serverUploadPath?: string
   buildCommand?: string
+  enabled?: boolean
 }
 
 export interface ToolStatus {

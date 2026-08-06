@@ -4,13 +4,12 @@
 All uploaders (SVN, Server, Local) inherit from ``BaseUploader``
 and implement the ``upload`` method.
 """
-from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 
 def as_log_fn(log: Any) -> Callable[[str], None]:
@@ -53,7 +52,7 @@ class BaseUploader(ABC):
     def upload(
         self,
         artifact: Path,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         log: logging.Logger,
         project_name: str = "",
     ) -> UploadResult:

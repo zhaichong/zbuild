@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Unit tests for per-project build command configuration and execution."""
-from __future__ import annotations
 
 import unittest
 from pathlib import Path

@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 """Commands: detect affected projects based on git changes."""
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 from runner.cli import register
 from git.affected import find_affected_projects, find_affected_projects_from_staged
 
 
 @register("detect-affected")
-def cmd_detect_affected(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_detect_affected(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Detect projects affected by changes between git refs.
 
     Parameters
@@ -65,7 +64,7 @@ def cmd_detect_affected(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("detect-affected-staged")
-def cmd_detect_affected_staged(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_detect_affected_staged(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Detect projects affected by staged (uncommitted) changes.
 
     Parameters

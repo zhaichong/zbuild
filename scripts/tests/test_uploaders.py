@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
 
 import logging
 import io
@@ -49,6 +48,19 @@ class _FakeSsh:
     def __init__(self):
         self.sftp = _FakeSftp()
         self.commands = []
+        self._host_keys = types.SimpleNamespace(add=lambda *a, **k: None)
+
+    def load_system_host_keys(self):
+        return None
+
+    def load_host_keys(self, _path):
+        return None
+
+    def get_host_keys(self):
+        return self._host_keys
+
+    def save_host_keys(self, _path):
+        return None
 
     def set_missing_host_key_policy(self, _policy):
         return None
@@ -81,6 +93,8 @@ class TestServerUploader(unittest.TestCase):
             fake_paramiko = types.SimpleNamespace(
                 SSHClient=lambda: ssh,
                 AutoAddPolicy=lambda: object(),
+                RejectPolicy=lambda: object(),
+                MissingHostKeyPolicy=object,
             )
             config = {
                 "server": {"host": "example", "port": 22, "username": "user", "password": "secret"},
@@ -107,6 +121,8 @@ class TestServerUploader(unittest.TestCase):
             fake_paramiko = types.SimpleNamespace(
                 SSHClient=lambda: ssh,
                 AutoAddPolicy=lambda: object(),
+                RejectPolicy=lambda: object(),
+                MissingHostKeyPolicy=object,
             )
             config = {
                 "server": {"host": "example", "port": 22, "username": "user", "password": "secret"},

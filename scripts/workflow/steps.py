@@ -4,11 +4,10 @@
 Inspired by Argo Workflows: each mode (svn/server/local) defines an
 ordered list of ``StepDefinition`` objects that the Pipeline executes.
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from core.models import StepStatus
 
@@ -28,11 +27,11 @@ class StepContext:
     project_path: Path
     branch: str
     mode: str  # "svn" | "server" | "local"
-    config: dict[str, Any] = field(default_factory=dict)
-    tools: dict[str, Any] = field(default_factory=dict)
+    config: Dict[str, Any] = field(default_factory=dict)
+    tools: Dict[str, Any] = field(default_factory=dict)
     artifact_path: Optional[Path] = None
     target_url: str = ""
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: Dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +44,7 @@ class StepResult:
     success: bool
     message: str = ""
     skip_remaining: bool = False
-    context_updates: dict[str, Any] = field(default_factory=dict)
+    context_updates: Dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +80,7 @@ class StepDefinition:
 # Step chain per mode
 # ---------------------------------------------------------------------------
 
-def get_steps(mode: str) -> list[StepDefinition]:
+def get_steps(mode: str) -> List[StepDefinition]:
     """Return the ordered step chain for the given mode.
 
     Parameters
@@ -91,7 +90,7 @@ def get_steps(mode: str) -> list[StepDefinition]:
 
     Returns
     -------
-    list[StepDefinition]:
+    List[StepDefinition]:
         The step chain to execute.
     """
     from workflow.step_fns import (

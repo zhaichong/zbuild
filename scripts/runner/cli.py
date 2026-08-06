@@ -4,13 +4,12 @@
 Commands are registered via the ``@register`` decorator and dispatched
 by ``main()`` based on ``sys.argv[1]``.
 """
-from __future__ import annotations
 
 import json
 from pathlib import Path
 import sys
 import traceback
-from typing import Any, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 # Ensure the scripts directory is in sys.path
 _scripts_dir = str(Path(__file__).resolve().parent.parent)
@@ -23,7 +22,7 @@ from runner.protocol import emit, emit_error, emit_result, read_stdin_json
 # Command registry
 # ---------------------------------------------------------------------------
 
-_COMMANDS: dict[str, Callable[[dict[str, Any]], Any]] = {}
+_COMMANDS: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
 
 
 def register(name: str) -> Callable:
@@ -41,12 +40,12 @@ def register(name: str) -> Callable:
     return decorator
 
 
-def get_command(name: str) -> Callable | None:
+def get_command(name: str) ->Optional[Callable]:
     """Return the registered function for *name*, or None."""
     return _COMMANDS.get(name)
 
 
-def list_commands() -> list[str]:
+def list_commands() -> List[str]:
     """Return all registered command names."""
     return sorted(_COMMANDS.keys())
 

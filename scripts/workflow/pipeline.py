@@ -4,13 +4,12 @@
 Replaces the monolithic HeadlessWorkflow with a step-based pipeline
 that supports retry, per-project execution, and execution recording.
 """
-from __future__ import annotations
 
 import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from core.models import (
     StepStatus,
@@ -38,7 +37,7 @@ class Pipeline:
         Must contain at least ``mode`` and ``projects``.
     """
 
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(self, payload: Dict[str, Any]) -> None:
         self.payload = payload
         self.config = load_config()
         # Deep merge payload into config (don't overwrite nested dicts)
@@ -218,7 +217,7 @@ class Pipeline:
     # Single project execution
     # ------------------------------------------------------------------
 
-    def run_one(self, project_config: dict[str, Any]) -> ProjectRunRecord:
+    def run_one(self, project_config: Dict[str, Any]) -> ProjectRunRecord:
         """Execute the full step chain for a single project.
 
         Returns a ``ProjectRunRecord`` with all step results.
@@ -369,11 +368,18 @@ class Pipeline:
         if order_dir_base and create_enabled:
             order_no = self.config.get("order_no") or form_cfg.get("orderNo") or form_cfg.get("order_no") or ""
             hospital_name = self.config.get("hospital_name") or form_cfg.get("hospitalName") or form_cfg.get("hospital_name") or ""
+            order_notes = self.config.get("order_notes") or form_cfg.get("orderNotes") or form_cfg.get("order_notes") or ""
             if order_no and hospital_name:
                 try:
                     from tools.order_dir import create_order_directory
                     enabled_projs = [p for p in self.config.get("projects", []) if p.get("enabled", True)]
-                    res = create_order_directory(order_dir_base, str(order_no), str(hospital_name), enabled_projs)
+                    res = create_order_directory(
+                        order_dir_base,
+                        str(order_no),
+                        str(hospital_name),
+                        enabled_projs,
+                        order_notes=str(order_notes),
+                    )
                     if res.get("success"):
                         emit_log(f"{res.get('message')}", level="info")
                     else:

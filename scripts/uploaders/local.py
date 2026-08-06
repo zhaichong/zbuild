@@ -3,13 +3,12 @@
 
 Simply copies the artifact to a local output directory.
 """
-from __future__ import annotations
 
 import logging
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 from core.constants import APP_DIR
 from uploaders.base import BaseUploader, UploadResult, as_log_fn
@@ -27,7 +26,7 @@ class LocalUploader(BaseUploader):
     def upload(
         self,
         artifact: Path,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         log: Any = None,
         project_name: str = "",
     ) -> UploadResult:

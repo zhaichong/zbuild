@@ -5,23 +5,36 @@ const { spawn } = require('child_process');
 const os = require('os');
 const net = require('net');
 const { resolvePython } = require('./runtime');
+const {
+  MOCK_HTTP_ALLOWED_METHODS,
+  DB_ALLOWED_DATABASES,
+  DB_MAX_STATEMENTS,
+  assertSafeMockUrl,
+  assertDbHostAllowed,
+  assertSafeInsertSql,
+} = require('./security');
+const { encryptConfigSecrets, decryptConfigSecrets } = require('./configCrypto');
 
 // ---- Asar-aware resource resolution ----
+// Prefer a per-user path under the home directory (not a shared world-writable
+// temp folder) to reduce resource-planting races on multi-user machines.
 const isAsar = __dirname.endsWith('app.asar') || __dirname.includes('app.asar' + path.sep);
 let rootDir;
 let extractedRoot = null;
 
 if (isAsar) {
-  extractedRoot = path.join(os.tmpdir(), 'zbuild-resources');
+  extractedRoot = path.join(os.homedir(), '.zbuild', 'extracted-resources');
   const asarRoot = path.resolve(__dirname, '..');
 
   function extractDir(dirName) {
     const src = path.join(asarRoot, dirName);
     const dst = path.join(extractedRoot, dirName);
     if (!fs.existsSync(dst)) {
-      fs.mkdirSync(dst, { recursive: true });
+      fs.mkdirSync(dst, { recursive: true, mode: 0o700 });
     }
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+      // Never follow symlinks out of the asar tree
+      if (entry.isSymbolicLink && entry.isSymbolicLink()) continue;
       const s = path.join(src, entry.name);
       const d = path.join(dst, entry.name);
       if (entry.isDirectory()) {
@@ -81,7 +94,9 @@ function createWindow() {
     backgroundColor: '#f4f7fb', title: '\u7279\u6b8a\u8ba2\u5355\u6253\u5305\u4e0a\u4f20\u5de5\u5177',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true, nodeIntegration: false
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
     }
   };
   if (fs.existsSync(iconPath)) windowOpts.icon = iconPath;
@@ -116,7 +131,12 @@ function createMiniWindow() {
     x: workArea.x + workArea.width - w - 18, y: workArea.y + workArea.height - h - 18,
     frame: false, resizable: false, transparent: true,
     alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    }
   });
   if (isDev) miniWindow.loadURL(devServerUrl + '/mini.html');
   else miniWindow.loadFile(path.join(rootDir, 'dist', 'mini.html'));
@@ -189,28 +209,63 @@ function buildEnv() {
   const env = { ...process.env, PYTHONUTF8: '1', ZBUILD_DATA_DIR: app.getPath('userData') };
   const extraPaths = candidates.filter(c => fs.existsSync(c));
 
-  // Ensure py.exe / Git and common system dirs are always on PATH.
-  // When Electron is launched from a desktop shortcut the user PATH may omit
-  // Git, which previously made discover return empty branch lists.
-  const systemPaths = [
-    'D:\\application\\python',
-    'C:\\Users\\zhaichong\\AppData\\Local\\Programs\\Python\\Python312',
-    'C:\\Program Files\\Git\\cmd',
-    'C:\\Program Files\\Git\\bin',
+  // Dynamically collect common Python, Git, SVN, Node, and Windows system paths
+  const localAppData = process.env.LOCALAPPDATA;
+  const userProfile = process.env.USERPROFILE;
+  const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const systemRoot = process.env.SystemRoot || 'C:\\Windows';
+
+  const searchBases = [localAppData, userProfile, programFiles, programFilesX86].filter(Boolean);
+  const detectedSystemPaths = [];
+
+  // Python directories
+  for (const base of searchBases) {
+    const pyBase = path.join(base, 'Programs', 'Python');
+    if (fs.existsSync(pyBase)) {
+      try {
+        for (const entry of fs.readdirSync(pyBase, { withFileTypes: true })) {
+          if (entry.isDirectory()) detectedSystemPaths.push(path.join(pyBase, entry.name));
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Git, SVN, Node, Windows static candidates
+  const staticAdditions = [
+    path.join(programFiles, 'Git', 'cmd'),
+    path.join(programFiles, 'Git', 'bin'),
+    path.join(programFilesX86, 'Git', 'cmd'),
+    path.join(programFilesX86, 'Git', 'bin'),
+    localAppData && path.join(localAppData, 'Programs', 'Git', 'cmd'),
+    localAppData && path.join(localAppData, 'Programs', 'Git', 'bin'),
     'D:\\application\\Git\\cmd',
     'D:\\application\\Git\\bin',
-    'C:\\Windows',
-    'C:\\Windows\\system32',
-  ].filter(p => fs.existsSync(p) && !((env.PATH || '').toLowerCase().includes(p.toLowerCase())));
+    path.join(programFiles, 'SlikSvn', 'bin'),
+    path.join(programFiles, 'TortoiseSVN', 'bin'),
+    path.join(programFilesX86, 'SlikSvn', 'bin'),
+    path.join(programFilesX86, 'TortoiseSVN', 'bin'),
+    'D:\\application\\SlikSvn\\bin',
+    path.join(programFiles, 'nodejs'),
+    'D:\\application\\nodejs',
+    'D:\\application\\python',
+    systemRoot,
+    path.join(systemRoot, 'System32'),
+  ].filter(Boolean);
+
+  const systemPaths = [...detectedSystemPaths, ...staticAdditions].filter(
+    p => fs.existsSync(p) && !((env.PATH || '').toLowerCase().includes(p.toLowerCase()))
+  );
 
   const allExtra = [...extraPaths, ...systemPaths];
   if (allExtra.length) {
     env.PATH = allExtra.join(path.delimiter) + path.delimiter + (env.PATH || '');
   }
-  // Always strip --openssl-legacy-provider: it is only valid for Node >= 17 (OpenSSL 3)
-  // and causes Node 14 (used by legacy frontend projects) to abort at startup.
   const parts = (env.NODE_OPTIONS || '').split(/\s+/).filter(p => p && p !== '--openssl-legacy-provider');
   if (parts.length) env.NODE_OPTIONS = parts.join(' '); else delete env.NODE_OPTIONS;
+  // Tell Python subprocesses where the Electron resources dir is so bundled.py
+  // can find runtime/python, runtime/node etc. in the packaged app.
+  if (process.resourcesPath) env.ZBUILD_RESOURCES_DIR = process.resourcesPath;
   return env;
 }
 
@@ -298,6 +353,7 @@ function pyConfigToFrontend(py) {
     form: {
       hospitalName: py.hospital_name || '',
       orderNo: py.order_no || '',
+      orderNotes: py.order_notes || '',
       createOrderDir: py.create_order_dir !== undefined ? py.create_order_dir : (py.form ? py.form.createOrderDir : false),
       svnUsername: svnCreds.username || '',
       svnPassword: svnCreds.password || '',
@@ -354,9 +410,90 @@ function frontendConfigToPy(fe) {
     },
     hospital_name: form.hospitalName || '',
     order_no: form.orderNo || '',
+    order_notes: form.orderNotes || '',
     server_upload_paths: fe.serverUploadPaths || {},
     projects: [],
   };
+}
+
+function nodeDetectTools(configTools) {
+  const tools = { git: '', bash: '', svn: '', node: '', npm: '' };
+  const configured = configTools || {};
+
+  const findExecutable = (name, cfg, candidates) => {
+    if (cfg && typeof cfg === 'string' && cfg.trim() && fs.existsSync(cfg.trim())) return cfg.trim();
+    for (const c of candidates) {
+      if (c && fs.existsSync(c)) return c;
+    }
+    try {
+      const { spawnSync } = require('child_process');
+      const res = spawnSync('where', [name], { windowsHide: true });
+      if (res.status === 0 && res.stdout) {
+        const firstLine = res.stdout.toString().split(/\r?\n/)[0].trim();
+        if (firstLine && fs.existsSync(firstLine)) return firstLine;
+      }
+    } catch (_) {}
+    return '';
+  };
+
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const userProfile = process.env.USERPROFILE || '';
+  const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+
+  tools.git = findExecutable('git', configured.git, [
+    path.join(programFiles, 'Git', 'cmd', 'git.exe'),
+    path.join(programFiles, 'Git', 'bin', 'git.exe'),
+    path.join(programFilesX86, 'Git', 'cmd', 'git.exe'),
+    localAppData && path.join(localAppData, 'Programs', 'Git', 'cmd', 'git.exe'),
+    userProfile && path.join(userProfile, 'AppData', 'Local', 'Programs', 'Git', 'cmd', 'git.exe'),
+    'D:\\application\\Git\\cmd\\git.exe',
+    'D:\\Git\\cmd\\git.exe',
+    'C:\\Git\\cmd\\git.exe',
+  ]);
+
+  tools.bash = findExecutable('bash', configured.bash, [
+    path.join(programFiles, 'Git', 'bin', 'bash.exe'),
+    path.join(programFiles, 'Git', 'usr', 'bin', 'bash.exe'),
+    path.join(programFilesX86, 'Git', 'bin', 'bash.exe'),
+    localAppData && path.join(localAppData, 'Programs', 'Git', 'bin', 'bash.exe'),
+    userProfile && path.join(userProfile, 'AppData', 'Local', 'Programs', 'Git', 'bin', 'bash.exe'),
+    'D:\\application\\Git\\bin\\bash.exe',
+  ]);
+
+  tools.svn = findExecutable('svn', configured.svn, [
+    path.join(programFiles, 'TortoiseSVN', 'bin', 'svn.exe'),
+    path.join(programFiles, 'SlikSvn', 'bin', 'svn.exe'),
+    path.join(programFilesX86, 'TortoiseSVN', 'bin', 'svn.exe'),
+    path.join(programFilesX86, 'SlikSvn', 'bin', 'svn.exe'),
+    localAppData && path.join(localAppData, 'Programs', 'TortoiseSVN', 'bin', 'svn.exe'),
+    localAppData && path.join(localAppData, 'Programs', 'SlikSvn', 'bin', 'svn.exe'),
+    'D:\\application\\SlikSvn\\bin\\svn.exe',
+    'D:\\SlikSvn\\bin\\svn.exe',
+    'D:\\TortoiseSVN\\bin\\svn.exe',
+  ]);
+
+  tools.node = findExecutable('node', configured.node, [
+    process.resourcesPath && path.join(process.resourcesPath, 'runtime', 'node', 'node.exe'),
+    path.join(programFiles, 'nodejs', 'node.exe'),
+    path.join(programFilesX86, 'nodejs', 'node.exe'),
+    localAppData && path.join(localAppData, 'Programs', 'nodejs', 'node.exe'),
+    'D:\\application\\nodejs\\node.exe',
+  ]);
+
+  tools.npm = findExecutable('npm', configured.npm, [
+    process.resourcesPath && path.join(process.resourcesPath, 'runtime', 'node', 'npm.cmd'),
+    path.join(programFiles, 'nodejs', 'npm.cmd'),
+    path.join(programFilesX86, 'nodejs', 'npm.cmd'),
+    localAppData && path.join(localAppData, 'Programs', 'nodejs', 'npm.cmd'),
+    'D:\\application\\nodejs\\npm.cmd',
+  ]);
+
+  const resultTools = {};
+  for (const [k, v] of Object.entries(tools)) {
+    resultTools[k] = { path: v, version: null };
+  }
+  return resultTools;
 }
 
 // ---- IPC handlers ----
@@ -366,31 +503,46 @@ ipcMain.handle('config:get', async () => {
   debugLog('config:get called');
   try {
     const result = await runPython('config');
-    debugLog('config:get runPython result keys: ' + Object.keys(result || {}).join(','));
-    const config = result.config || {};
-    debugLog('config:get config keys: ' + Object.keys(config).join(','));
-    const fe = pyConfigToFrontend(config);
-    debugLog('config:get frontend config keys: ' + Object.keys(fe).join(','));
-    return fe;
+    const config = decryptConfigSecrets(result.config || {});
+    return pyConfigToFrontend(config);
   } catch (e) {
-    debugLog('config:get ERROR: ' + e.message + ' | ' + e.stack);
-    throw e;
+    debugLog('config:get ERROR, attempting fallback read: ' + e.message);
+    const userData = app.getPath('userData');
+    const configFile = path.join(userData, 'tool-config.json');
+    if (fs.existsSync(configFile)) {
+      try {
+        const raw = decryptConfigSecrets(JSON.parse(fs.readFileSync(configFile, 'utf8')));
+        return pyConfigToFrontend(raw);
+      } catch (_) {}
+    }
+    return pyConfigToFrontend({});
   }
 });
 ipcMain.handle('config:save', async (_, p) => {
   const pyConfig = frontendConfigToPy(p);
-  await runPython('save-config', { config: pyConfig });
+  // Persist secrets via OS-backed safeStorage (DPAPI on Windows) when available
+  const toStore = encryptConfigSecrets(pyConfig);
+  try {
+    await runPython('save-config', { config: toStore });
+  } catch (e) {
+    debugLog('config:save Python failed, saving directly to userData: ' + e.message);
+    const userData = app.getPath('userData');
+    const configFile = path.join(userData, 'tool-config.json');
+    fs.mkdirSync(userData, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(toStore, null, 2), 'utf8');
+  }
+  // Return the plaintext form state to the renderer (do not echo ciphertext)
   return p;
 });
 ipcMain.handle('tools:detect', async (_, p) => {
-  debugLog('tools:detect called, payload type: ' + typeof p);
+  debugLog('tools:detect called');
   try {
     const result = await runPython('detect-tools', p);
-    debugLog('tools:detect result keys: ' + Object.keys(result || {}).join(','));
     return { tools: result.tools || {}, status: {} };
   } catch (e) {
-    debugLog('tools:detect ERROR: ' + e.message);
-    throw e;
+    debugLog('tools:detect Python failed, fallback to Node detection: ' + e.message);
+    const fallbackTools = nodeDetectTools(p && p.tools);
+    return { tools: fallbackTools, status: {} };
   }
 });
 ipcMain.handle('order-dir:create', async (_, p) => {
@@ -556,41 +708,93 @@ ipcMain.handle('history:get', async (_, id) => {
   };
 });
 
-// mock query proxy request (Node http/https backend)
+// mock query proxy request (Node http/https backend) — hardened against SSRF
 const http = require('http');
 const https = require('https');
+const dns = require('dns').promises;
+
+const MOCK_HTTP_TIMEOUT_MS = 15000;
+const MOCK_HTTP_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+
+/** After DNS resolve, reject if any answer is cloud metadata IP. */
+async function assertResolvedHostSafe(hostname) {
+  try {
+    const records = await dns.lookup(hostname, { all: true });
+    for (const rec of records) {
+      if (rec.address === '169.254.169.254') {
+        throw new Error('DNS 解析指向云元数据地址，已拦截');
+      }
+    }
+  } catch (e) {
+    if (e && e.message && e.message.includes('云元数据')) throw e;
+    // DNS failure is handled by the request itself
+  }
+}
 
 ipcMain.handle('mock-query:request', async (_, { url: fullUrl, method = 'GET', body = null }) => {
+  const parsed = assertSafeMockUrl(fullUrl);
+  const verb = String(method || 'GET').toUpperCase();
+  if (!MOCK_HTTP_ALLOWED_METHODS.has(verb)) {
+    throw new Error(`不允许的 HTTP 方法: ${verb}（仅支持 GET/POST）`);
+  }
+  await assertResolvedHostSafe(parsed.hostname);
+
   return new Promise((resolve, reject) => {
     try {
-      const parsed = new URL(fullUrl);
       const requestLib = parsed.protocol === 'https:' ? https : http;
       const headers = {
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MockQueryTool/1.0',
+        'User-Agent': 'zbuild-MockQueryTool/2.0',
       };
       let bodyData = null;
-      if (body) {
+      if (body != null && verb !== 'GET') {
         bodyData = typeof body === 'string' ? body : JSON.stringify(body);
+        if (Buffer.byteLength(bodyData) > MOCK_HTTP_MAX_BYTES) {
+          reject(new Error('请求体过大'));
+          return;
+        }
         headers['Content-Length'] = Buffer.byteLength(bodyData);
       }
-      const req = requestLib.request(parsed, { method: method || 'GET', headers }, (res) => {
-        let chunks = [];
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', () => {
-          const dataStr = Buffer.concat(chunks).toString('utf-8');
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsedData = JSON.parse(dataStr);
-              const finalData = parsedData.data !== undefined ? parsedData.data : parsedData;
-              resolve(finalData);
-            } catch (e) {
-              resolve(dataStr);
-            }
-          } else {
-            reject(new Error(`远程服务器返回错误 ${res.statusCode}: ${dataStr.substring(0, 200)}`));
+      const req = requestLib.request(
+        parsed,
+        { method: verb, headers, timeout: MOCK_HTTP_TIMEOUT_MS },
+        (res) => {
+          // Do not follow redirects automatically (Node default); reject 3xx with Location to private metadata
+          if (res.statusCode >= 300 && res.statusCode < 400) {
+            res.resume();
+            reject(new Error(`拒绝跟随重定向 (${res.statusCode})`));
+            return;
           }
-        });
+          const chunks = [];
+          let total = 0;
+          res.on('data', (chunk) => {
+            total += chunk.length;
+            if (total > MOCK_HTTP_MAX_BYTES) {
+              req.destroy();
+              reject(new Error('响应体过大'));
+              return;
+            }
+            chunks.push(chunk);
+          });
+          res.on('end', () => {
+            const dataStr = Buffer.concat(chunks).toString('utf-8');
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              try {
+                const parsedData = JSON.parse(dataStr);
+                const finalData = parsedData.data !== undefined ? parsedData.data : parsedData;
+                resolve(finalData);
+              } catch (e) {
+                resolve(dataStr);
+              }
+            } else {
+              reject(new Error(`远程服务器返回错误 ${res.statusCode}: ${dataStr.substring(0, 200)}`));
+            }
+          });
+        },
+      );
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error(`请求超时 (${MOCK_HTTP_TIMEOUT_MS}ms)`));
       });
       req.on('error', (err) => reject(err));
       if (bodyData) req.write(bodyData);
@@ -684,8 +888,16 @@ ipcMain.handle('mini:dismiss', async () => { miniDismissed = true; closeMiniWind
 
 // DB Connection Test
 ipcMain.handle('db:test-connection', async (_event, payload) => {
-  const host = (payload && payload.host) || '127.0.0.1';
+  let host;
+  try {
+    host = assertDbHostAllowed((payload && payload.host) || '127.0.0.1');
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
   const port = parseInt((payload && payload.port) || '3306', 10);
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    return { success: false, error: '无效的数据库端口' };
+  }
 
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -724,16 +936,41 @@ ipcMain.handle('db:test-connection', async (_event, payload) => {
   });
 });
 
-// Direct MySQL Execute SQL Handler
+// Direct MySQL Execute SQL Handler (INSERT-only, private hosts, YHDB)
 const mysql = require('mysql2/promise');
 
 ipcMain.handle('db:execute-sql', async (_event, payload) => {
-  const host = (payload && payload.host) || '127.0.0.1';
+  let host;
+  try {
+    host = assertDbHostAllowed((payload && payload.host) || '127.0.0.1');
+  } catch (e) {
+    return { success: false, error: e.message, logs: `❌ ${e.message}` };
+  }
   const port = parseInt((payload && payload.port) || '3306', 10);
-  const user = (payload && payload.user) || 'root';
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    return { success: false, error: '无效的数据库端口', logs: '❌ 无效的数据库端口' };
+  }
+  const user = String((payload && payload.user) || 'root').slice(0, 64);
   const password = (payload && payload.password) || '';
-  const database = (payload && payload.database) || 'YHDB';
+  const database = String((payload && payload.database) || 'YHDB');
+  if (!DB_ALLOWED_DATABASES.has(database)) {
+    return {
+      success: false,
+      error: `不允许的数据库名: ${database}（仅支持: ${[...DB_ALLOWED_DATABASES].join(', ')}）`,
+      logs: `❌ 不允许的数据库名: ${database}`,
+    };
+  }
   const sqlStatements = (payload && payload.sqlStatements) || [];
+  if (!Array.isArray(sqlStatements)) {
+    return { success: false, error: 'sqlStatements 必须是数组', logs: '❌ sqlStatements 必须是数组' };
+  }
+  if (sqlStatements.length > DB_MAX_STATEMENTS) {
+    return {
+      success: false,
+      error: `语句数量超过上限 (${DB_MAX_STATEMENTS})`,
+      logs: `❌ 语句数量超过上限 (${DB_MAX_STATEMENTS})`,
+    };
+  }
 
   const logs = [];
   let successCount = 0;
@@ -749,13 +986,22 @@ ipcMain.handle('db:execute-sql', async (_event, payload) => {
       password,
       database,
       connectTimeout: 5000,
+      // Defense in depth: never allow multiStatements at the driver level
+      multipleStatements: false,
     });
 
     logs.push(`[${new Date().toLocaleTimeString()}] 已连接数据库 ${user}@${host}:${port}/${database}`);
 
     for (let i = 0; i < sqlStatements.length; i++) {
-      const sql = sqlStatements[i].trim();
-      if (!sql || sql.startsWith('--')) continue;
+      let sql;
+      try {
+        sql = assertSafeInsertSql(sqlStatements[i]);
+      } catch (err) {
+        errorCount++;
+        logs.push(`❌ [${i + 1}/${sqlStatements.length}] 拒绝执行: ${err.message}`);
+        continue;
+      }
+      if (!sql) continue;
 
       try {
         const [result] = await connection.query(sql);

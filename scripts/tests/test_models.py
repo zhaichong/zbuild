@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Tests for core.models module."""
-from __future__ import annotations
 
 import sys
 import time

@@ -4,12 +4,11 @@
 Refactored from the original config.py to use centralized constants
 and structured error handling.
 """
-from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from core.constants import (
     CONFIG_PATH,
@@ -77,7 +76,7 @@ def write_debug(message: str, *args: Any) -> None:
 # Default configuration
 # ---------------------------------------------------------------------------
 
-def default_config() -> dict[str, Any]:
+def default_config() -> Dict[str, Any]:
     """Return a fresh default configuration dictionary."""
     return {
         "mode": "svn",
@@ -102,7 +101,7 @@ def default_config() -> dict[str, Any]:
         "node_required_version": "14.21.3",
         "build_command": DEFAULT_BUILD_COMMAND,
         "build_commands": dict(DEFAULT_BUILD_COMMANDS),
-        "artifact_paths": ["dist"],
+        "artifact_paths": ["dist", "release", "build", "output", "target"],
         "project_artifact_paths": {},
         "server_upload_paths": dict(DEFAULT_SERVER_UPLOAD_PATHS),
     }
@@ -112,7 +111,7 @@ def default_config() -> dict[str, Any]:
 # Config normalization
 # ---------------------------------------------------------------------------
 
-def normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
+def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Validate and normalize a configuration dictionary.
 
     Ensures all required keys exist with sane defaults and normalizes
@@ -150,14 +149,21 @@ def normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
 
     # Normalize artifact_paths list
     raw_art_paths = config.get("artifact_paths")
+    default_art_paths = ["dist", "release", "build", "output", "target"]
     if isinstance(raw_art_paths, str):
         config["artifact_paths"] = [p.strip() for p in raw_art_paths.replace(";", ",").split(",") if p.strip()]
     elif isinstance(raw_art_paths, list):
-        config["artifact_paths"] = [str(p).strip() for p in raw_art_paths if str(p).strip()]
+        art_list = []
+        for p in raw_art_paths:
+            if isinstance(p, str):
+                art_list.extend([s.strip() for s in p.replace(";", ",").split(",") if s.strip()])
+            elif p:
+                art_list.append(str(p).strip())
+        config["artifact_paths"] = art_list
     else:
-        config["artifact_paths"] = ["dist"]
+        config["artifact_paths"] = default_art_paths
     if not config["artifact_paths"]:
-        config["artifact_paths"] = ["dist"]
+        config["artifact_paths"] = default_art_paths
 
     # Normalize project_artifact_paths dict
     proj_art_paths = config.get("project_artifact_paths")
@@ -224,7 +230,7 @@ def normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
 # High-level config access
 # ---------------------------------------------------------------------------
 
-def load_config() -> dict[str, Any]:
+def load_config() -> Dict[str, Any]:
     """Load the tool configuration, creating defaults if needed."""
     if not CONFIG_PATH.exists():
         cfg = default_config()
@@ -234,6 +240,6 @@ def load_config() -> dict[str, Any]:
     return normalize_config(raw)
 
 
-def save_config(config: dict[str, Any]) -> None:
+def save_config(config: Dict[str, Any]) -> None:
     """Persist the configuration to disk."""
     save_json(CONFIG_PATH, config)

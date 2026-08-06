@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """Commands: template-list, template-get, template-save, template-delete."""
-from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from runner.cli import register
 from core.templates import TemplateStore
 from core.models import TaskTemplate
+from core.secrets import without_secrets
 
 
 @register("template-list")
-def cmd_template_list(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_template_list(payload: Dict[str, Any]) -> Dict[str, Any]:
     """List all saved task templates."""
     store = TemplateStore()
     templates = store.list()
@@ -21,7 +21,7 @@ def cmd_template_list(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("template-get")
-def cmd_template_get(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_template_get(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Get a single template by ID."""
     template_id = payload.get("id", "")
     if not template_id:
@@ -35,13 +35,17 @@ def cmd_template_get(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("template-save")
-def cmd_template_save(payload: dict[str, Any]) -> dict[str, Any]:
-    """Save a new template or update an existing one."""
+def cmd_template_save(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Save a new template or update an existing one.
+
+    Passwords and other secrets are stripped before persistence so templates
+    never become a secondary credential store.
+    """
     name = payload.get("name", "")
     if not name:
         return {"success": False, "error": "Missing 'name'"}
 
-    config = payload.get("config", {})
+    config = without_secrets(payload.get("config", {}) or {})
     mode = payload.get("mode", "svn")
     description = payload.get("description", "")
     template_id = payload.get("id", "")
@@ -72,7 +76,7 @@ def cmd_template_save(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("template-delete")
-def cmd_template_delete(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_template_delete(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Delete a template by ID."""
     template_id = payload.get("id", "")
     if not template_id:

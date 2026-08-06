@@ -3,29 +3,61 @@
     <!-- SVN 模式: 订单信息 -->
     <div
       v-if="store.mode === 'svn'"
-      class="card p-5"
+      class="card p-5 space-y-4"
     >
-      <div class="flex items-center gap-1.5 mb-3 text-text-2 font-semibold text-sm">
-        <svg
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-          />
-        </svg>
-        订单信息
+      <!-- Section Header with Actions -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+        <div class="flex items-center gap-2 text-text-1 font-bold text-sm">
+          <svg
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            class="text-primary shrink-0"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 01-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+          <span>订单与提测单信息</span>
+        </div>
+
+        <!-- Checkbox & Manual Trigger Button -->
+        <div v-if="store.config?.orderDirPath" class="flex flex-wrap items-center gap-3">
+          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-text-2 select-none hover:text-primary transition-colors">
+            <input
+              v-model="store.config.form.createOrderDir"
+              type="checkbox"
+              class="w-4 h-4 accent-primary rounded cursor-pointer shrink-0"
+            >
+            <span>自动创建提测目录</span>
+            <span
+              class="text-[10px] text-text-3 font-normal max-w-[150px] truncate"
+              :title="store.config.orderDirPath"
+            >({{ store.config.orderDirPath }})</span>
+          </label>
+          <button
+            type="button"
+            class="px-2 py-1 text-xs border border-border rounded bg-white text-text-2 hover:bg-slate-50 transition-colors shrink-0"
+            :disabled="creatingOrderDir"
+            title="手动创建提测目录并生成 Excel 提测单"
+            @click="onGenerateOrderDirManually"
+          >
+            {{ creatingOrderDir ? '创建中...' : '手动生成提测目录' }}
+          </button>
+        </div>
       </div>
-      <div class="flex flex-wrap items-end gap-4">
-        <div class="flex flex-col gap-1.5 w-72 min-w-0">
-          <label class="text-xs text-text-3 font-medium">医院名称</label>
-          <div class="flex gap-1">
+
+      <!-- Row 1: Hospital Name & Order No -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- 医院名称 -->
+        <div class="flex flex-col gap-1.5 min-w-0">
+          <label class="text-xs font-semibold text-text-2">医院名称</label>
+          <div class="flex gap-1.5">
             <input
               v-model="store.config.form.hospitalName"
               type="text"
@@ -33,44 +65,13 @@
               placeholder="输入或选择医院名称"
             >
             <button
-              class="px-2.5 rounded-lg border border-border bg-white text-text-3 hover:text-primary hover:border-primary/30 transition-colors flex items-center shrink-0"
-              title="从 SVN 浏览选择"
+              class="px-3 rounded-lg border border-border bg-white text-text-3 hover:text-primary hover:border-primary/40 transition-colors flex items-center shrink-0 cursor-pointer shadow-2xs"
+              title="从 SVN 浏览选择医院"
               :disabled="svnLoading"
               @click="pickHospital"
             >
               <svg
-                class="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div class="flex flex-col gap-1.5 w-72 min-w-0">
-          <label class="text-xs text-text-3 font-medium">订单号</label>
-          <div class="flex gap-1">
-            <input
-              v-model="store.config.form.orderNo"
-              type="text"
-              class="form-input flex-1 min-w-0"
-              placeholder="输入或选择订单号"
-            >
-            <button
-              class="px-2.5 rounded-lg border border-border bg-white text-text-3 hover:text-primary hover:border-primary/30 transition-colors flex items-center shrink-0"
-              title="从 SVN 浏览选择"
-              :disabled="svnLoading || !store.config.form.hospitalName"
-              @click="pickOrder"
-            >
-              <svg
-                class="w-3.5 h-3.5"
+                class="w-4 h-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -86,28 +87,55 @@
           </div>
         </div>
 
-        <!-- 自动创建提测目录复选框 -->
-        <div
-          v-if="store.config?.orderDirPath"
-          class="flex items-center gap-1.5 self-end mb-2.5 cursor-pointer text-xs font-medium text-text-2 select-none shrink-0"
-        >
-          <input
-            id="createOrderDir"
-            v-model="store.config.form.createOrderDir"
-            type="checkbox"
-            class="w-4 h-4 accent-primary rounded cursor-pointer"
-          >
-          <label
-            for="createOrderDir"
-            class="cursor-pointer hover:text-primary transition-colors flex items-center gap-1"
-          >
-            <span>自动创建提测目录</span>
-            <span
-              class="text-[10px] text-text-3 font-normal max-w-[140px] truncate"
-              :title="store.config.orderDirPath"
-            >({{ store.config.orderDirPath }})</span>
-          </label>
+        <!-- 订单号 -->
+        <div class="flex flex-col gap-1.5 min-w-0">
+          <label class="text-xs font-semibold text-text-2">订单号</label>
+          <div class="flex gap-1.5">
+            <input
+              v-model="store.config.form.orderNo"
+              type="text"
+              class="form-input flex-1 min-w-0"
+              placeholder="输入或选择订单号"
+            >
+            <button
+              class="px-3 rounded-lg border border-border bg-white text-text-3 hover:text-primary hover:border-primary/40 transition-colors flex items-center shrink-0 cursor-pointer shadow-2xs"
+              title="从 SVN 浏览选择订单号"
+              :disabled="svnLoading || !store.config.form.hospitalName"
+              @click="pickOrder"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
+      </div>
+
+      <!-- Row 2: Multi-line Change Notes Textarea (仅在勾选自动创建提测目录时展示) -->
+      <div
+        v-if="store.config.form.createOrderDir"
+        class="flex flex-col gap-1.5 pt-1"
+      >
+        <div class="flex items-center justify-between text-xs">
+          <label class="font-semibold text-text-2">本次更改内容（自动写入提测单 B12）</label>
+          <span class="text-[11px] text-text-3 font-normal">支持按 Enter 换行多行输入（留空则默认按选中的项目及分支自动填充）</span>
+        </div>
+        <textarea
+          v-model="store.config.form.orderNotes"
+          rows="3"
+          class="form-input w-full font-sans text-xs resize-y leading-relaxed p-2.5"
+          placeholder="例如:&#10;1、增加新首页&#10;2、修复已知问题"
+        />
       </div>
 
       <PickerDialog
@@ -398,12 +426,61 @@ async function pickOrder() {
 
 function onPickerChoose(value: string) {
   if (!store.config || !store.config.form) return
+  const cleanVal = (value || '').trim()
   if (pickerKind.value === 'hospital') {
-    store.config.form.hospitalName = value
+    store.config.form.hospitalName = cleanVal
     // Clear order number since it depends on hospital
     store.config.form.orderNo = ''
+    store.showToast(`已选择医院: ${cleanVal}`, 'success')
   } else {
-    store.config.form.orderNo = value
+    store.config.form.orderNo = cleanVal
+    store.showToast(`已选择订单号: ${cleanVal}`, 'success')
+  }
+  saveConfig(store.config).catch((e) => console.warn('Auto save failed:', e))
+}
+
+const creatingOrderDir = ref(false)
+
+async function onGenerateOrderDirManually() {
+  if (!store.config || !store.config.form) return
+  const { hospitalName, orderNo, orderNotes } = store.config.form
+  const orderDirPath = store.config.orderDirPath
+  if (!orderDirPath) {
+    store.showToast('请先在设置中配置提测目录根路径', 'warning')
+    return
+  }
+  if (!hospitalName || !orderNo) {
+    store.showToast('请先填写医院名称和订单号', 'warning')
+    return
+  }
+
+  creatingOrderDir.value = true
+  try {
+    const enabledProjs = (store.projects || [])
+      .filter((p) => p.enabled)
+      .map((p) => ({
+        projectName: p.projectName,
+        branch: store.projectBranches[p.projectName] || p.currentBranch || '',
+      }))
+
+    const res = await ipc.createOrderDir({
+      order_dir_base: orderDirPath,
+      order_no: orderNo,
+      hospital_name: hospitalName,
+      order_notes: orderNotes || '',
+      projects: enabledProjs,
+    })
+
+    if (res && res.success) {
+      store.showToast(res.message || '成功生成提测目录、Excel 提测单及 Word 升级说明', 'success')
+    } else {
+      store.showToast('生成提测单失败: ' + (res?.message || '未知错误'), 'error')
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    store.showToast('生成提测单失败: ' + msg, 'error')
+  } finally {
+    creatingOrderDir.value = false
   }
 }
 </script>

@@ -5,12 +5,11 @@ Electron may launch with a minimal PATH (no Git/Bash). Discover and other
 commands receive ``tools`` from the frontend config, but historically ignored
 them — so ``git branch`` failed silently and the UI showed empty branches.
 """
-from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +27,12 @@ def _tool_path(tools: Any, name: str) -> str:
     return ""
 
 
-def apply_tools_env(payload: Optional[dict[str, Any]] = None, *, config: Optional[dict[str, Any]] = None) -> None:
+def apply_tools_env(payload: Optional[Dict[str, Any]] = None, *, config: Optional[Dict[str, Any]] = None) -> None:
     """Set GIT_EXECUTABLE / PATH from payload tools (or auto-detect fallback).
 
     Safe to call multiple times; only sets values when a usable path is found.
     """
-    tools: dict[str, Any] = {}
+    tools: Dict[str, Any] = {}
     if isinstance(payload, dict):
         raw = payload.get("tools")
         if isinstance(raw, dict):

@@ -5,7 +5,6 @@ Uploads the artifact to a temporary path on the server, then extracts
 it into the target directory. For most projects, the extraction first
 deletes matching top-level directories to prevent stale files.
 """
-from __future__ import annotations
 
 import logging
 import posixpath
@@ -13,7 +12,7 @@ import tarfile
 import time
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Dict
 
 from core.constants import DEFAULT_SERVER_UPLOAD_PATHS
 from core.errors import UploadError
@@ -108,8 +107,9 @@ def test_server_connection(host: str, username: str, password: str, port: int = 
     except ImportError as exc:
         raise RuntimeError("当前 Python 环境缺少 paramiko，无法检测服务器连接。") from exc
 
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    from uploaders.ssh_policy import open_ssh_client
+
+    ssh = open_ssh_client(paramiko)
     try:
         ssh.connect(hostname=host, port=port, username=username, password=password, timeout=15)
         output = _run_ssh(ssh, "pwd")
@@ -141,7 +141,7 @@ class ServerUploader(BaseUploader):
     def upload(
         self,
         artifact: Path,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         log: Any = None,
         project_name: str = "",
     ) -> UploadResult:
@@ -203,8 +203,9 @@ class ServerUploader(BaseUploader):
                 message="paramiko 未安装，无法使用服务器上传",
             )
 
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        from uploaders.ssh_policy import open_ssh_client
+
+        client = open_ssh_client(paramiko)
 
         try:
             log_fn(f"正在连接服务器 {host}:{port} ...")

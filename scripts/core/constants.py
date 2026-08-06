@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 APP_DIR = Path(__file__).resolve().parent.parent.parent
 _DATA_DIR_ENV = os.environ.get("ZBUILD_DATA_DIR")
@@ -60,7 +61,7 @@ class ProjectInfo:
     name: str
     path: Path
     current_branch: str
-    branches: list[str]
+    branches: List[str]
     default_svn_leaf: str
     server_upload_path: str = ""
     build_command: str = DEFAULT_BUILD_COMMAND

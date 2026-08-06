@@ -4,32 +4,16 @@
 Manages per-run JSON records in HISTORY_DIR with an index.json for
 fast listing without scanning all files.
 """
-from __future__ import annotations
 
 import json
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from core.constants import HISTORY_DIR
 from core.models import ExecutionRecord
-
-
-_SECRET_KEYS = {"password", "secret", "token", "api_key"}
-
-
-def _without_secrets(value: Any) -> Any:
-    """Return a JSON-safe copy with credential fields removed."""
-    if isinstance(value, dict):
-        return {
-            key: _without_secrets(item)
-            for key, item in value.items()
-            if key.lower() not in _SECRET_KEYS
-        }
-    if isinstance(value, list):
-        return [_without_secrets(item) for item in value]
-    return value
+from core.secrets import without_secrets
 
 
 class HistoryStore:
@@ -48,7 +32,7 @@ class HistoryStore:
     # Index management
     # ------------------------------------------------------------------
 
-    def _load_index(self) -> list[dict[str, Any]]:
+    def _load_index(self) -> List[Dict[str, Any]]:
         if not self._index_path.exists():
             return []
         try:
@@ -56,7 +40,7 @@ class HistoryStore:
         except (json.JSONDecodeError, OSError):
             return []
 
-    def _save_index(self, index: list[dict[str, Any]]) -> None:
+    def _save_index(self, index: List[Dict[str, Any]]) -> None:
         self._index_path.write_text(
             json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -76,7 +60,7 @@ class HistoryStore:
             record.started_at = time.time()
 
         record_data = record.to_dict()
-        record_data["config_snapshot"] = _without_secrets(record.config_snapshot)
+        record_data["config_snapshot"] = without_secrets(record.config_snapshot)
         path = self.history_dir / f"{record.run_id}.json"
         path.write_text(
             json.dumps(record_data, ensure_ascii=False, indent=2),
@@ -100,7 +84,7 @@ class HistoryStore:
     def update(self, record: ExecutionRecord) -> None:
         """Overwrite an existing execution record and refresh the index."""
         record_data = record.to_dict()
-        record_data["config_snapshot"] = _without_secrets(record.config_snapshot)
+        record_data["config_snapshot"] = without_secrets(record.config_snapshot)
         path = self.history_dir / f"{record.run_id}.json"
         path.write_text(
             json.dumps(record_data, ensure_ascii=False, indent=2),
@@ -131,7 +115,7 @@ class HistoryStore:
         except (json.JSONDecodeError, KeyError, OSError):
             return None
 
-    def list(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+    def list(self, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """Return a summary list of execution records, newest first."""
         index = self._load_index()
         return index[offset:offset + limit]

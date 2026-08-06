@@ -4,11 +4,10 @@
 Scans configured directories for Git repositories and builds
 ``ProjectInfo`` objects with branch metadata.
 """
-from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 from core.constants import (
     ProjectInfo,
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Project defaults mapping
 # ---------------------------------------------------------------------------
 
-def _load_project_defaults() -> dict[str, dict]:
+def _load_project_defaults() -> Dict[str, dict]:
     """Load the project-defaults.json mapping.
 
     Returns a dict keyed by project directory name, with values like::
@@ -52,8 +51,8 @@ def _load_project_defaults() -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 def discover_projects(
-    search_dirs: Optional[list[str]] = None,
-) -> list[ProjectInfo]:
+    search_dirs: Optional[List[str]] = None,
+) -> List[ProjectInfo]:
     """Discover Git projects in the given directories.
 
     Parameters
@@ -65,14 +64,14 @@ def discover_projects(
 
     Returns
     -------
-    list[ProjectInfo]:
+    List[ProjectInfo]:
         Discovered projects with branch metadata populated.
     """
     if not search_dirs:
         return []
 
     defaults = _load_project_defaults()
-    projects: list[ProjectInfo] = []
+    projects: List[ProjectInfo] = []
 
     for search_dir in search_dirs:
         base = Path(search_dir)

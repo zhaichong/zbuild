@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """Command: server-test."""
-from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from runner.cli import register
 
 
 @register("server-test")
-def cmd_server_test(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_server_test(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Test SSH/SFTP connectivity to the target server."""
     host = payload.get("serverAddress", "")
     port = int(payload.get("port", 22) or 22)

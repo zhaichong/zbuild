@@ -4,11 +4,10 @@
 Uses ``git diff`` to find changed files and maps them back to
 projects to determine which ones need rebuilding.
 """
-from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Set, Union
 
 from tools.exec import run_process
 from git.branches import safe_git
@@ -17,10 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 def _changed_files(
-    project_path: Path | str,
+    project_path: Union[Path, str],
     base_ref: str = "main",
     head_ref: str = "HEAD",
-) -> list[str]:
+) -> List[str]:
     """Return list of files changed between two refs."""
     try:
         r = run_process(
@@ -35,7 +34,7 @@ def _changed_files(
 
 def _map_file_to_project(
     file_path: str,
-    project_dirs: dict[str, Path],
+    project_dirs: Dict[str, Path],
 ) -> Optional[str]:
     """Map a changed file path to its owning project name.
 
@@ -77,11 +76,11 @@ def _map_file_to_project(
 
 
 def find_affected_projects(
-    repo_path: Path | str,
-    project_dirs: dict[str, Path],
+    repo_path: Union[Path, str],
+    project_dirs: Dict[str, Path],
     base_ref: str = "main",
     head_ref: str = "HEAD",
-) -> list[str]:
+) -> List[str]:
     """Find projects affected by changes between two refs.
 
     Parameters
@@ -97,7 +96,7 @@ def find_affected_projects(
 
     Returns
     -------
-    list[str]:
+    List[str]:
         Names of affected projects.
     """
     changed = _changed_files(repo_path, base_ref, head_ref)
@@ -105,7 +104,7 @@ def find_affected_projects(
         logger.info("No changes detected between %s and %s", base_ref, head_ref)
         return []
 
-    affected: set[str] = set()
+    affected: Set[str] = set()
     for f in changed:
         project_name = _map_file_to_project(f, project_dirs)
         if project_name:
@@ -126,9 +125,9 @@ def find_affected_projects(
 
 
 def find_affected_projects_from_staged(
-    repo_path: Path | str,
-    project_dirs: dict[str, Path],
-) -> list[str]:
+    repo_path: Union[Path, str],
+    project_dirs: Dict[str, Path],
+) -> List[str]:
     """Find projects affected by staged (uncommitted) changes."""
     try:
         r = run_process(
@@ -140,7 +139,7 @@ def find_affected_projects_from_staged(
     except Exception:
         return []
 
-    affected: set[str] = set()
+    affected: Set[str] = set()
     for f in changed:
         project_name = _map_file_to_project(f, project_dirs)
         if project_name:

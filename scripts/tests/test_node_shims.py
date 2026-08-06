@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Regression: Node 14 must never run a foreign (Volta/global) npm 10+ CLI."""
-from __future__ import annotations
 
 import os
 import sys

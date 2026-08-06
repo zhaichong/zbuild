@@ -5,7 +5,6 @@ Provides paths to bundled runtimes (Python, Git, Bash, SVN, Node, npm)
 that ship alongside the Electron application, and helpers to set up
 shims so that child processes pick up the bundled versions.
 """
-from __future__ import annotations
 
 import logging
 import os
@@ -28,9 +27,17 @@ REQUIRED_NODE_VERSION = "14.21.3"
 def runtime_root() -> Path:
     """Return the root directory for bundled runtimes.
 
-    In a packaged Electron app this is ``resources/runtime/``;
-    during development it falls back to ``<APP_DIR>/runtime/``.
+    Search order:
+    1. ZBUILD_RESOURCES_DIR env var (set by Electron's buildEnv() to
+       process.resourcesPath) — correct in the packaged / distributed app.
+    2. APP_DIR.parent / "resources" / "runtime" — legacy fallback.
+    3. APP_DIR / "runtime" — development fallback.
     """
+    resources_env = os.environ.get("ZBUILD_RESOURCES_DIR", "")
+    if resources_env:
+        packaged = Path(resources_env) / "runtime"
+        if packaged.is_dir():
+            return packaged
     packaged = APP_DIR.parent / "resources" / "runtime"
     if packaged.is_dir():
         return packaged

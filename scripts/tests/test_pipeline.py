@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
 
 import subprocess
 import sys
@@ -18,6 +17,7 @@ from workflow.pipeline import Pipeline
 from workflow.step_fns import step_switch_branch
 from workflow.step_fns import step_check_tools
 from workflow.steps import StepContext, StepDefinition, StepResult
+from typing import List
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -197,7 +197,7 @@ class TestMultiProjectPipeline(unittest.TestCase):
                 project_path.mkdir()
                 projects.append({"name": name, "path": str(project_path), "enabled": True})
 
-            uploaded: list[str] = []
+            uploaded: List[str] = []
 
             def build(ctx):
                 artifact = ctx.project_path / "dist" / f"{ctx.project_name}.tar.gz"
@@ -234,7 +234,7 @@ class TestMultiProjectPipeline(unittest.TestCase):
                 project_path.mkdir()
                 projects.append({"name": name, "path": str(project_path), "enabled": True})
 
-            uploaded: list[str] = []
+            uploaded: List[str] = []
 
             def build(ctx):
                 if ctx.project_name == "broken":

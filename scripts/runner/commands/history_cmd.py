@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """Commands: history-list, history-get."""
-from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict
 
 from runner.cli import register
 from core.history import HistoryStore
 
 
 @register("history-list")
-def cmd_history_list(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_history_list(payload: Dict[str, Any]) -> Dict[str, Any]:
     """List execution history records."""
     limit = payload.get("limit", 50)
     offset = payload.get("offset", 0)
@@ -19,7 +18,7 @@ def cmd_history_list(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("history-get")
-def cmd_history_get(payload: dict[str, Any]) -> dict[str, Any]:
+def cmd_history_get(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Get a single execution record by run_id."""
     run_id = payload.get("id", "")
     if not run_id:

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """GIT_EXECUTABLE must be applied so discover can list branches without PATH git."""
-from __future__ import annotations
 
 import os
 import sys

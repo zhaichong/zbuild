@@ -71,13 +71,24 @@ if (window.runtimeSetup) {
 }
 
 if (retryBtn) {
-  retryBtn.addEventListener('click', () => {
+  retryBtn.addEventListener('click', async () => {
     retryBtn.disabled = true
     errorEl.classList.remove('visible')
     actionsEl.classList.add('hidden')
     fillEl.classList.add('indeterminate')
     phaseEl.textContent = '正在重试…'
-    if (window.runtimeSetup) window.runtimeSetup.retry().then(() => { retryBtn.disabled = false })
+    try {
+      if (!window.runtimeSetup) return
+      const started = await window.runtimeSetup.retry()
+      if (!started) {
+        // Not in error state or already attempting — restore error UI.
+        phaseEl.textContent = PHASE_TEXT.error
+        errorEl.classList.add('visible')
+        actionsEl.classList.remove('hidden')
+      }
+    } finally {
+      retryBtn.disabled = false
+    }
   })
 }
 

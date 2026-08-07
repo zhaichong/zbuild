@@ -55,13 +55,16 @@ jobs:
         run: npm ci
 
       - name: Install Python dependencies
-        run: python -m pip install "openpyxl>=3.1,<4" "paramiko>=3.0,<4"
+        run: python -m pip install "openpyxl==3.1.5" "paramiko==5.0.0"
 
       - name: Run TypeScript type check
         run: npm run typecheck
 
       - name: Run frontend build
         run: npm run build
+
+      - name: Run Node tests
+        run: npm run test:node
 
       - name: Run Python tests
         run: |

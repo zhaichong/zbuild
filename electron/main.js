@@ -4,7 +4,7 @@ const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
-const { resolvePython, isUsableRuntime } = require('./runtime');
+const { resolvePython, isUsableRuntime, findNode } = require('./runtime');
 const {
   ensureRuntime,
   getRuntimeRoot,
@@ -296,21 +296,35 @@ function validateOverride(name) {
 // missing. Resolves `true` when the runtime is ready, `false` on failure (the
 // setup window remains open so the user can retry or read the recovery guide).
 // Concurrent callers for the same kind share one single-flight Promise.
+// The Map entry is registered synchronously before any async work to close races.
 function ensureRuntimeWithUi(name, title) {
   if (setupInflight.has(name)) {
     return setupInflight.get(name);
   }
 
-  const promise = new Promise((resolve) => {
-    // If another kind's setup is showing an error, resolve that promise and
-    // close the window so a fresh one can be created for this request.
-    if (setupUiState && setupUiState.name !== name && typeof setupUiState._resolve === 'function') {
+  let settled = false;
+  const settle = (ok) => {
+    if (settled) return;
+    settled = true;
+    resolveOuter(ok);
+  };
+  let resolveOuter;
+  const promise = new Promise((resolve) => { resolveOuter = resolve; });
+  setupInflight.set(name, promise);
+  promise.finally(() => {
+    if (setupInflight.get(name) === promise) setupInflight.delete(name);
+  });
+
+  // Kick off work without awaiting — callers share `promise`.
+  (async () => {
+    // If another kind's setup is showing, abort it and resolve its waiters.
+    if (setupUiState && setupUiState.name !== name) {
       if (setupUiState.abortController) {
         try { setupUiState.abortController.abort(); } catch (_) {}
       }
-      setupUiState._resolve(false);
-    }
-    if (setupUiState && setupUiState.name !== name) {
+      if (typeof setupUiState._resolve === 'function') {
+        setupUiState._resolve(false);
+      }
       setupUiState = null;
       if (setupWin && !setupWin.isDestroyed()) {
         setupWin.close();
@@ -322,23 +336,18 @@ function ensureRuntimeWithUi(name, title) {
     const usable = isUsableRuntime(rootDir, name, {
       manifestPath: MANIFEST_PATH(),
     });
-    if (usable) { resolve(true); return; }
+    if (usable) {
+      settle(true);
+      return;
+    }
 
     const win = createSetupWindow();
-    const abortController = new AbortController();
-    const waiters = [resolve];
     setupUiState = {
       name, title, phase: 'starting', error: '',
       resource: '', label: '', url: '', downloaded: 0, total: 0,
-      abortController,
+      abortController: new AbortController(),
       _attempting: false,
-      _resolve: (ok) => {
-        for (const w of waiters) {
-          try { w(ok); } catch (_) {}
-        }
-        waiters.length = 0;
-      },
-      _addWaiter: (fn) => { waiters.push(fn); },
+      _resolve: settle,
     };
     broadcastSetup();
 
@@ -347,7 +356,6 @@ function ensureRuntimeWithUi(name, title) {
       setupUiState._attempting = true;
       setupUiState.phase = 'starting';
       setupUiState.error = '';
-      // Fresh abort controller per attempt so a prior cancel does not poison retry.
       setupUiState.abortController = new AbortController();
       broadcastSetup();
       try {
@@ -378,14 +386,16 @@ function ensureRuntimeWithUi(name, title) {
         setupUiState.error = (err && err.message) || String(err);
         setupUiState._attempting = false;
         broadcastSetup();
+        // Keep promise pending so retry can still resolve it; inflight stays until
+        // success, cancel, or window close.
       }
     };
     setupUiState.attempt();
-  }).finally(() => {
-    setupInflight.delete(name);
+  })().catch((err) => {
+    debugLog('ensureRuntimeWithUi failed: ' + ((err && err.message) || err));
+    settle(false);
   });
 
-  setupInflight.set(name, promise);
   return promise;
 }
 
@@ -601,38 +611,27 @@ function updateMini(evt) {
 // ---- Python bridge ----
 
 function buildEnv() {
+  const userRt = getRuntimeRoot();
+  // Prefer shims + managed runtimes. Do not put system Python/Node first —
+  // packaged builds must use the locked runtime versions.
   const candidates = [
     path.join(pyRoot, 'tmp', 'node-shims'),
     path.join(pyRoot, 'runtime', 'node'),
+    path.join(pyRoot, 'runtime', 'python'),
+    userRt && path.join(userRt, 'node'),
+    userRt && path.join(userRt, 'python'),
     path.join(pyRoot, 'tools', 'node'),
     path.join(pyRoot, 'tools-cache', 'node'),
-  ];
+  ].filter(Boolean);
   const env = { ...process.env, PYTHONUTF8: '1', ZBUILD_DATA_DIR: app.getPath('userData') };
   const extraPaths = candidates.filter(c => fs.existsSync(c));
 
-  // Dynamically collect common Python, Git, SVN, Node, and Windows system paths
   const localAppData = process.env.LOCALAPPDATA;
-  const userProfile = process.env.USERPROFILE;
   const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
   const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
   const systemRoot = process.env.SystemRoot || 'C:\\Windows';
 
-  const searchBases = [localAppData, userProfile, programFiles, programFilesX86].filter(Boolean);
-  const detectedSystemPaths = [];
-
-  // Python directories
-  for (const base of searchBases) {
-    const pyBase = path.join(base, 'Programs', 'Python');
-    if (fs.existsSync(pyBase)) {
-      try {
-        for (const entry of fs.readdirSync(pyBase, { withFileTypes: true })) {
-          if (entry.isDirectory()) detectedSystemPaths.push(path.join(pyBase, entry.name));
-        }
-      } catch (_) {}
-    }
-  }
-
-  // Git, SVN, Node, Windows static candidates
+  // Git / SVN / Windows only (not system Python or Node).
   const staticAdditions = [
     path.join(programFiles, 'Git', 'cmd'),
     path.join(programFiles, 'Git', 'bin'),
@@ -647,14 +646,11 @@ function buildEnv() {
     path.join(programFilesX86, 'SlikSvn', 'bin'),
     path.join(programFilesX86, 'TortoiseSVN', 'bin'),
     'D:\\application\\SlikSvn\\bin',
-    path.join(programFiles, 'nodejs'),
-    'D:\\application\\nodejs',
-    'D:\\application\\python',
     systemRoot,
     path.join(systemRoot, 'System32'),
   ].filter(Boolean);
 
-  const systemPaths = [...detectedSystemPaths, ...staticAdditions].filter(
+  const systemPaths = staticAdditions.filter(
     p => fs.existsSync(p) && !((env.PATH || '').toLowerCase().includes(p.toLowerCase()))
   );
 
@@ -664,11 +660,6 @@ function buildEnv() {
   }
   const parts = (env.NODE_OPTIONS || '').split(/\s+/).filter(p => p && p !== '--openssl-legacy-provider');
   if (parts.length) env.NODE_OPTIONS = parts.join(' '); else delete env.NODE_OPTIONS;
-  // Tell Python subprocesses where the Electron resources dir is so bundled.py
-  // can find runtime/python, runtime/node etc. in the packaged app.
-  if (process.resourcesPath) env.ZBUILD_RESOURCES_DIR = process.resourcesPath;
-  // Per-user runtime root (where runtime-setup installs). Only set in the
-  // packaged app; in dev the repo runtime/ wins via bundled.py's APP_DIR/runtime.
   if (app.isPackaged) env.ZBUILD_RUNTIME_ROOT = getRuntimeRoot();
   return env;
 }
@@ -827,13 +818,15 @@ function nodeDetectTools(configTools) {
   const tools = { git: '', bash: '', svn: '', node: '', npm: '' };
   const configured = configTools || {};
 
-  const findExecutable = (name, cfg, candidates) => {
+  const findExecutable = (name, cfg, candidates, options = {}) => {
+    const allowPathLookup = options.allowPathLookup !== false;
     if (cfg && typeof cfg === 'string' && cfg.trim() && fs.existsSync(cfg.trim())) return cfg.trim();
     for (const c of candidates) {
       if (c && fs.existsSync(c)) return c;
     }
+    // Node/npm must not fall through to `where` (system Node can be 18/20/22).
+    if (!allowPathLookup) return '';
     try {
-      const { spawnSync } = require('child_process');
       const res = spawnSync('where', [name], { windowsHide: true });
       if (res.status === 0 && res.stdout) {
         const firstLine = res.stdout.toString().split(/\r?\n/)[0].trim();
@@ -880,21 +873,21 @@ function nodeDetectTools(configTools) {
     'D:\\TortoiseSVN\\bin\\svn.exe',
   ]);
 
+  // Node/npm: only managed runtimes (override / dev / per-user). No system Node
+  // and no legacy resources/runtime — those bypass the locked Node 14 pin.
+  const managedNode = findNode(rootDir);
   tools.node = findExecutable('node', configured.node, [
-    process.resourcesPath && path.join(process.resourcesPath, 'runtime', 'node', 'node.exe'),
-    path.join(programFiles, 'nodejs', 'node.exe'),
-    path.join(programFilesX86, 'nodejs', 'node.exe'),
-    localAppData && path.join(localAppData, 'Programs', 'nodejs', 'node.exe'),
-    'D:\\application\\nodejs\\node.exe',
-  ]);
-
+    managedNode,
+    path.join(rootDir, 'runtime', 'node', 'node.exe'),
+    path.join(getRuntimeRoot(), 'node', 'node.exe'),
+  ], { allowPathLookup: false });
+  const nodeDir = tools.node ? path.dirname(tools.node) : '';
   tools.npm = findExecutable('npm', configured.npm, [
-    process.resourcesPath && path.join(process.resourcesPath, 'runtime', 'node', 'npm.cmd'),
-    path.join(programFiles, 'nodejs', 'npm.cmd'),
-    path.join(programFilesX86, 'nodejs', 'npm.cmd'),
-    localAppData && path.join(localAppData, 'Programs', 'nodejs', 'npm.cmd'),
-    'D:\\application\\nodejs\\npm.cmd',
-  ]);
+    nodeDir && path.join(nodeDir, 'npm.cmd'),
+    nodeDir && path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(rootDir, 'runtime', 'node', 'npm.cmd'),
+    path.join(getRuntimeRoot(), 'node', 'npm.cmd'),
+  ], { allowPathLookup: false });
 
   const resultTools = {};
   for (const [k, v] of Object.entries(tools)) {

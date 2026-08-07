@@ -135,9 +135,7 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
-
+      # npm run dist already runs `npm run build` then electron-builder
       - name: Build Electron app
         run: npm run dist -- --publish never
 
@@ -222,9 +220,7 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
-
+      # npm run dist already runs `npm run build` then electron-builder
       - name: Build Electron app
         run: npm run dist -- --publish never
 

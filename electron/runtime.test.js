@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('path');
 const { resolvePython, findPython, findNode, buildCandidates, isUsableRuntime } = require('./runtime');
 
 function makeEnv(overrides) {
@@ -11,8 +12,11 @@ function makeEnv(overrides) {
 }
 
 function pathJoin(...parts) {
-  const path = require('path');
   return path.join(...parts);
+}
+
+function healthy() {
+  return { ok: true, version: '3.11.9' };
 }
 
 test('buildCandidates order: override, dev repo, user root (no legacy resources)', () => {
@@ -44,6 +48,7 @@ test('dev repository runtime wins over the user root', () => {
   const result = resolvePython('C:/app', {
     env: makeEnv(),
     existsSync: (p) => p === devPy,
+    validateOverrideExecutable: healthy,
   });
   assert.deepEqual(result, { exe: devPy, args: [] });
 });
@@ -66,7 +71,24 @@ test('unhealthy override is skipped in favor of user runtime', () => {
     env: makeEnv(),
     readFileSync: () => JSON.stringify({ overridePython: overridePy }),
     existsSync: (p) => p === overridePy || p === userPy,
-    validateOverrideExecutable: () => ({ ok: false, error: 'bad deps' }),
+    validateOverrideExecutable: (kind, p) => (
+      p === overridePy ? { ok: false, error: 'bad deps' } : { ok: true, version: '3.11.9' }
+    ),
+  });
+  assert.deepEqual(result, { exe: userPy, args: [] });
+});
+
+test('unhealthy dev runtime is skipped in favor of user runtime', () => {
+  const devPy = pathJoin('C:/app', 'runtime', 'python', 'python.exe');
+  const userPy = 'C:\\Users\\test\\AppData\\Local\\zbuild\\runtime\\python\\python.exe';
+  const result = resolvePython('C:/app', {
+    env: makeEnv(),
+    existsSync: (p) => p === devPy || p === userPy,
+    validateOverrideExecutable: (kind, p) => (
+      path.normalize(String(p)) === path.normalize(devPy)
+        ? { ok: false, error: 'incomplete dev' }
+        : healthy()
+    ),
   });
   assert.deepEqual(result, { exe: userPy, args: [] });
 });
@@ -95,14 +117,31 @@ test('system Python is not used as an automatic fallback', () => {
   assert.equal(result, null);
 });
 
-test('isUsableRuntime prefers override / dev exe without requiring marker', () => {
+test('isUsableRuntime accepts healthy dev exe', () => {
   const devPy = pathJoin('C:/app', 'runtime', 'python', 'python.exe');
   assert.equal(
     isUsableRuntime('C:/app', 'python', {
       env: makeEnv(),
       existsSync: (p) => p === devPy,
+      deps: {
+        validateOverrideExecutable: () => ({ ok: true, version: '3.11.9' }),
+      },
     }),
     true,
+  );
+});
+
+test('isUsableRuntime rejects incomplete dev runtime that fails health', () => {
+  const devPy = pathJoin('C:/app', 'runtime', 'python', 'python.exe');
+  assert.equal(
+    isUsableRuntime('C:/app', 'python', {
+      env: makeEnv(),
+      existsSync: (p) => p === devPy,
+      deps: {
+        validateOverrideExecutable: () => ({ ok: false, error: 'missing openpyxl' }),
+      },
+    }),
+    false,
   );
 });
 

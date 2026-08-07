@@ -53,15 +53,18 @@ function findExe(root, kind, deps) {
   const existsSync = (deps && deps.existsSync) || fs.existsSync;
   const env = (deps && deps.env) || process.env;
   const readFileSync = (deps && deps.readFileSync) || fs.readFileSync;
-  const checkOverride = (deps && deps.validateOverrideExecutable) || validateOverrideExecutable;
+  const checkHealth = (deps && deps.validateOverrideExecutable) || validateOverrideExecutable;
   const override = readOverride(kind, env, readFileSync);
+  const exeName = kind === 'python' ? 'python.exe' : 'node.exe';
+  const devExe = path.join(root, 'runtime', kind, exeName);
+  const expected = EXPECTED[kind] || '';
   const candidates = buildCandidates(root, kind, env, deps);
   return candidates.find((p) => {
     if (!existsSync(p)) return false;
-    // Never spawn with a configured override that fails version/deps checks.
-    if (override && path.normalize(p) === path.normalize(override)) {
-      const r = checkOverride(kind, p, EXPECTED[kind] || '');
-      return !!r.ok;
+    const norm = path.normalize(p);
+    // Override and dev repo trees must pass version/deps health before use.
+    if ((override && norm === path.normalize(override)) || norm === path.normalize(devExe)) {
+      return !!checkHealth(kind, p, expected).ok;
     }
     return true;
   }) || null;
@@ -80,7 +83,7 @@ function findNode(root, deps) {
 /**
  * Whether a named runtime is ready for use without reinstall.
  * - override: version + dependency/health (validateOverrideExecutable)
- * - dev runtime: executable exists under root/runtime/{kind}
+ * - dev runtime: same health/deps check as override (incomplete trees fail)
  * - user runtime: marker + sha256 + health (isRuntimeReady)
  */
 function isUsableRuntime(root, kind, options = {}) {
@@ -92,16 +95,20 @@ function isUsableRuntime(root, kind, options = {}) {
     deps = {},
   } = options;
 
+  const check = deps.validateOverrideExecutable || validateOverrideExecutable;
+  const expected = EXPECTED[kind] || '';
+
   const override = readOverride(kind, env, readFileSync);
   if (override && existsSync(override)) {
-    const check = deps.validateOverrideExecutable || validateOverrideExecutable;
-    const expected = EXPECTED[kind] || '';
     if (check(kind, override, expected).ok) return true;
     // Invalid override does not count as usable (main validateOverride should clear it).
   }
 
   const devExe = path.join(root, 'runtime', kind, kind === 'python' ? 'python.exe' : 'node.exe');
-  if (existsSync(devExe)) return true;
+  if (existsSync(devExe)) {
+    // Dev trees must pass version/deps health — a bare python.exe is not enough.
+    return !!check(kind, devExe, expected).ok;
+  }
 
   if (!manifestPath) return false;
   let resource;

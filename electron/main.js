@@ -25,6 +25,8 @@ const { encryptConfigSecrets, decryptConfigSecrets } = require('./configCrypto')
 // ---- Asar-aware resource resolution ----
 // Prefer a per-user path under the home directory (not a shared world-writable
 // temp folder) to reduce resource-planting races on multi-user machines.
+// Only re-copy scripts/references when app version (or required dirs) change.
+const { ensureExtractedResources } = require('./asar-extract');
 const isAsar = __dirname.endsWith('app.asar') || __dirname.includes('app.asar' + path.sep);
 let rootDir;
 let extractedRoot = null;
@@ -32,29 +34,18 @@ let extractedRoot = null;
 if (isAsar) {
   extractedRoot = path.join(os.homedir(), '.zbuild', 'extracted-resources');
   const asarRoot = path.resolve(__dirname, '..');
-
-  function extractDir(dirName) {
-    const src = path.join(asarRoot, dirName);
-    const dst = path.join(extractedRoot, dirName);
-    if (!fs.existsSync(dst)) {
-      fs.mkdirSync(dst, { recursive: true, mode: 0o700 });
-    }
-    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-      // Never follow symlinks out of the asar tree
-      if (entry.isSymbolicLink && entry.isSymbolicLink()) continue;
-      const s = path.join(src, entry.name);
-      const d = path.join(dst, entry.name);
-      if (entry.isDirectory()) {
-        extractDir(path.join(dirName, entry.name));
-      } else {
-        // Force overwrite to keep extracted assets in sync
-        try { fs.copyFileSync(s, d); } catch (_) {}
-      }
-    }
+  let appVersion = '0';
+  try {
+    appVersion = String(require(path.join(asarRoot, 'package.json')).version || '0');
+  } catch (_) {
+    try { appVersion = String(require('../package.json').version || '0'); } catch (_) {}
   }
-
-  extractDir('scripts');
-  extractDir('references');
+  ensureExtractedResources({
+    asarRoot,
+    extractedRoot,
+    appVersion,
+    dirs: ['scripts', 'references'],
+  });
 }
 
 rootDir = path.resolve(__dirname, '..');

@@ -1,5 +1,9 @@
 name: CI
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 on:
   push:
     branches: [main, develop]
@@ -11,6 +15,7 @@ jobs:
   test:
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version: [18.x, 20.x]
         python-version: ['3.10', '3.11']
@@ -29,8 +34,28 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Prepare Node 14 runtime
+        shell: pwsh
+        run: |
+          $version = "14.21.3"
+          $target = Join-Path $env:GITHUB_WORKSPACE "runtime\node"
+          $zip = Join-Path $env:RUNNER_TEMP "node-$version.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "node-$version"
+          if (-not (Test-Path (Join-Path $target "node.exe")) -or -not (Test-Path (Join-Path $target "node_modules\npm\bin\npm-cli.js"))) {
+            Invoke-WebRequest -Uri "https://nodejs.org/dist/v$version/node-v$version-win-x64.zip" -OutFile $zip -UseBasicParsing
+            Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zip -DestinationPath $extract -Force
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Copy-Item (Join-Path $extract "node-v$version-win-x64\*") $target -Recurse -Force
+          }
+          & (Join-Path $target "node.exe") --version
+          & (Join-Path $target "node.exe") (Join-Path $target "node_modules\npm\bin\npm-cli.js") --version
+
       - name: Install Node dependencies
         run: npm ci
+
+      - name: Install Python dependencies
+        run: python -m pip install "openpyxl>=3.1,<4" "paramiko>=3.0,<4"
 
       - name: Run TypeScript type check
         run: npm run typecheck
@@ -62,6 +87,27 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Prepare bundled runtime
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools\setup_runtime.ps1
+
+      - name: Prepare Node 14 runtime
+        shell: pwsh
+        run: |
+          $version = "14.21.3"
+          $target = Join-Path $env:GITHUB_WORKSPACE "runtime\node"
+          $zip = Join-Path $env:RUNNER_TEMP "node-$version.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "node-$version"
+          if (-not (Test-Path (Join-Path $target "node.exe")) -or -not (Test-Path (Join-Path $target "node_modules\npm\bin\npm-cli.js"))) {
+            Invoke-WebRequest -Uri "https://nodejs.org/dist/v$version/node-v$version-win-x64.zip" -OutFile $zip -UseBasicParsing
+            Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zip -DestinationPath $extract -Force
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Copy-Item (Join-Path $extract "node-v$version-win-x64\*") $target -Recurse -Force
+          }
+          & (Join-Path $target "node.exe") --version
+          & (Join-Path $target "node.exe") (Join-Path $target "node_modules\npm\bin\npm-cli.js") --version
+
       - name: Install Node dependencies
         run: npm ci
 
@@ -70,8 +116,6 @@ jobs:
 
       - name: Build Electron app
         run: npm run dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -104,6 +148,27 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Prepare bundled runtime
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools\setup_runtime.ps1
+
+      - name: Prepare Node 14 runtime
+        shell: pwsh
+        run: |
+          $version = "14.21.3"
+          $target = Join-Path $env:GITHUB_WORKSPACE "runtime\node"
+          $zip = Join-Path $env:RUNNER_TEMP "node-$version.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "node-$version"
+          if (-not (Test-Path (Join-Path $target "node.exe")) -or -not (Test-Path (Join-Path $target "node_modules\npm\bin\npm-cli.js"))) {
+            Invoke-WebRequest -Uri "https://nodejs.org/dist/v$version/node-v$version-win-x64.zip" -OutFile $zip -UseBasicParsing
+            Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zip -DestinationPath $extract -Force
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Copy-Item (Join-Path $extract "node-v$version-win-x64\*") $target -Recurse -Force
+          }
+          & (Join-Path $target "node.exe") --version
+          & (Join-Path $target "node.exe") (Join-Path $target "node_modules\npm\bin\npm-cli.js") --version
+
       - name: Install Node dependencies
         run: npm ci
 
@@ -116,6 +181,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update GitHub Release notes
+        if: always()
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

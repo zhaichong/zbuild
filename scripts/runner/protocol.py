@@ -11,6 +11,10 @@ import sys
 from typing import Any, Dict, Optional
 
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def read_stdin_json() -> Dict[str, Any]:
     """Read a JSON object from stdin and return it as a dict.
 

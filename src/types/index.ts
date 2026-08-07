@@ -39,6 +39,8 @@ export interface AppConfig {
   localOutputDir: string
   serverUploadPaths: Record<string, string>
   form: FormConfig
+  enableDeskPet?: boolean
+  deskPetAutoHideDelay?: number
 }
 
 export interface ProjectInfo {
@@ -139,6 +141,11 @@ export interface MiniStatus {
   successCount: number
   failureCount: number
   currentProject?: string
+  currentStep?: string
+  stepIndex?: number
+  stepTotal?: number
+  percent?: number
+  latestLog?: string
   message?: string
 }
 

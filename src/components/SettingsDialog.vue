@@ -591,6 +591,30 @@
               </div>
             </div>
           </section>
+
+          <!-- 桌宠与悬浮助手 -->
+          <section>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-1 h-4 rounded-full bg-primary" />
+              <span class="text-sm font-semibold text-text-1">桌宠助手 (悬浮进度)</span>
+            </div>
+            <div class="bg-slate-50/70 border border-border/80 rounded-xl p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs font-semibold text-text-1">启用打包桌宠进度提示</div>
+                  <div class="text-[11px] text-text-3">在点击打包构建时，桌宠将在桌面实时同步展示当前打包阶段与进度气泡</div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input
+                    v-model="deskPetEnabled"
+                    type="checkbox"
+                    class="sr-only peer"
+                  >
+                  <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                </label>
+              </div>
+            </div>
+          </section>
         </div>
 
         <!-- Sticky footer -->
@@ -645,6 +669,17 @@ const globalArtifactPathsInput = computed({
       .split(/[,;\n]+/)
       .map((s) => s.trim())
       .filter(Boolean)
+  },
+})
+
+const deskPetEnabled = computed({
+  get() {
+    return store.config?.enableDeskPet !== false
+  },
+  set(val: boolean) {
+    if (store.config) {
+      store.config.enableDeskPet = val
+    }
   },
 })
 

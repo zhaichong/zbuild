@@ -3,280 +3,403 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
-    <title>执行进度</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;" />
+    <title>打包桌宠助手</title>
     <style>
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
+        user-select: none;
       }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
         background: transparent;
         display: flex;
         justify-content: center;
         align-items: center;
         min-height: 100vh;
         overflow: hidden;
+        -webkit-font-smoothing: antialiased;
       }
-      .container {
-        background: white;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        width: calc(100% - 16px);
-        height: calc(100% - 16px);
+      
+      /* Main Container */
+      .pet-card {
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 18px;
+        padding: 12px 14px;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.9) inset, 0 3px 12px rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        width: 380px;
+        height: 165px;
         position: relative;
         display: flex;
         flex-direction: column;
-        transition: all 0.3s ease;
+        justify-content: space-between;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        -webkit-app-region: drag;
+        cursor: grab;
       }
-      
-      /* Mascot / Robot Styles */
-      .mascot {
+      .pet-card:active {
+        cursor: grabbing;
+      }
+
+      /* Control Buttons */
+      .controls {
         position: absolute;
-        top: 16px;
-        left: 16px;
-        width: 36px;
-        height: 36px;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        z-index: 30;
+        -webkit-app-region: no-drag;
+      }
+      .btn-icon {
+        background: rgba(241, 245, 249, 0.9);
+        color: #64748b;
+        border: 1px solid rgba(226, 232, 240, 0.7);
+        font-size: 13px;
+        cursor: pointer;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.3s ease;
+        transition: all 0.2s;
       }
-      .robot-icon {
-        width: 100%;
-        height: 100%;
+      .btn-icon:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+        transform: scale(1.06);
+      }
+      .btn-close:hover {
+        background: #fee2e2;
+        color: #ef4444;
+        border-color: #fca5a5;
+      }
+
+      /* Header Layout: Mascot + Bubble */
+      .pet-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      /* Pixel Pet Avatar Container */
+      .mascot-box {
+        width: 72px;
+        height: 80px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        position: relative;
+        -webkit-app-region: no-drag;
+        cursor: pointer;
       }
       
-      /* Robot Animations */
-      .antenna-glow {
-        animation: pulse 1.2s infinite alternate;
+      .pixel-pet {
+        width: 72px;
+        height: 80px;
+        image-rendering: pixelated;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: crisp-edges;
+        background-repeat: no-repeat;
+        transition: transform 0.15s ease;
+        flex-shrink: 0;
       }
-      @keyframes pulse {
-        0% { fill: #4f46e5; opacity: 0.6; r: 2px; }
-        100% { fill: #818cf8; opacity: 1; r: 3.5px; }
+      .mascot-box:hover .pixel-pet {
+        transform: translateY(-2px);
       }
-      
-      .robot-eye {
-        animation: blink 4s infinite;
-      }
-      .left-eye {
-        transform-origin: 19px 20px;
-      }
-      .right-eye {
-        transform-origin: 29px 20px;
-      }
-      @keyframes blink {
-        0%, 96%, 100% { transform: scaleY(1); }
-        98% { transform: scaleY(0.1); }
+      .mascot-box:active .pixel-pet {
+        transform: translateY(1px);
       }
 
-      /* Running state float animation */
-      .container.running .robot-icon {
-        animation: float 2s ease-in-out infinite;
+      /* Pixel Pet Animations (72x80 per frame) */
+      /* IDLE: 7 frames -> 504px */
+      .pet-card.idle .pixel-pet,
+      .pixel-pet.state-idle {
+        background-image: url('./pet/anim_idle.png');
+        background-size: 504px 80px;
+        animation: petIdleAnim 1.8s steps(7) infinite;
       }
-      @keyframes float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-2px); }
-      }
-
-      /* Success state styles */
-      .container.complete {
-        border-color: rgba(34, 197, 94, 0.3);
-      }
-      .container.complete .robot-eye {
-        fill: #22c55e;
-        animation: none;
-        transform: scaleY(1);
-      }
-      .container.complete .antenna-glow {
-        fill: #22c55e;
-        animation: none;
-        r: 3px;
-      }
-      .container.complete .robot-head {
-        stroke: #22c55e;
-        fill: url(#paint_success);
+      @keyframes petIdleAnim {
+        0% { background-position: 0 0; }
+        100% { background-position: -504px 0; }
       }
 
-      /* Error state styles */
-      .container.error {
-        border-color: rgba(239, 68, 68, 0.3);
-        animation: shake 0.5s ease-in-out;
+      /* RUNNING / WALK: 8 frames -> 576px */
+      .pet-card.running .pixel-pet,
+      .pixel-pet.state-running {
+        background-image: url('./pet/anim_walk.png');
+        background-size: 576px 80px;
+        animation: petWalkAnim 0.75s steps(8) infinite;
+      }
+      @keyframes petWalkAnim {
+        0% { background-position: 0 0; }
+        100% { background-position: -576px 0; }
+      }
+
+      /* COMPLETE / GESTURES: 7 frames -> 504px */
+      .pet-card.complete .pixel-pet,
+      .pixel-pet.state-complete {
+        background-image: url('./pet/anim_gestures.png');
+        background-size: 504px 80px;
+        animation: petGesturesAnim 1.1s steps(7) infinite;
+      }
+      @keyframes petGesturesAnim {
+        0% { background-position: 0 0; }
+        100% { background-position: -504px 0; }
+      }
+
+      /* WAVE: 4 frames -> 288px */
+      .pixel-pet.state-wave {
+        background-image: url('./pet/anim_wave.png');
+        background-size: 288px 80px;
+        animation: petWaveAnim 0.9s steps(4) infinite !important;
+      }
+      @keyframes petWaveAnim {
+        0% { background-position: 0 0; }
+        100% { background-position: -288px 0; }
+      }
+
+      /* ERROR */
+      .pet-card.error .pixel-pet,
+      .pixel-pet.state-error {
+        background-image: url('./pet/anim_gestures.png');
+        background-size: 504px 80px;
+        background-position: 0 0;
+        animation: petErrorVibrate 0.4s ease-in-out infinite alternate;
+      }
+      @keyframes petErrorVibrate {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(-3px) rotate(1.5deg); }
+      }
+
+      /* Complete state border */
+      .pet-card.complete {
+        border-color: rgba(34, 197, 94, 0.4);
+        box-shadow: 0 16px 40px rgba(34, 197, 94, 0.16), 0 0 0 1px rgba(34, 197, 94, 0.25) inset;
+      }
+
+      /* Error state border */
+      .pet-card.error {
+        border-color: rgba(239, 68, 68, 0.4);
+        box-shadow: 0 16px 40px rgba(239, 68, 68, 0.16), 0 0 0 1px rgba(239, 68, 68, 0.25) inset;
+        animation: shake 0.45s ease-in-out;
       }
       @keyframes shake {
         0%, 100% { transform: translateX(0); }
         20%, 60% { transform: translateX(-4px); }
         40%, 80% { transform: translateX(4px); }
       }
-      .container.error .robot-eye {
-        fill: #ef4444;
-        animation: none;
-        transform: scaleY(1);
+
+      /* Speech Bubble */
+      .bubble-content {
+        flex: 1;
+        min-width: 0;
+        padding-right: 36px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 8px 12px;
+        position: relative;
       }
-      .container.error .antenna-glow {
-        fill: #ef4444;
-        animation: none;
-        r: 3px;
-      }
-      .container.error .robot-head {
-        stroke: #ef4444;
-        fill: url(#paint_error);
+      /* Bubble tail pointer */
+      .bubble-content::before {
+        content: '';
+        position: absolute;
+        top: 26px;
+        left: -5.5px;
+        width: 9px;
+        height: 9px;
+        background: #f8fafc;
+        border-left: 1px solid #e2e8f0;
+        border-bottom: 1px solid #e2e8f0;
+        transform: rotate(45deg);
       }
 
-      /* Rest of layout */
-      .bubble {
-        margin-left: 48px;
-        padding-right: 20px; /* space for close button */
-        margin-bottom: 12px;
+      .bubble-top {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 3px;
       }
-      .title {
-        font-size: 14px;
+      .project-badge {
+        font-size: 11px;
+        font-weight: 700;
+        background: #ede9fe;
+        color: #6366f1;
+        padding: 1px 7px;
+        border-radius: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 130px;
+      }
+      .status-pill {
+        font-size: 11px;
+        font-weight: 500;
+        color: #475569;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #6366f1;
+        animation: pulseDot 1.2s infinite alternate;
+      }
+      @keyframes pulseDot {
+        0% { transform: scale(0.8); opacity: 0.6; }
+        100% { transform: scale(1.3); opacity: 1; }
+      }
+      .pet-card.complete .status-dot { background: #22c55e; animation: none; }
+      .pet-card.error .status-dot { background: #ef4444; animation: none; }
+
+      .step-title {
+        font-size: 12.5px;
         font-weight: 600;
         color: #1e293b;
-        margin-bottom: 2px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        line-height: 1.3;
       }
-      .message {
-        font-size: 12px;
+      .log-preview {
+        font-size: 10.5px;
         color: #64748b;
-        line-height: 1.4;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        margin-top: 2px;
       }
-      .progress-bar {
+
+      /* Progress Section */
+      .progress-section {
+        margin-top: 6px;
+      }
+      .progress-track {
         width: 100%;
         height: 6px;
         background: #e2e8f0;
-        border-radius: 3px;
+        border-radius: 999px;
         overflow: hidden;
-        margin-bottom: 6px;
-        margin-top: auto;
+        position: relative;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05) inset;
       }
       .progress-fill {
         height: 100%;
-        background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
-        transition: width 0.3s ease;
+        width: 0%;
+        background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%);
+        border-radius: 999px;
+        transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 0 8px rgba(79, 70, 229, 0.5);
       }
-      .progress-row {
+      .pet-card.complete .progress-fill {
+        background: linear-gradient(90deg, #10b981 0%, #22c55e 100%);
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+      }
+      .pet-card.error .progress-fill {
+        background: linear-gradient(90deg, #f87171 0%, #ef4444 100%);
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+      }
+
+      /* Footer row */
+      .footer-row {
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-size: 11px;
-        color: #94a3b8;
+        color: #64748b;
+        margin-top: 5px;
       }
-      .progress-text {
-        font-weight: 500;
-      }
-      .count {
-        font-weight: 500;
-      }
-      .result {
-        margin-top: 10px;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        text-align: center;
-        font-weight: 500;
-      }
-      .result.success {
-        background: #dcfce7;
-        color: #15803d;
-      }
-      .result.error {
-        background: #fee2e2;
-        color: #b91c1c;
-      }
-      .dismiss-btn {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        background: transparent;
-        color: #94a3b8;
-        border: none;
-        font-size: 20px;
-        font-weight: 300;
-        cursor: pointer;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
+      .stats-badge-group {
         display: flex;
         align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-        z-index: 10;
+        gap: 6px;
       }
-      .dismiss-btn:hover {
-        background: #f1f5f9;
-        color: #475569;
+      .pill-stat {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 10.5px;
+      }
+      .pill-stat.success { background: #dcfce7; color: #15803d; }
+      .pill-stat.fail { background: #fee2e2; color: #b91c1c; }
+      .pill-stat.count { background: #f1f5f9; color: #475569; }
+
+      .action-link {
+        font-size: 11px;
+        color: #4f46e5;
+        font-weight: 600;
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+        padding: 2px 5px;
+        border-radius: 4px;
+        transition: all 0.15s;
+      }
+      .action-link:hover {
+        background: #ede9fe;
+        text-decoration: underline;
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <button class="dismiss-btn" id="dismissBtn" title="关闭">×</button>
-      
-      <!-- Robot Mascot SVG -->
-      <div class="mascot">
-        <svg class="robot-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- Antenna -->
-          <rect x="23" y="4" width="2" height="6" fill="#818cf8" rx="1" />
-          <circle class="antenna-glow" cx="24" cy="4" r="3" fill="#4f46e5" />
-          
-          <!-- Ears -->
-          <rect x="6" y="18" width="3" height="8" rx="1.5" fill="#94a3b8" />
-          <rect x="39" y="18" width="3" height="8" rx="1.5" fill="#94a3b8" />
-
-          <!-- Head/Face -->
-          <rect class="robot-head" x="9" y="10" width="30" height="24" rx="6" fill="url(#paint_normal)" stroke="#4f46e5" stroke-width="1.5" />
-          
-          <!-- Screen -->
-          <rect x="13" y="14" width="22" height="15" rx="3" fill="#0f172a" />
-          
-          <!-- Eyes -->
-          <ellipse class="robot-eye left-eye" cx="19" cy="21" rx="2" ry="2.5" fill="#38bdf8" />
-          <ellipse class="robot-eye right-eye" cx="29" cy="21" rx="2" ry="2.5" fill="#38bdf8" />
-          
-          <!-- Mouth -->
-          <path d="M21 26 C 21 26, 24 28, 27 26" stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round" fill="none" />
-          
-          <!-- Gradients -->
-          <defs>
-            <linearGradient id="paint_normal" x1="9" y1="10" x2="39" y2="34" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#f8fafc" />
-              <stop offset="1" stop-color="#e2e8f0" />
-            </linearGradient>
-            <linearGradient id="paint_success" x1="9" y1="10" x2="39" y2="34" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#f0fdf4" />
-              <stop offset="1" stop-color="#bbf7d0" />
-            </linearGradient>
-            <linearGradient id="paint_error" x1="9" y1="10" x2="39" y2="34" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#fef2f2" />
-              <stop offset="1" stop-color="#fecaca" />
-            </linearGradient>
-          </defs>
-        </svg>
+    <div class="pet-card idle" id="petCard">
+      <!-- Top Control Buttons -->
+      <div class="controls">
+        <button class="btn-icon" id="openMainBtn" title="打开主控制台">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+        </button>
+        <button class="btn-icon btn-close" id="dismissBtn" title="隐藏桌宠">×</button>
       </div>
 
-      <div class="bubble">
-        <div class="title" id="title">准备执行...</div>
-        <div class="message" id="message">正在等待任务开始</div>
+      <!-- Mascot + Speech Bubble -->
+      <div class="pet-header">
+        <!-- Pixel Mascot Avatar (from user image) -->
+        <div class="mascot-box" id="mascotBox" title="点击打招呼">
+          <div class="pixel-pet state-idle" id="pixelPet"></div>
+        </div>
+
+        <!-- Speech Bubble Info -->
+        <div class="bubble-content">
+          <div class="bubble-top">
+            <span class="project-badge" id="projectBadge">待命中</span>
+            <div class="status-pill">
+              <div class="status-dot" id="statusDot"></div>
+              <span id="statusLabel">桌宠待命</span>
+            </div>
+          </div>
+          <div class="step-title" id="stepTitle">等待开始打包任务...</div>
+          <div class="log-preview" id="logPreview">双击可快速呼出主控制台</div>
+        </div>
       </div>
-      
-      <div class="progress-bar">
-        <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+
+      <!-- Progress Bar & Footer -->
+      <div class="progress-section">
+        <div class="progress-track">
+          <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+        </div>
+        <div class="footer-row">
+          <div class="stats-badge-group">
+            <span class="pill-stat count" id="progressText">0 / 0</span>
+            <span class="pill-stat success" id="successPill" style="display:none;">✓ 0</span>
+            <span class="pill-stat fail" id="failPill" style="display:none;">✗ 0</span>
+          </div>
+          <span class="action-link" id="openMainLink">打开主面板 ➔</span>
+        </div>
       </div>
-      <div class="progress-row">
-        <div class="progress-text" id="progressText">0 / 0</div>
-        <div class="count" id="countText"></div>
-      </div>
-      <div class="result" id="resultText" style="display: none;"></div>
     </div>
     <script type="module" src="/src/mini.ts"></script>
   </body>

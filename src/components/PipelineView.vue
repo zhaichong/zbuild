@@ -48,6 +48,18 @@
       />
     </div>
 
+    <!-- Companion Status Banner -->
+    <div class="px-3 py-2 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border-b border-slate-100 flex items-center gap-3 flex-shrink-0">
+      <PixelPet :state="petState" size="mini" tooltip="点击与桌宠互动" />
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px] font-bold text-slate-800">{{ petBannerTitle }}</span>
+          <span class="text-[10px] text-slate-400">({{ overallProgressPercent }}%)</span>
+        </div>
+        <p class="text-[10.5px] text-slate-500 truncate">{{ petBannerMessage }}</p>
+      </div>
+    </div>
+
     <!-- Projects List -->
     <div class="p-3 space-y-2.5 overflow-y-auto flex-1 min-h-0">
       <div
@@ -171,38 +183,34 @@
     </div>
   </div>
 
-  <!-- Empty state when idle -->
+  <!-- Empty state when idle with Desktop Pet Mascot -->
   <div
     v-else
-    class="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-slate-50/40 select-none"
+    class="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-slate-50/40 select-none relative"
   >
-    <div class="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100/80 text-blue-500 flex items-center justify-center mb-3 shadow-xs">
-      <svg
-        class="w-6 h-6"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.75"
-          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-        />
-      </svg>
+    <!-- Pixel Mascot Character -->
+    <div class="mb-3 relative group">
+      <div class="w-20 h-24 flex items-end justify-center">
+        <PixelPet state="idle" size="md" tooltip="点击与桌宠打招呼！" />
+      </div>
+      <!-- Soft Shadow Base -->
+      <div class="w-16 h-2 bg-slate-300/50 rounded-full mx-auto -mt-1 blur-[1px]"></div>
     </div>
-    <h4 class="text-xs font-bold text-slate-700 mb-1">
-      等待流水线任务
+
+    <h4 class="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5 justify-center">
+      <span>等待流水线任务</span>
+      <span class="text-blue-500">✨</span>
     </h4>
-    <p class="text-[11px] text-slate-400 max-w-[220px] leading-relaxed mb-4">
-      在左侧配置好参数并勾选项目，点击「开始执行」查看实时打包进度
+    <p class="text-[11px] text-slate-400 max-w-[230px] leading-relaxed mb-4">
+      在左侧配置好参数并勾选项目，点击「开始执行」即可全自动构建与打包
     </p>
-    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200/80 text-[11px] font-medium text-slate-500 shadow-xs">
+
+    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200/80 text-[11px] font-medium text-slate-600 shadow-xs">
       <span
-        class="w-1.5 h-1.5 rounded-full"
-        :class="store.selectedCount > 0 ? 'bg-emerald-500' : 'bg-slate-300'"
+        class="w-1.5 h-1.5 rounded-full transition-colors"
+        :class="store.selectedCount > 0 ? 'bg-emerald-500 ring-2 ring-emerald-100' : 'bg-slate-300'"
       />
-      <span>已勾选 {{ store.selectedCount }} 个项目</span>
+      <span>已勾选 <strong class="text-slate-800 font-bold">{{ store.selectedCount }}</strong> 个项目</span>
     </div>
   </div>
 </template>
@@ -211,12 +219,47 @@
 import { computed } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import StageNode from '@/components/StageNode.vue'
+import PixelPet from '@/components/PixelPet.vue'
 import type { StepStatusType, StepState } from '@/types'
 
 const store = useAppStore()
 
 const hasProgress = computed(() => {
   return store.running || Object.keys(store.projectStates).length > 0
+})
+
+const petState = computed<'idle' | 'running' | 'complete' | 'error'>(() => {
+  if (store.running) return 'running'
+  const total = Object.keys(store.projectStates).length
+  if (total > 0) {
+    if (store.failureCount > 0) return 'error'
+    if (store.successCount > 0) return 'complete'
+  }
+  return 'idle'
+})
+
+const petBannerTitle = computed(() => {
+  if (store.running) return '桌宠正在监工打包中...'
+  if (store.failureCount > 0) return '构建遇到异常'
+  if (store.successCount > 0) return '所有项目打包完成！'
+  return '桌宠待命中'
+})
+
+const petBannerMessage = computed(() => {
+  if (store.running) {
+    const activeProject = Object.values(store.projectStates).find((p) => p.status === 'running')
+    if (activeProject) {
+      return `当前项目: ${activeProject.projectName} (${activeProject.currentStep || '执行中...'})`
+    }
+    return '正在按流水线规则依次构建各项目...'
+  }
+  if (store.failureCount > 0) {
+    return `有 ${store.failureCount} 个项目失败，可展开查看详细日志`
+  }
+  if (store.successCount > 0) {
+    return '太棒了！所有勾选的模块均已成功生成'
+  }
+  return '配置项目后点击「开始执行」即可开工'
 })
 
 function getProjectBranch(projectName: string): string {
@@ -311,3 +354,46 @@ const overallProgressBarClass = computed(() => {
   return 'bg-emerald-500'
 })
 </script>
+
+<style scoped>
+.status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 9999px;
+}
+.status-badge.pending {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.status-badge.running {
+  background: #dbeafe;
+  color: #2563eb;
+}
+.status-badge.done {
+  background: #dcfce7;
+  color: #16a34a;
+}
+.status-badge.failed {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.status-badge.skipped {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+.status-badge.retrying {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.progress-shimmer {
+  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 50%, #60a5fa 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+</style>

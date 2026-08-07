@@ -205,15 +205,22 @@ function createWindow() {
   });
 }
 
+let savedMiniBounds = null;
+
 function createMiniWindow() {
   if (miniWindow && !miniWindow.isDestroyed()) return miniWindow;
   const { workArea } = screen.getPrimaryDisplay();
-  const w = 380, h = 200;
+  const w = 390, h = 180;
+  const defaultX = workArea.x + workArea.width - w - 24;
+  const defaultY = workArea.y + workArea.height - h - 36;
+
   miniWindow = new BrowserWindow({
     width: w, height: h,
-    x: workArea.x + workArea.width - w - 18, y: workArea.y + workArea.height - h - 18,
+    x: savedMiniBounds ? savedMiniBounds.x : defaultX,
+    y: savedMiniBounds ? savedMiniBounds.y : defaultY,
     frame: false, resizable: false, transparent: true,
     alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000',
+    hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -221,6 +228,13 @@ function createMiniWindow() {
       sandbox: true,
     }
   });
+
+  miniWindow.on('moved', () => {
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      savedMiniBounds = miniWindow.getBounds();
+    }
+  });
+
   if (isDev) miniWindow.loadURL(devServerUrl + '/mini.html');
   else miniWindow.loadFile(path.join(rootDir, 'dist', 'mini.html'));
   miniWindow.webContents.on('did-finish-load', () => sendMiniStatus());
@@ -229,8 +243,22 @@ function createMiniWindow() {
 }
 
 function showMiniStatus(status) {
-  // Mini window feature disabled as requested by user
-  return;
+  if (status) {
+    miniStatus = { ...miniStatus, ...status };
+  }
+  if (miniDismissed) return;
+
+  const win = createMiniWindow();
+  if (win && !win.isDestroyed()) {
+    if (miniCloseTimer) {
+      clearTimeout(miniCloseTimer);
+      miniCloseTimer = null;
+    }
+    if (!win.isVisible()) {
+      win.showInactive();
+    }
+    sendMiniStatus();
+  }
 }
 
 function closeMiniWindow(delay) {
@@ -248,10 +276,7 @@ function sendMiniStatus() {
 }
 
 function notifyDone(title, body) {
-  if (miniCompletionNotified) return;
-  miniCompletionNotified = true;
-  try { if (Notification.isSupported()) new Notification({ title, body, silent: false }).show(); }
-  catch (e) { debugLog('notify fail: ' + e.message); }
+  // OS system notification popup disabled as requested (desktop pet visual status is used instead)
 }
 
 function sendRunEvent(evt) {
@@ -265,19 +290,79 @@ function sendRunEvent(evt) {
 }
 
 function updateMini(evt) {
-  if (!miniWindow || miniWindow.isDestroyed() || !evt || !evt.type) return;
+  if (!evt || !evt.type) return;
   if (evt.type === 'projectStart') {
-    miniStatus = { ...miniStatus, state: 'running', currentProject: evt.project || '', message: evt.project ? `\u6b63\u5728\u6267\u884c\uff1a${evt.project}` : '\u6b63\u5728\u6267\u884c\u4efb\u52a1' };
+    miniStatus = {
+      ...miniStatus,
+      state: 'running',
+      currentProject: evt.project || '',
+      currentStep: '准备开始构建...',
+      message: evt.project ? `正在构建：${evt.project}` : '正在执行任务'
+    };
+    showMiniStatus();
+  } else if (evt.type === 'step-start' || evt.type === 'step_start') {
+    const stepName = evt.step || evt.name || '';
+    miniStatus = {
+      ...miniStatus,
+      state: 'running',
+      currentStep: stepName,
+      message: stepName ? `${miniStatus.currentProject ? miniStatus.currentProject + ' - ' : ''}${stepName}` : miniStatus.message
+    };
+    sendMiniStatus();
+  } else if (evt.type === 'step-end' || evt.type === 'step_end') {
+    const stepName = evt.step || evt.name || '';
+    if (evt.success === false) {
+      miniStatus = {
+        ...miniStatus,
+        currentStep: `${stepName} 遇到问题`
+      };
+    }
+    sendMiniStatus();
   } else if (evt.type === 'projectResult') {
-    miniStatus = { ...miniStatus, state: 'running', completed: miniStatus.completed + 1, successCount: miniStatus.successCount + (evt.success ? 1 : 0), failureCount: miniStatus.failureCount + (evt.success ? 0 : 1) };
+    const newCompleted = miniStatus.completed + 1;
+    const newSuccess = miniStatus.successCount + (evt.success ? 1 : 0);
+    const newFail = miniStatus.failureCount + (evt.success ? 0 : 1);
+    miniStatus = {
+      ...miniStatus,
+      state: 'running',
+      completed: newCompleted,
+      successCount: newSuccess,
+      failureCount: newFail,
+      currentStep: evt.success ? `项目 ${evt.project || ''} 打包成功` : `项目 ${evt.project || ''} 打包失败`
+    };
+    sendMiniStatus();
+  } else if (evt.type === 'log') {
+    const rawMsg = evt.message || '';
+    if (rawMsg && (rawMsg.includes('building') || rawMsg.includes('Building') || rawMsg.includes('npm run') || rawMsg.includes('vite') || rawMsg.includes('webpack') || rawMsg.includes('svn') || rawMsg.includes('Uploading') || evt.level === 'error')) {
+      miniStatus.latestLog = rawMsg.slice(0, 80);
+      sendMiniStatus();
+    }
   } else if (evt.type === 'done') {
-    miniStatus = { ...miniStatus, state: evt.failureCount ? 'error' : 'complete', completed: evt.total || miniStatus.completed, successCount: evt.successCount || 0, failureCount: evt.failureCount || 0, message: evt.failureCount ? '\u4efb\u52a1\u7ed3\u675f\uff0c\u5b58\u5728\u5931\u8d25\u9879\u76ee' : '\u4efb\u52a1\u6267\u884c\u5b8c\u6210' };
-    notifyDone(evt.failureCount ? '\u4efb\u52a1\u7ed3\u675f' : '\u4efb\u52a1\u5b8c\u6210', miniStatus.message);
+    const hasFail = (evt.failureCount || 0) > 0;
+    miniStatus = {
+      ...miniStatus,
+      state: hasFail ? 'error' : 'complete',
+      completed: evt.total || miniStatus.completed,
+      successCount: evt.successCount ?? miniStatus.successCount,
+      failureCount: evt.failureCount ?? miniStatus.failureCount,
+      currentStep: hasFail ? '部分项目打包失败' : '所有项目打包已完成 🎉',
+      message: hasFail ? '任务结束，存在失败项目' : '所有项目打包顺利完成！'
+    };
+    notifyDone(hasFail ? '任务结束' : '打包完成', miniStatus.message);
+    sendMiniStatus();
+    if (!hasFail) {
+      closeMiniWindow(6000);
+    }
   } else if (evt.type === 'error') {
-    miniStatus = { ...miniStatus, state: 'error', message: evt.message || '\u4efb\u52a1\u6267\u884c\u5931\u8d25' };
-    notifyDone('\u4efb\u52a1\u5f02\u5e38', miniStatus.message);
+    miniStatus = {
+      ...miniStatus,
+      state: 'error',
+      currentStep: '发生错误',
+      message: evt.message || '任务执行失败'
+    };
+    notifyDone('任务异常', miniStatus.message);
+    sendMiniStatus();
   }
-  sendMiniStatus();
 }
 
 // ---- Python bridge ----
@@ -952,10 +1037,22 @@ ipcMain.handle('run:start', async (_, payload) => {
     })),
   };
   const py = resolvePython(pyRoot);
-  miniStatus = { state: 'running', total: Array.isArray(runPayload.projects) ? runPayload.projects.length : 0, completed: 0, successCount: 0, failureCount: 0, currentProject: '', message: '\u6b63\u5728\u6267\u884c\u4efb\u52a1' };
+  miniStatus = {
+    state: 'running',
+    total: Array.isArray(runPayload.projects) ? runPayload.projects.length : 0,
+    completed: 0,
+    successCount: 0,
+    failureCount: 0,
+    currentProject: '',
+    currentStep: '正在准备打包环境...',
+    message: '正在准备打包任务'
+  };
+  const isPetEnabled = payload.config ? payload.config.enableDeskPet !== false : true;
   miniCompletionNotified = false;
-  miniDismissed = false;
-  showMiniStatus();
+  miniDismissed = !isPetEnabled;
+  if (isPetEnabled) {
+    showMiniStatus();
+  }
   debugLog('spawning python: ' + py.exe + ' ' + py.args.join(' ') + ' ' + runnerPath);
   currentRun = spawn(py.exe, [...py.args, runnerPath, 'run'], { cwd: pyRoot, windowsHide: true, env: buildEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
   let buffer = '';

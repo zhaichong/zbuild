@@ -14,14 +14,10 @@ const failPillEl = document.getElementById('failPill') as HTMLSpanElement
 const dismissBtn = document.getElementById('dismissBtn') as HTMLButtonElement
 const openMainBtn = document.getElementById('openMainBtn') as HTMLButtonElement
 const openMainLink = document.getElementById('openMainLink') as HTMLSpanElement
-
-let currentPetState: string = 'idle'
 let isWaveInteracting = false
 
 function updateUI(status: MiniStatus) {
   if (!petCardEl) return
-
-  currentPetState = status.state || 'idle'
 
   // Update root state class
   petCardEl.className = `pet-card ${status.state}`

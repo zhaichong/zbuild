@@ -23,29 +23,39 @@ def find_template_file(order_dir_base: Union[str, Optional[Path]] = None) -> Opt
     if bundled_tmpl2.exists():
         return bundled_tmpl2
 
-    # 2. Check in order_dir_base if provided
+    # Check via core.constants if available
+    try:
+        from core.constants import APP_DIR, DATA_DIR
+        for cand in [
+            APP_DIR / "references" / "template_test_order.xlsx",
+            DATA_DIR / "references" / "template_test_order.xlsx",
+            DATA_DIR / "template_test_order.xlsx",
+        ]:
+            if cand.exists():
+                return cand
+    except Exception:
+        pass
+
+    # 2. Check canonical locations in order_dir_base if provided
     if order_dir_base:
         base = Path(order_dir_base)
         if base.exists():
-            ref = base / "2026-1319 -深圳市新华医院" / "2026-1319 -深圳市新华医院医院提测单.xlsx"
-            if ref.exists():
-                return ref
-            # Search for any reference excel ending in 提测单.xlsx
-            matches = list(base.rglob("*提测单.xlsx"))
-            if matches:
-                return matches[0]
+            for cand in [
+                base.parent / "升级说明+提测单" / "template_test_order.xlsx",
+                base.parent / "升级说明+提测单" / "医院提测单.xlsx",
+                base / "升级说明+提测单" / "template_test_order.xlsx",
+                base / "template_test_order.xlsx",
+                base / "2026-1319 -深圳市新华医院" / "2026-1319 -深圳市新华医院医院提测单.xlsx",
+            ]:
+                if cand.exists():
+                    return cand
 
     return None
 
 
 def find_docx_template_file(order_dir_base: Union[str, Optional[Path]] = None) -> Optional[Path]:
     """Find the official 全部升级说明.docx template file."""
-    # 1. Check exact user specified path
-    exact_p = Path(r"D:\yh\特殊订单\升级说明+提测单\全部升级说明.docx")
-    if exact_p.exists():
-        return exact_p
-
-    # 2. Check bundled references inside zbuild
+    # 1. Check bundled references inside zbuild
     pkg_dir = Path(__file__).resolve().parents[2]
     bundled_docx = pkg_dir / "references" / "全部升级说明.docx"
     if bundled_docx.exists():
@@ -56,7 +66,26 @@ def find_docx_template_file(order_dir_base: Union[str, Optional[Path]] = None) -
     if bundled_docx2.exists():
         return bundled_docx2
 
-    # 3. Check in order_dir_base and surrounding paths
+    # Check via core.constants if available
+    try:
+        from core.constants import APP_DIR, DATA_DIR, UPGRADE_DOC_NAME
+        for cand in [
+            APP_DIR / "references" / UPGRADE_DOC_NAME,
+            APP_DIR / UPGRADE_DOC_NAME,
+            DATA_DIR / "references" / UPGRADE_DOC_NAME,
+            DATA_DIR / UPGRADE_DOC_NAME,
+        ]:
+            if cand.exists():
+                return cand
+    except Exception:
+        pass
+
+    # 2. Check exact user specified path
+    exact_p = Path(r"D:\yh\特殊订单\升级说明+提测单\全部升级说明.docx")
+    if exact_p.exists():
+        return exact_p
+
+    # 3. Check in order_dir_base canonical surrounding paths
     if order_dir_base:
         base = Path(order_dir_base)
         for cand in [
@@ -66,9 +95,6 @@ def find_docx_template_file(order_dir_base: Union[str, Optional[Path]] = None) -
         ]:
             if cand.exists():
                 return cand
-        matches = list(base.rglob("*升级说明.docx"))
-        if matches:
-            return matches[0]
 
     return None
 

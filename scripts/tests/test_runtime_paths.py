@@ -16,6 +16,7 @@ class TestRuntimePaths(unittest.TestCase):
             env = os.environ.copy()
             env["ZBUILD_DATA_DIR"] = temp_dir
             code = (
+                f"import sys; sys.path.insert(0, r'{SCRIPTS_DIR}'); "
                 "from core.constants import CONFIG_PATH, HISTORY_DIR, TEMPLATES_DIR; "
                 "print(CONFIG_PATH); print(HISTORY_DIR); print(TEMPLATES_DIR)"
             )
@@ -38,7 +39,7 @@ class TestRuntimePaths(unittest.TestCase):
     def test_development_paths_keep_existing_references_layout(self):
         env = os.environ.copy()
         env.pop("ZBUILD_DATA_DIR", None)
-        code = "from core.constants import CONFIG_PATH; print(CONFIG_PATH)"
+        code = f"import sys; sys.path.insert(0, r'{SCRIPTS_DIR}'); from core.constants import CONFIG_PATH; print(CONFIG_PATH)"
         result = subprocess.run(
             [sys.executable, "-c", code],
             cwd=SCRIPTS_DIR,

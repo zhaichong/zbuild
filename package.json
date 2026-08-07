@@ -60,6 +60,8 @@
       "scripts/**/*",
       "!scripts/tests/**/*",
       "references/project-defaults.json",
+      "references/template_test_order.xlsx",
+      "references/全部升级说明.docx",
       "!**/__pycache__/**",
       "!**/*.pyc"
     ],

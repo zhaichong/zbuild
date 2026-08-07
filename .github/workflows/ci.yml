@@ -269,7 +269,7 @@ jobs:
           fi
           FILES=("${EXE_FILES[@]}" "${BLOCKMAP_FILES[@]}" release/latest.yml "${PY_ZIPS[@]}")
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "v$VER" --notes "$NOTES" --prerelease=false --latest
+            gh release edit "$TAG" --title "v$VER" --notes "$NOTES" --draft=false --prerelease=false --latest
             gh release upload "$TAG" "${FILES[@]}" --clobber
           else
             gh release create "$TAG" "${FILES[@]}" --title "v$VER" --notes "$NOTES" --latest

@@ -140,6 +140,8 @@ jobs:
 
       # npm run dist already runs `npm run build` then electron-builder
       - name: Build Electron app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist -- --publish never
 
       - name: Upload artifacts

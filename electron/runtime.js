@@ -52,8 +52,19 @@ function buildCandidates(root, kind, env, deps) {
 function findExe(root, kind, deps) {
   const existsSync = (deps && deps.existsSync) || fs.existsSync;
   const env = (deps && deps.env) || process.env;
+  const readFileSync = (deps && deps.readFileSync) || fs.readFileSync;
+  const checkOverride = (deps && deps.validateOverrideExecutable) || validateOverrideExecutable;
+  const override = readOverride(kind, env, readFileSync);
   const candidates = buildCandidates(root, kind, env, deps);
-  return candidates.find(existsSync) || null;
+  return candidates.find((p) => {
+    if (!existsSync(p)) return false;
+    // Never spawn with a configured override that fails version/deps checks.
+    if (override && path.normalize(p) === path.normalize(override)) {
+      const r = checkOverride(kind, p, EXPECTED[kind] || '');
+      return !!r.ok;
+    }
+    return true;
+  }) || null;
 }
 
 // Non-throwing lookups used for path resolution (spawn). Prefer ensureRuntimeReady

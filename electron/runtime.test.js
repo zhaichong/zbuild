@@ -48,14 +48,27 @@ test('dev repository runtime wins over the user root', () => {
   assert.deepEqual(result, { exe: devPy, args: [] });
 });
 
-test('override pointer is the highest priority', () => {
+test('override pointer is the highest priority when healthy', () => {
   const overridePy = 'C:\\custom\\python.exe';
   const result = resolvePython('C:/app', {
     env: makeEnv(),
     readFileSync: () => JSON.stringify({ overridePython: overridePy }),
     existsSync: (p) => p === overridePy,
+    validateOverrideExecutable: () => ({ ok: true, version: '3.11.9' }),
   });
   assert.deepEqual(result, { exe: overridePy, args: [] });
+});
+
+test('unhealthy override is skipped in favor of user runtime', () => {
+  const overridePy = 'C:\\custom\\python.exe';
+  const userPy = 'C:\\Users\\test\\AppData\\Local\\zbuild\\runtime\\python\\python.exe';
+  const result = resolvePython('C:/app', {
+    env: makeEnv(),
+    readFileSync: () => JSON.stringify({ overridePython: overridePy }),
+    existsSync: (p) => p === overridePy || p === userPy,
+    validateOverrideExecutable: () => ({ ok: false, error: 'bad deps' }),
+  });
+  assert.deepEqual(result, { exe: userPy, args: [] });
 });
 
 test('findNode looks up the node executable', () => {

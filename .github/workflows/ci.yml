@@ -100,10 +100,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Artifact builds embed a non-empty HTTPS source. Real downloadability
-          # is guaranteed only by the release job (tag push).
-          PRIMARY="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/zbuild-python-3.11.9-win-x64.zip"
-          node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --backup "$PRIMARY" --require-complete
+          # Artifact builds are not user-facing releases. Embed HTTPS primary so
+          # validateResource can pass; download may 404 until a real tag Release exists.
+          # Prefer PYTHON_RUNTIME_PRIMARY_URL when set to a real hosted ZIP.
+          if [ -n "${PYTHON_RUNTIME_PRIMARY_URL:-}" ]; then
+            PRIMARY="$PYTHON_RUNTIME_PRIMARY_URL"
+          else
+            PRIMARY="https://github.com/${GITHUB_REPOSITORY}/releases/download/v0.0.0-artifact/zbuild-python-3.11.9-win-x64.zip"
+          fi
+          BACKUP="${PYTHON_RUNTIME_BACKUP_URL:-}"
+          if [ -n "$BACKUP" ]; then
+            node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --backup "$BACKUP" --require-complete
+          else
+            node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --clear-backup --require-complete
+          fi
 
       - name: Prepare Node 14 runtime
         shell: pwsh
@@ -172,11 +182,23 @@ jobs:
 
       - name: Fill Python download URLs from release tag
         shell: bash
+        env:
+          # Optional second HTTPS host for Python ZIP (not the same GitHub URL).
+          # Set repo secret/variable PYTHON_RUNTIME_BACKUP_URL for real failover.
+          PYTHON_RUNTIME_BACKUP_URL: ${{ vars.PYTHON_RUNTIME_BACKUP_URL || secrets.PYTHON_RUNTIME_BACKUP_URL }}
         run: |
           set -euo pipefail
           TAG="$GITHUB_REF_NAME"
           PRIMARY="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/zbuild-python-3.11.9-win-x64.zip"
-          node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --backup "$PRIMARY" --require-complete
+          BACKUP="${PYTHON_RUNTIME_BACKUP_URL:-}"
+          if [ -n "$BACKUP" ] && [ "$BACKUP" != "$PRIMARY" ]; then
+            node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --backup "$BACKUP" --require-complete
+          else
+            # Single controlled host is OK; download layer de-dupes identical URLs.
+            # Prefer configuring PYTHON_RUNTIME_BACKUP_URL for true failover.
+            node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --clear-backup --require-complete
+            echo "note: no distinct PYTHON_RUNTIME_BACKUP_URL; python has single download source"
+          fi
           echo "Manifest after fill:"
           node -e "const m=require('./electron/runtime-manifest.json'); console.log(JSON.stringify(m.resources.python,null,2))"
 

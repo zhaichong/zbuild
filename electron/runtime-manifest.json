@@ -1,7 +1,7 @@
 {
   "version": 1,
   "platform": "win32-x64",
-  "_comment": "Before npm run dist / release: run tools/setup_runtime.ps1 (fills python.sha256 + size) then tools/fill-runtime-manifest.cjs --primary/--backup --require-complete. CI release job does this automatically and uploads the Python ZIP as a GitHub Release asset. Empty python.sha256/primary will fail validateResource and block install.",
+  "_comment": "Before npm run dist/pack: run tools/setup_runtime.ps1 then fill-runtime-manifest.cjs --primary HTTPS_URL [--backup HTTPS_URL] --require-complete. Local dist/pack scripts gate on --require-complete. CI tag release fills primary from GitHub Release asset URL; set repo var/secret PYTHON_RUNTIME_BACKUP_URL for a distinct failover host. Empty python.sha256/primary fails packaging and install.",
   "resources": {
     "python": {
       "label": "Python 运行环境",

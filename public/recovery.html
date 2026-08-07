@@ -31,40 +31,79 @@
         margin: 6px 0 4px;
         padding: 8px 10px;
       }
+      pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        border-radius: 8px;
+        padding: 12px 14px;
+        font-size: 12px;
+        overflow-x: auto;
+        margin: 8px 0 12px;
+        line-height: 1.5;
+      }
       ol { margin: 6px 0 10px 20px; }
       li { font-size: 13.5px; margin-bottom: 6px; }
       .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px; font-size: 12.5px; margin-top: 8px; }
+      .warn { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 14px; font-size: 12.5px; margin-top: 8px; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <h1>运行环境安装恢复指引</h1>
-      <p>本工具首次使用需要下载 Python 运行环境。如果自动下载一直失败，可以按以下任一种方式手动恢复。</p>
+      <p>本工具首次使用需要下载 Python 运行环境（构建任务还需要 Node 14）。如果自动下载一直失败，可按下列方式恢复。</p>
 
       <h2>方式一：重试</h2>
-      <p>返回工具窗口点击「重试」。工具会自动切换备用下载源。</p>
+      <p>返回工具窗口点击「重试」。工具会按 manifest 中的主源 / 备用源依次尝试。</p>
 
-      <h2>方式二：手动放置运行环境</h2>
-      <p>运行环境会安装到如下目录：</p>
+      <h2>方式二：手动放置运行环境（推荐离线场景）</h2>
+      <p>目标目录：</p>
       <span class="path">%LOCALAPPDATA%\zbuild\runtime\python</span>
       <ol>
-        <li>在其它有网络的电脑上，运行项目提供的 <code>tools\setup_runtime.ps1</code>，或在发版方处获取预制压缩包 <code>zbuild-python-3.11.9-win-x64.zip</code>。</li>
-        <li>将压缩包解压后整体放到上面的 <code>python</code> 目录（目录结构需保留：<code>python\python.exe</code>、<code>python\Lib\site-packages</code> 等）。</li>
-        <li>重新启动本工具。若手动放置成功，工具会直接使用，不再要求下载。</li>
+        <li>在其它有网络的电脑上运行 <code>tools\setup_runtime.ps1</code>，或从发版方获取 <code>zbuild-python-3.11.9-win-x64.zip</code>（须与当前安装包内 manifest 的 SHA256 一致）。</li>
+        <li>将 ZIP 解压到上面的 <code>python</code> 目录，保证存在：
+          <code>python\python.exe</code>、<code>python\Lib\site-packages\openpyxl</code>、<code>python\Lib\site-packages\paramiko</code>。</li>
+        <li><strong>必须写入完成标记</strong> <code>.ready.json</code>（与安装包内 <code>electron/runtime-manifest.json</code> 的 python.version / python.sha256 完全一致），例如：</li>
       </ol>
-      <div class="note">手动放置不会写入完成标记。工具启动时会做健康检查（要求可导入 openpyxl、paramiko）与版本校验（Python 3.11.x），不满足时会重新尝试下载。</div>
+      <pre>{
+  "name": "python",
+  "version": "3.11.9",
+  "sha256": "&lt;与安装包 manifest 中 python.sha256 相同的 64 位十六进制&gt;",
+  "installedAt": "2026-01-01T00:00:00.000Z"
+}</pre>
+      <p>文件路径：</p>
+      <span class="path">%LOCALAPPDATA%\zbuild\runtime\python\.ready.json</span>
+      <div class="note">
+        仅解压、不写 <code>.ready.json</code>，或 version/sha256 与当前安装包不一致时，工具<strong>不会</strong>视为已安装，仍会尝试联网下载。
+        启动时还会做健康检查：Python 3.11.9，且 <code>openpyxl==3.1.5</code>、<code>paramiko==5.0.0</code>。
+      </div>
 
-      <h2>方式三：配置自定义镜像</h2>
-      <p>如果默认下载源在你的网络环境下不可用，可指定国内镜像。编辑如下文件：</p>
+      <h2>方式三：配置下载镜像（仅覆盖前缀）</h2>
+      <p>编辑：</p>
       <span class="path">%LOCALAPPDATA%\zbuild\runtime-config.json</span>
-      <code>{"mirrorBase": "https://registry.npmmirror.com/-/binary/"}</code>
-      <p>镜像地址必须以 <code>https://</code> 开头；<strong>版本、文件名与校验值无法通过配置修改</strong>，仅能覆盖镜像前缀。</p>
+      <pre>{
+  "mirrorBase": "https://your-https-mirror.example.com/zbuild-runtime"
+}</pre>
+      <p>镜像必须以 <code>https://</code> 开头。工具会请求 <code>{mirrorBase}/{manifest.path}</code>：</p>
+      <ul style="margin:6px 0 10px 20px;font-size:13.5px">
+        <li>Python：<code>.../zbuild-python-3.11.9-win-x64.zip</code>（须由你们自己托管该文件）</li>
+        <li>Node：路径形如 <code>node/v14.21.3/node-v14.21.3-win-x64.zip</code>（可用兼容 npmmirror 布局的源）</li>
+      </ul>
+      <div class="warn">不要把 Node 的 npmmirror 前缀直接当作 Python 源：npmmirror 默认没有 zbuild 预制 Python ZIP。</div>
+      <p><strong>版本、文件名与 SHA256 无法通过配置修改</strong>，只能换下载主机前缀。</p>
 
-      <h2>方式四：使用系统已安装的 Python</h2>
-      <p>如果你本机装有 Python 3.11.9（x64），可在如下文件写入其绝对路径，工具将优先使用它：</p>
+      <h2>方式四：系统 Python / Node 紧急覆盖（逃生口）</h2>
+      <p>仅在自动安装与手动放置都不可用时使用。编辑：</p>
       <span class="path">%LOCALAPPDATA%\zbuild\runtime-config.json</span>
-      <code>{"overridePython": "C:\\Python311\\python.exe"}</code>
-      <p>注意：工具会校验该路径的版本号是否为 3.11.9，不匹配时不会采用。</p>
+      <pre>{
+  "overridePython": "C:\\Path\\To\\python.exe",
+  "overrideNode": "C:\\Path\\To\\node.exe"
+}</pre>
+      <p>工具会校验：</p>
+      <ul style="margin:6px 0 10px 20px;font-size:13.5px">
+        <li>Python：版本为 <strong>3.11.9</strong>，且可 <code>import openpyxl, paramiko</code> 且版本分别为 <strong>3.1.5 / 5.0.0</strong></li>
+        <li>Node：版本为 <strong>14.21.3</strong>，且同目录下 npm 可用（Node 14 自带 npm 6.x）</li>
+      </ul>
+      <div class="warn">不满足上述条件时覆盖会被清除，不会静默使用错误运行时。</div>
 
       <p>以上任一种方式完成后，请重新打开工具。</p>
     </div>

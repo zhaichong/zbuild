@@ -17,6 +17,7 @@ const {
   isRuntimeReady,
   atomicInstall,
   isAllowedDownloadUrl,
+  validateOverrideExecutable,
   writeRuntimeConfig,
   loadRuntimeConfig,
   runtimeConfigPath,
@@ -87,6 +88,26 @@ test('resolveDownloadUrls: mirror base first, then primary, then backup', () => 
     'https://p/node.zip',
     'https://b/node.zip',
   ]);
+});
+
+test('resolveDownloadUrls de-dupes identical primary and backup', () => {
+  const urls = resolveDownloadUrls(
+    { path: 'p.zip', primary: 'https://same/x.zip', backup: 'https://same/x.zip' },
+    {},
+  );
+  assert.deepEqual(urls, ['https://same/x.zip']);
+});
+
+test('validateOverrideExecutable rejects missing path', () => {
+  const r = validateOverrideExecutable('python', 'C:\\no\\such\\python.exe', '3.11.9');
+  assert.equal(r.ok, false);
+});
+
+test('validateOverrideExecutable accepts real dev python when present', () => {
+  const py = path.join(__dirname, '..', 'runtime', 'python', 'python.exe');
+  if (!fs.existsSync(py)) return;
+  const r = validateOverrideExecutable('python', py, '3.11.9');
+  assert.equal(r.ok, true, r.error);
 });
 
 test('validateResource rejects a resource without a locked SHA256', () => {

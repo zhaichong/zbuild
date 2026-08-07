@@ -10,6 +10,7 @@ const {
   getRuntimeRoot,
   loadRuntimeConfig,
   writeRuntimeConfig,
+  validateOverrideExecutable,
 } = require('./runtime-setup');
 const {
   MOCK_HTTP_ALLOWED_METHODS,
@@ -271,23 +272,18 @@ async function openRecoveryDoc() {
   }
 }
 
-// Clears a user-configured system-runtime override when it is missing or does
-// not match the locked version, so an invalid override can never silently
-// shadow the installed user runtime.
+// Clears a user-configured system-runtime override when it is missing, wrong
+// version, or fails dependency/health checks — so an invalid override can never
+// silently shadow the installed user runtime.
 function validateOverride(name) {
   const key = name === 'python' ? 'overridePython' : 'overrideNode';
   const expected = name === 'python' ? '3.11.9' : '14.21.3';
   const cfg = loadRuntimeConfig();
   const overridePath = cfg[key];
   if (!overridePath) return;
-  let ok = false;
-  if (fs.existsSync(overridePath)) {
-    const r = spawnSync(overridePath, ['--version'], { windowsHide: true, encoding: 'utf8', timeout: 15000 });
-    const ver = r.status === 0 ? String(r.stdout || '').match(/\d+\.\d+\.\d+/) : null;
-    ok = !!ver && expected.startsWith(ver[0]);
-  }
-  if (!ok) {
-    debugLog(`invalid ${key} override, clearing: ${overridePath}`);
+  const result = validateOverrideExecutable(name, overridePath, expected);
+  if (!result.ok) {
+    debugLog(`invalid ${key} override, clearing: ${overridePath} (${result.error})`);
     writeRuntimeConfig({ [key]: null });
   }
 }

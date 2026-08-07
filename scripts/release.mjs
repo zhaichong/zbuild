@@ -103,6 +103,19 @@ function prechecks() {
     ['Node 主进程测试 (test:node)', () => runNpm(['run', 'test:node'])],
     ['Python 测试 (test:py)', () => runNpm(['run', 'test:py'])],
     ['前端构建 (build)', () => runNpm(['run', 'build'])],
+    // Manifest in git may have empty python.sha256/primary — that is filled by the
+    // tag release CI job before electron-builder. Local `npm run dist` requires
+    // --require-complete (setup_runtime + fill URLs first).
+    ['提醒: 发布包由 CI tag 任务回填 runtime-manifest 并上传 Python ZIP', () => {
+      const m = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'runtime-manifest.json'), 'utf8'))
+      const py = m.resources && m.resources.python
+      if (!py) throw new Error('manifest missing resources.python')
+      if (!py.healthCheck || !py.healthCheck.length) throw new Error('python.healthCheck missing')
+      if (!m.resources.node || !/^[a-f0-9]{64}$/i.test(m.resources.node.sha256 || '')) {
+        throw new Error('node.sha256 missing in manifest')
+      }
+      console.log('(python.sha256 in git may be empty; CI will fill before dist)')
+    }],
   ]
   for (const [name, fn] of steps) {
     process.stdout.write(`[release] 预检: ${name} ... `)
@@ -193,8 +206,11 @@ async function main() {
   runOk('git', ['push', 'origin', `v${target}`])
 
   console.log(`[release] 已推送 ${branch} 与 tag v${target}`)
-  console.log('[release] CI 检测到 tag v' + target + ' 后将自动构建并发布 GitHub Release')
-  console.log('[release] 发布完成')
+  console.log('[release] CI 检测到 tag v' + target + ' 后将自动：')
+  console.log('[release]   1) 运行 setup_runtime.ps1 生成 Python ZIP 并回填 sha256/size')
+  console.log('[release]   2) 写入 primary=GitHub Release 资产 URL（可选 PYTHON_RUNTIME_BACKUP_URL）')
+  console.log('[release]   3) --require-complete 通过后 npm run dist 并上传 exe + python zip')
+  console.log('[release] 发布完成（安装包可用性取决于上述 CI job 成功）')
 }
 
 main().catch((e) => {

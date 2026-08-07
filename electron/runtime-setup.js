@@ -144,7 +144,57 @@ function resolveDownloadUrls(resource, cfg) {
   }
   if (resource.primary) urls.push(resource.primary);
   if (resource.backup) urls.push(resource.backup);
-  return urls;
+  // De-dupe while preserving order (primary==backup should not double-retry).
+  return [...new Set(urls.filter(Boolean))];
+}
+
+/**
+ * Validate a user override executable (system recovery path).
+ * Python: version + openpyxl==3.1.5 + paramiko==5.0.0
+ * Node: version + npm-cli usable from the same install tree
+ */
+function validateOverrideExecutable(kind, exePath, expectedVersion) {
+  if (!exePath || !fs.existsSync(exePath)) {
+    return { ok: false, error: 'override path missing' };
+  }
+  const ver = spawnSync(exePath, ['--version'], {
+    windowsHide: true, encoding: 'utf8', timeout: 15000,
+  });
+  if (ver.status !== 0) return { ok: false, error: 'version command failed' };
+  const match = String(ver.stdout || ver.stderr || '').match(/\d+\.\d+\.\d+/);
+  if (!match) return { ok: false, error: 'cannot parse version' };
+  if (!String(expectedVersion).startsWith(match[0])) {
+    return { ok: false, error: `version mismatch: want ${expectedVersion}, got ${match[0]}` };
+  }
+  if (kind === 'python') {
+    const hc = spawnSync(exePath, [
+      '-c',
+      "import openpyxl, paramiko; assert openpyxl.__version__=='3.1.5', openpyxl.__version__; assert paramiko.__version__=='5.0.0', paramiko.__version__",
+    ], { windowsHide: true, encoding: 'utf8', timeout: HEALTH_TIMEOUT_MS });
+    if (hc.status !== 0) {
+      return {
+        ok: false,
+        error: 'python deps check failed (need openpyxl==3.1.5, paramiko==5.0.0): ' +
+          String(hc.stderr || hc.stdout || '').trim(),
+      };
+    }
+    return { ok: true, version: match[0] };
+  }
+  if (kind === 'node') {
+    const dir = path.dirname(exePath);
+    const npmCli = path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+    if (!fs.existsSync(npmCli)) {
+      return { ok: false, error: 'npm-cli.js missing next to node.exe (need Node 14 layout)' };
+    }
+    const npm = spawnSync(exePath, [npmCli, '--version'], {
+      windowsHide: true, encoding: 'utf8', timeout: HEALTH_TIMEOUT_MS,
+    });
+    if (npm.status !== 0) {
+      return { ok: false, error: 'npm check failed: ' + String(npm.stderr || npm.stdout || '').trim() };
+    }
+    return { ok: true, version: match[0], npm: String(npm.stdout || '').trim() };
+  }
+  return { ok: false, error: 'unknown kind' };
 }
 
 // ---- Download ------------------------------------------------------------
@@ -705,6 +755,7 @@ module.exports = {
   loadRuntimeConfig,
   writeRuntimeConfig,
   isAllowedDownloadUrl,
+  validateOverrideExecutable,
   READY_FILE,
   LOCK_STALE_MS,
 };

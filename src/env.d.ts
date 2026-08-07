@@ -39,6 +39,12 @@ declare global {
       openMain: () => Promise<boolean>
       dismiss: () => Promise<boolean>
     }
+    runtimeSetup: {
+      getState: () => Promise<RuntimeSetupStatus | null>
+      retry: () => Promise<boolean>
+      openRecoveryDoc: () => Promise<boolean>
+      onStatus: (handler: (status: RuntimeSetupStatus) => void) => () => void
+    }
   }
 }
 
@@ -53,4 +59,5 @@ import type {
   ExecutionRecord,
   MiniStatus,
   UpdateStatus,
+  RuntimeSetupStatus,
 } from './types'

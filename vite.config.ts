@@ -15,6 +15,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         mini: resolve(__dirname, 'mini.html'),
+        setup: resolve(__dirname, 'setup.html'),
       },
     },
   },

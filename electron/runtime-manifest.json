@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "platform": "win32-x64",
+  "_comment": "Before npm run dist / release: run tools/setup_runtime.ps1 (fills python.sha256 + size) then tools/fill-runtime-manifest.cjs --primary/--backup --require-complete. CI release job does this automatically and uploads the Python ZIP as a GitHub Release asset. Empty python.sha256/primary will fail validateResource and block install.",
+  "resources": {
+    "python": {
+      "label": "Python 运行环境",
+      "version": "3.11.9",
+      "file": "zbuild-python-3.11.9-win-x64.zip",
+      "size": null,
+      "sha256": "",
+      "path": "zbuild-python-3.11.9-win-x64.zip",
+      "primary": "",
+      "backup": "",
+      "healthCheck": [
+        "python.exe",
+        "-c",
+        "import openpyxl, paramiko; assert openpyxl.__version__=='3.1.5', openpyxl.__version__; assert paramiko.__version__=='5.0.0', paramiko.__version__"
+      ],
+      "healthVersion": [
+        "python.exe",
+        "--version"
+      ]
+    },
+    "node": {
+      "label": "Node.js 构建环境",
+      "version": "14.21.3",
+      "file": "node-v14.21.3-win-x64.zip",
+      "size": 29088388,
+      "sha256": "47cfb919bb86ab681369636a9cb925e2bd61991aad1638b2e38e61ec956796a6",
+      "path": "node/v14.21.3/node-v14.21.3-win-x64.zip",
+      "primary": "https://registry.npmmirror.com/-/binary/node/v14.21.3/node-v14.21.3-win-x64.zip",
+      "backup": "https://nodejs.org/dist/v14.21.3/node-v14.21.3-win-x64.zip",
+      "healthCheck": [
+        "node.exe",
+        "node_modules/npm/bin/npm-cli.js",
+        "--version"
+      ],
+      "healthVersion": [
+        "node.exe",
+        "--version"
+      ]
+    }
+  }
+}

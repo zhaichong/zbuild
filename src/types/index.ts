@@ -167,3 +167,26 @@ export interface UpdateStatus {
   message?: string
 }
 
+export type RuntimeSetupPhase =
+  | 'starting'
+  | 'downloading'
+  | 'retry-source'
+  | 'verifying'
+  | 'extracting'
+  | 'health-check'
+  | 'installing'
+  | 'done'
+  | 'error'
+
+export interface RuntimeSetupStatus {
+  name: 'python' | 'node'
+  title?: string
+  phase: RuntimeSetupPhase
+  label?: string
+  resource?: string
+  url?: string
+  downloaded?: number
+  total?: number
+  error?: string
+}
+

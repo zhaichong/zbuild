@@ -1,10 +1,16 @@
 const { app, BrowserWindow, dialog, ipcMain, screen, Notification, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
-const { resolvePython } = require('./runtime');
+const { resolvePython, isUsableRuntime } = require('./runtime');
+const {
+  ensureRuntime,
+  getRuntimeRoot,
+  loadRuntimeConfig,
+  writeRuntimeConfig,
+} = require('./runtime-setup');
 const {
   MOCK_HTTP_ALLOWED_METHODS,
   DB_ALLOWED_DATABASES,
@@ -58,6 +64,22 @@ const debugLogPath = path.join(pyRoot, 'tmp', 'electron-debug.log');
 
 const isDev = !!process.env.VITE_DEV_SERVER;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173';
+
+// ---- Single instance ----
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  debugLog('another instance already running, quitting');
+  app.quit();
+}
+app.on('second-instance', () => {
+  debugLog('second-instance: focusing existing window');
+  const win = (setupWin && !setupWin.isDestroyed()) ? setupWin : mainWindow;
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  }
+});
 
 let mainWindow = null;
 let miniWindow = null;
@@ -166,6 +188,217 @@ ipcMain.handle('update:install', async () => {
   autoUpdater.quitAndInstall();
   return true;
 });
+
+// ---- Runtime setup window ----
+
+let setupWin = null;
+let setupUiState = null;
+/** @type {Map<string, Promise<boolean>>} single-flight per runtime kind */
+const setupInflight = new Map();
+const MANIFEST_PATH = () => path.join(__dirname, 'runtime-manifest.json');
+
+function createSetupWindow() {
+  if (setupWin && !setupWin.isDestroyed()) return setupWin;
+  setupWin = new BrowserWindow({
+    width: 640, height: 540, minWidth: 560, minHeight: 480,
+    resizable: false, maximizable: false, fullscreenable: false,
+    backgroundColor: '#0f172a', title: '\u8fd0\u884c\u73af\u5883\u51c6\u5907',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-setup.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    }
+  });
+  if (isDev) setupWin.loadURL(devServerUrl + '/setup.html');
+  else setupWin.loadFile(path.join(rootDir, 'dist', 'setup.html'));
+  setupWin.on('close', () => {
+    // Always allow close: abort in-flight install so download/extract does not
+    // keep writing runtime after the UI is gone, and resolve waiters.
+    if (setupUiState) {
+      if (setupUiState.abortController) {
+        try { setupUiState.abortController.abort(); } catch (_) {}
+      }
+      if (typeof setupUiState._resolve === 'function') {
+        setupUiState._resolve(false);
+        delete setupUiState._resolve;
+      }
+    }
+  });
+  setupWin.on('closed', () => {
+    setupWin = null;
+    // Drop UI state after close if install already finished or was cancelled.
+    if (setupUiState && (setupUiState.phase === 'error' || setupUiState.phase === 'done' || !setupUiState._attempting)) {
+      setupUiState = null;
+    }
+  });
+  return setupWin;
+}
+
+function broadcastSetup() {
+  if (!setupUiState) return;
+  if (setupWin && !setupWin.isDestroyed()) {
+    setupWin.webContents.send('runtime-setup:status', getSetupPublicState());
+  }
+}
+
+function getSetupPublicState() {
+  if (!setupUiState) return null;
+  const { name, title, phase, error, resource, label, url, downloaded, total } = setupUiState;
+  return { name, title, phase, error, resource, label, url, downloaded, total };
+}
+
+function ensureRecoveryDoc() {
+  const src = isDev ? path.join(rootDir, 'public', 'recovery.html') : path.join(rootDir, 'dist', 'recovery.html');
+  const dstDir = path.dirname(getRuntimeRoot());
+  const dst = path.join(dstDir, 'recovery.html');
+  try {
+    const content = fs.readFileSync(src, 'utf8');
+    fs.mkdirSync(dstDir, { recursive: true });
+    fs.writeFileSync(dst, content, 'utf8');
+  } catch (_) {}
+  return dst;
+}
+
+async function openRecoveryDoc() {
+  try {
+    const dst = ensureRecoveryDoc();
+    await shell.openPath(dst);
+    return true;
+  } catch (err) {
+    debugLog('openRecoveryDoc failed: ' + (err && err.message));
+    return false;
+  }
+}
+
+// Clears a user-configured system-runtime override when it is missing or does
+// not match the locked version, so an invalid override can never silently
+// shadow the installed user runtime.
+function validateOverride(name) {
+  const key = name === 'python' ? 'overridePython' : 'overrideNode';
+  const expected = name === 'python' ? '3.11.9' : '14.21.3';
+  const cfg = loadRuntimeConfig();
+  const overridePath = cfg[key];
+  if (!overridePath) return;
+  let ok = false;
+  if (fs.existsSync(overridePath)) {
+    const r = spawnSync(overridePath, ['--version'], { windowsHide: true, encoding: 'utf8', timeout: 15000 });
+    const ver = r.status === 0 ? String(r.stdout || '').match(/\d+\.\d+\.\d+/) : null;
+    ok = !!ver && expected.startsWith(ver[0]);
+  }
+  if (!ok) {
+    debugLog(`invalid ${key} override, clearing: ${overridePath}`);
+    writeRuntimeConfig({ [key]: null });
+  }
+}
+
+// Ensures the named runtime is usable, installing it via the setup window when
+// missing. Resolves `true` when the runtime is ready, `false` on failure (the
+// setup window remains open so the user can retry or read the recovery guide).
+// Concurrent callers for the same kind share one single-flight Promise.
+function ensureRuntimeWithUi(name, title) {
+  if (setupInflight.has(name)) {
+    return setupInflight.get(name);
+  }
+
+  const promise = new Promise((resolve) => {
+    // If another kind's setup is showing an error, resolve that promise and
+    // close the window so a fresh one can be created for this request.
+    if (setupUiState && setupUiState.name !== name && typeof setupUiState._resolve === 'function') {
+      if (setupUiState.abortController) {
+        try { setupUiState.abortController.abort(); } catch (_) {}
+      }
+      setupUiState._resolve(false);
+    }
+    if (setupUiState && setupUiState.name !== name) {
+      setupUiState = null;
+      if (setupWin && !setupWin.isDestroyed()) {
+        setupWin.close();
+        setupWin = null;
+      }
+    }
+
+    validateOverride(name);
+    const usable = isUsableRuntime(rootDir, name, {
+      manifestPath: MANIFEST_PATH(),
+    });
+    if (usable) { resolve(true); return; }
+
+    const win = createSetupWindow();
+    const abortController = new AbortController();
+    const waiters = [resolve];
+    setupUiState = {
+      name, title, phase: 'starting', error: '',
+      resource: '', label: '', url: '', downloaded: 0, total: 0,
+      abortController,
+      _attempting: false,
+      _resolve: (ok) => {
+        for (const w of waiters) {
+          try { w(ok); } catch (_) {}
+        }
+        waiters.length = 0;
+      },
+      _addWaiter: (fn) => { waiters.push(fn); },
+    };
+    broadcastSetup();
+
+    setupUiState.attempt = async () => {
+      if (!setupUiState || setupUiState._attempting) return;
+      setupUiState._attempting = true;
+      setupUiState.phase = 'starting';
+      setupUiState.error = '';
+      // Fresh abort controller per attempt so a prior cancel does not poison retry.
+      setupUiState.abortController = new AbortController();
+      broadcastSetup();
+      try {
+        const result = await ensureRuntime(name, {
+          manifestPath: MANIFEST_PATH(),
+          root: getRuntimeRoot(),
+          signal: setupUiState.abortController.signal,
+          onProgress: (s) => {
+            if (!setupUiState || setupUiState.name !== name) return;
+            Object.assign(setupUiState, s);
+            broadcastSetup();
+          },
+        });
+        if (setupUiState && typeof setupUiState._resolve === 'function') {
+          setupUiState._resolve(true);
+        }
+        setupUiState = null;
+        if (win && !win.isDestroyed()) win.close();
+        void result;
+      } catch (err) {
+        if (!setupUiState || setupUiState.name !== name) return;
+        if (err && err.code === 'ABORTED') {
+          if (typeof setupUiState._resolve === 'function') setupUiState._resolve(false);
+          setupUiState = null;
+          return;
+        }
+        setupUiState.phase = 'error';
+        setupUiState.error = (err && err.message) || String(err);
+        setupUiState._attempting = false;
+        broadcastSetup();
+      }
+    };
+    setupUiState.attempt();
+  }).finally(() => {
+    setupInflight.delete(name);
+  });
+
+  setupInflight.set(name, promise);
+  return promise;
+}
+
+ipcMain.handle('runtime-setup:get-state', () => getSetupPublicState());
+ipcMain.handle('runtime-setup:retry', () => {
+  // Only allow retry from the error state — prevents parallel install storms.
+  if (!setupUiState || setupUiState.phase !== 'error') return false;
+  if (typeof setupUiState.attempt !== 'function') return false;
+  if (setupUiState._attempting) return false;
+  setupUiState.attempt();
+  return true;
+});
+ipcMain.handle('runtime-setup:open-recovery', () => openRecoveryDoc());
 
 // ---- Window management ----
 
@@ -434,6 +667,9 @@ function buildEnv() {
   // Tell Python subprocesses where the Electron resources dir is so bundled.py
   // can find runtime/python, runtime/node etc. in the packaged app.
   if (process.resourcesPath) env.ZBUILD_RESOURCES_DIR = process.resourcesPath;
+  // Per-user runtime root (where runtime-setup installs). Only set in the
+  // packaged app; in dev the repo runtime/ wins via bundled.py's APP_DIR/runtime.
+  if (app.isPackaged) env.ZBUILD_RUNTIME_ROOT = getRuntimeRoot();
   return env;
 }
 
@@ -477,12 +713,15 @@ function runPython(cmd, payload, timeoutMs = 60000) {
   });
 }
 
-let runStopping = false;
+let runSeq = 0;
 function stopCurrentRun() {
   if (!currentRun) return;
-  runStopping = true;
-  try { currentRun.kill(); } catch {}
+  const proc = currentRun.proc || currentRun;
+  const seq = currentRun.seq;
+  // Detach before kill so a late 'close' from this process cannot clear a newer run.
   currentRun = null;
+  try { proc.kill(); } catch {}
+  void seq;
   miniDismissed = false;
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('run:exit', { code: 1 });
   showMiniStatus({ state: 'error', message: '\u4efb\u52a1\u5df2\u505c\u6b62', currentProject: '' });
@@ -659,7 +898,7 @@ function nodeDetectTools(configTools) {
 
   const resultTools = {};
   for (const [k, v] of Object.entries(tools)) {
-    resultTools[k] = { path: v, version: null };
+    resultTools[k] = v;
   }
   return resultTools;
 }
@@ -1020,6 +1259,17 @@ ipcMain.handle('tools:launch', async (_, payload) => {
 ipcMain.handle('run:start', async (_, payload) => {
   debugLog('run:start called, projects: ' + (payload.projects || []).map(p => p.name).join(', '));
   if (currentRun) throw new Error('\u5df2\u6709\u4efb\u52a1\u6b63\u5728\u6267\u884c\u3002');
+  // Ensure required runtimes before spawning the pipeline.
+  if (app.isPackaged) {
+    const nodeReady = await ensureRuntimeWithUi('node', '\u6784\u5efa\u4efb\u52a1\u9700\u8981 Node.js 14 \u8fd0\u884c\u73af\u5883');
+    if (!nodeReady) {
+      throw new Error('Node.js \u8fd0\u884c\u73af\u5883\u672a\u5c31\u7eea\uff0c\u8bf7\u91cd\u8bd5\u6216\u67e5\u770b\u6062\u590d\u6307\u5f15\u3002');
+    }
+    validateOverride('python');
+    if (!isUsableRuntime(rootDir, 'python', { manifestPath: MANIFEST_PATH() })) {
+      throw new Error('Python \u8fd0\u884c\u73af\u5883\u672a\u5c31\u7eea\uff0c\u8bf7\u91cd\u542f\u5e94\u7528\u5b8c\u6210\u81ea\u52a8\u5b89\u88c5\u3002');
+    }
+  }
   // Convert frontend camelCase config to Python snake_case for the pipeline
   const pyConfig = payload.config ? frontendConfigToPy(payload.config) : {};
   const runPayload = {
@@ -1054,9 +1304,11 @@ ipcMain.handle('run:start', async (_, payload) => {
     showMiniStatus();
   }
   debugLog('spawning python: ' + py.exe + ' ' + py.args.join(' ') + ' ' + runnerPath);
-  currentRun = spawn(py.exe, [...py.args, runnerPath, 'run'], { cwd: pyRoot, windowsHide: true, env: buildEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+  const seq = ++runSeq;
+  const child = spawn(py.exe, [...py.args, runnerPath, 'run'], { cwd: pyRoot, windowsHide: true, env: buildEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+  currentRun = { proc: child, seq };
   let buffer = '';
-  currentRun.stdout.on('data', chunk => {
+  child.stdout.on('data', chunk => {
     buffer += chunk.toString('utf8');
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || '';
@@ -1065,19 +1317,20 @@ ipcMain.handle('run:start', async (_, payload) => {
       try { sendRunEvent(JSON.parse(line)); } catch { sendRunEvent({ type: 'log', message: line, level: 'normal' }); }
     });
   });
-  currentRun.stderr.on('data', c => {
+  child.stderr.on('data', c => {
     const msg = c.toString('utf8');
     debugLog('runner stderr: ' + msg);
     sendRunEvent({ type: 'log', level: 'error', message: msg });
   });
-  currentRun.on('error', e => {
+  child.on('error', e => {
     debugLog('runner spawn error: ' + e.message);
     sendRunEvent({ type: 'error', message: e.message });
-    currentRun = null;
+    if (currentRun && currentRun.seq === seq) currentRun = null;
   });
-  currentRun.on('close', code => {
+  child.on('close', code => {
     debugLog('runner process closed, exit code: ' + code);
-    if (runStopping) { runStopping = false; currentRun = null; return; }
+    // Ignore late close from a stopped/previous process after a new run started.
+    if (!currentRun || currentRun.seq !== seq) return;
     if (buffer.trim()) { try { sendRunEvent(JSON.parse(buffer)); } catch { sendRunEvent({ type: 'log', message: buffer, level: 'normal' }); } }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('run:exit', { code });
     if (miniWindow && !miniWindow.isDestroyed() && miniStatus.state === 'running') {
@@ -1087,7 +1340,7 @@ ipcMain.handle('run:start', async (_, payload) => {
     }
     currentRun = null;
   });
-  currentRun.stdin.end(JSON.stringify(runPayload));
+  child.stdin.end(JSON.stringify(runPayload));
   return true;
 });
 ipcMain.handle('run:stop', async () => { stopCurrentRun(); return true; });
@@ -1268,7 +1521,17 @@ ipcMain.handle('db:execute-sql', async (_event, payload) => {
 // ---- App lifecycle ----
 process.on('uncaughtException', (err) => { debugLog('uncaughtException: ' + (err && err.stack || err)); });
 process.on('unhandledRejection', (reason) => { debugLog('unhandledRejection: ' + reason); });
-app.whenReady().then(() => { debugLog('app ready'); createWindow(); initUpdater(); });
+app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return;
+  debugLog('app ready');
+  // Ensure the Python runtime before any IPC (config, tools, pipeline) is used.
+  if (app.isPackaged) {
+    const pyReady = await ensureRuntimeWithUi('python', '\u9996\u6b21\u8fd0\u884c\u9700\u8981\u4e0b\u8f7d Python \u73af\u5883');
+    if (!pyReady) return; // setup window stays open; user can retry
+  }
+  createWindow();
+  initUpdater();
+});
 app.on('window-all-closed', () => {
   debugLog('window-all-closed');
   stopCurrentRun();

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+    <title>运行环境准备</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #312e81 100%);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        width: 560px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 18px;
+        padding: 40px 44px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+        text-align: center;
+      }
+      .spinner {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 22px;
+        border-radius: 50%;
+        border: 4px solid rgba(255, 255, 255, 0.15);
+        border-top-color: #818cf8;
+        animation: spin 1s linear infinite;
+      }
+      .spinner.hidden { display: none; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      h1 {
+        color: #f1f5f9;
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .subtitle {
+        color: #94a3b8;
+        font-size: 13px;
+        line-height: 1.6;
+        margin-bottom: 28px;
+      }
+      .track {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-bottom: 10px;
+      }
+      .fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #6366f1 0%, #818cf8 50%, #06b6d4 100%);
+        border-radius: 999px;
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .fill.indeterminate {
+        width: 40% !important;
+        animation: slide 1.2s ease-in-out infinite alternate;
+      }
+      @keyframes slide {
+        from { margin-left: -10%; }
+        to { margin-left: 70%; }
+      }
+      .meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #94a3b8;
+        font-size: 12px;
+        margin-bottom: 20px;
+        font-variant-numeric: tabular-nums;
+      }
+      .phase { color: #cbd5e1; font-size: 13px; min-height: 20px; }
+      .error {
+        display: none;
+        margin-top: 22px;
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        border-radius: 12px;
+        padding: 14px 16px;
+        color: #fecaca;
+        font-size: 12.5px;
+        line-height: 1.6;
+        text-align: left;
+        word-break: break-all;
+        max-height: 120px;
+        overflow: auto;
+      }
+      .error.visible { display: block; }
+      .actions {
+        margin-top: 22px;
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+      }
+      .actions.hidden { display: none; }
+      .btn {
+        border: none;
+        border-radius: 10px;
+        padding: 10px 26px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .btn-primary {
+        background: #6366f1;
+        color: #fff;
+      }
+      .btn-primary:hover { background: #4f46e5; }
+      .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn-ghost {
+        background: transparent;
+        color: #a5b4fc;
+        border: 1px solid rgba(165, 180, 252, 0.4);
+      }
+      .btn-ghost:hover { background: rgba(165, 180, 252, 0.1); }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="spinner" id="spinner"></div>
+      <h1 id="title">正在准备运行环境</h1>
+      <div class="subtitle" id="subtitle">首次使用需要下载并安装所需的运行环境，请保持网络畅通，整个过程可能需要几分钟。</div>
+      <div class="track">
+        <div class="fill indeterminate" id="fill"></div>
+      </div>
+      <div class="meta">
+        <span id="phase">正在准备…</span>
+        <span id="bytes">0 B</span>
+      </div>
+      <div class="error" id="error"></div>
+      <div class="actions hidden" id="actions">
+        <button class="btn btn-primary" id="retryBtn">重试</button>
+        <button class="btn btn-ghost" id="recoveryBtn">查看恢复指引</button>
+      </div>
+    </div>
+    <script type="module" src="/src/setup.ts"></script>
+  </body>
+</html>

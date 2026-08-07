@@ -87,11 +87,20 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Prepare bundled runtime
+      - name: Prepare Python runtime ZIP + fill manifest hash
         shell: pwsh
         run: |
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
           .\tools\setup_runtime.ps1
+
+      - name: Fill Python download URLs for artifact build
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Artifact builds embed a non-empty HTTPS source. Real downloadability
+          # is guaranteed only by the release job (tag push).
+          PRIMARY="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/zbuild-python-3.11.9-win-x64.zip"
+          node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --backup "$PRIMARY" --require-complete
 
       - name: Prepare Node 14 runtime
         shell: pwsh
@@ -126,6 +135,8 @@ jobs:
           path: |
             release/*.exe
             release/*.zip
+            release/zbuild-python-*.zip
+            electron/runtime-manifest.json
 
   release:
     needs: test
@@ -150,11 +161,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Prepare bundled runtime
+      - name: Prepare Python runtime ZIP + fill manifest hash
         shell: pwsh
         run: |
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
           .\tools\setup_runtime.ps1
+
+      - name: Fill Python download URLs from release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          PRIMARY="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/zbuild-python-3.11.9-win-x64.zip"
+          node tools/fill-runtime-manifest.cjs --primary "$PRIMARY" --backup "$PRIMARY" --require-complete
+          echo "Manifest after fill:"
+          node -e "const m=require('./electron/runtime-manifest.json'); console.log(JSON.stringify(m.resources.python,null,2))"
 
       - name: Prepare Node 14 runtime
         shell: pwsh
@@ -201,6 +222,7 @@ jobs:
           shopt -s nullglob
           EXE_FILES=(release/*.exe)
           BLOCKMAP_FILES=(release/*.blockmap)
+          PY_ZIPS=(release/zbuild-python-*-win-x64.zip)
           if [ "${#EXE_FILES[@]}" -ne 1 ] || [ "${#BLOCKMAP_FILES[@]}" -ne 1 ] || [ ! -f release/latest.yml ]; then
             echo "发布资产不完整"
             printf 'exe: %s\n' "${EXE_FILES[*]:-none}"
@@ -208,11 +230,16 @@ jobs:
             test -f release/latest.yml || echo 'latest.yml: missing'
             exit 1
           fi
+          if [ "${#PY_ZIPS[@]}" -lt 1 ]; then
+            echo "缺少 Python 运行时 ZIP (release/zbuild-python-*-win-x64.zip)"
+            exit 1
+          fi
+          node tools/fill-runtime-manifest.cjs --require-complete
           if ! grep -q "^version: $VER$" release/latest.yml; then
             echo "latest.yml 版本与 tag 不一致"
             exit 1
           fi
-          FILES=("${EXE_FILES[@]}" "${BLOCKMAP_FILES[@]}" release/latest.yml)
+          FILES=("${EXE_FILES[@]}" "${BLOCKMAP_FILES[@]}" release/latest.yml "${PY_ZIPS[@]}")
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "v$VER" --notes "$NOTES" --prerelease=false --latest
             gh release upload "$TAG" "${FILES[@]}" --clobber

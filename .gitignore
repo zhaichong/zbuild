@@ -32,6 +32,7 @@ desktop.ini
 # Temp / debug
 tmp/
 tools-cache/
+tools/build-runtime/
 *.log
 references/tool-config.json
 references/build-history.json

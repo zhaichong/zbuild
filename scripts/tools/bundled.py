@@ -6,6 +6,7 @@ that ship alongside the Electron application, and helpers to set up
 shims so that child processes pick up the bundled versions.
 """
 
+import json
 import logging
 import os
 import re
@@ -24,23 +25,74 @@ REQUIRED_NODE_VERSION = "14.21.3"
 # Root paths
 # ---------------------------------------------------------------------------
 
-def runtime_root() -> Path:
-    """Return the root directory for bundled runtimes.
+def _runtime_config_path() -> Path:
+    """Path to runtime-config.json alongside the per-user runtime root."""
+    local_appdata = os.environ.get("LOCALAPPDATA", "")
+    if local_appdata:
+        return Path(local_appdata) / "zbuild" / "runtime-config.json"
+    return Path.home() / "zbuild-runtime-config.json"
 
-    Search order:
-    1. ZBUILD_RESOURCES_DIR env var (set by Electron's buildEnv() to
-       process.resourcesPath) — correct in the packaged / distributed app.
-    2. APP_DIR.parent / "resources" / "runtime" — legacy fallback.
-    3. APP_DIR / "runtime" — development fallback.
+
+def _read_config() -> dict:
+    """Read runtime-config.json, returning an empty dict on failure."""
+    try:
+        return json.loads(_runtime_config_path().read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _read_override(kind: str) -> Optional[str]:
+    """Return the user-configured system-runtime override path, or None.
+
+    The path is only returned if the file actually exists on disk.
     """
-    resources_env = os.environ.get("ZBUILD_RESOURCES_DIR", "")
-    if resources_env:
-        packaged = Path(resources_env) / "runtime"
-        if packaged.is_dir():
-            return packaged
-    packaged = APP_DIR.parent / "resources" / "runtime"
-    if packaged.is_dir():
-        return packaged
+    cfg = _read_config()
+    key = "overridePython" if kind == "python" else "overrideNode"
+    val = cfg.get(key)
+    if isinstance(val, str) and val:
+        p = Path(val)
+        if p.is_file():
+            return str(p)
+    return None
+
+
+def _runtime_roots() -> list:
+    """Ordered runtime roots (matches electron/runtime.js).
+
+    1. Dev repository (APP_DIR / "runtime") when present as a directory.
+    2. Per-user runtime root (ZBUILD_RUNTIME_ROOT or %LOCALAPPDATA%\\zbuild\\runtime).
+
+    Legacy resources/runtime is intentionally omitted so old bundled installs
+    cannot bypass online-setup manifest version / hash checks.
+    """
+    roots = []
+    dev = APP_DIR / "runtime"
+    if dev.is_dir():
+        roots.append(dev)
+    runtime_root_env = os.environ.get("ZBUILD_RUNTIME_ROOT", "")
+    if runtime_root_env:
+        user = Path(runtime_root_env)
+        if user.is_dir() and user not in roots:
+            roots.append(user)
+    else:
+        local_appdata = os.environ.get("LOCALAPPDATA", "")
+        if local_appdata:
+            user = Path(local_appdata) / "zbuild" / "runtime"
+            if user.is_dir() and user not in roots:
+                roots.append(user)
+    return roots
+
+
+def runtime_root() -> Path:
+    """Return the preferred root directory for bundled runtimes (git/bash/svn).
+
+    Prefer the first existing root. For python/node, use bundled_python /
+    find_node14_dir which select per-executable so an incomplete root does not
+    shadow a complete one.
+    """
+    roots = _runtime_roots()
+    if roots:
+        return roots[0]
     return APP_DIR / "runtime"
 
 
@@ -49,15 +101,23 @@ def runtime_root() -> Path:
 # ---------------------------------------------------------------------------
 
 def bundled_python() -> Optional[str]:
-    """Path to the bundled Python executable, or None."""
-    root = runtime_root()
-    if os.name == "nt":
-        candidates = [root / "python" / "python.exe", root / "python.exe"]
-    else:
-        candidates = [root / "python" / "bin" / "python3", root / "python"]
-    for c in candidates:
-        if c.is_file():
-            return str(c)
+    """Path to the bundled Python executable, or None.
+
+    Candidate order (per executable, not per root-directory existence):
+    override → each runtime root's python.exe. Incomplete dev trees do not
+    shadow a complete user install.
+    """
+    override = _read_override("python")
+    if override:
+        return override
+    for root in _runtime_roots():
+        if os.name == "nt":
+            candidates = [root / "python" / "python.exe", root / "python.exe"]
+        else:
+            candidates = [root / "python" / "bin" / "python3", root / "python"]
+        for c in candidates:
+            if c.is_file():
+                return str(c)
     return None
 
 
@@ -113,44 +173,21 @@ def bundled_svn() -> Optional[str]:
 def find_node14_dir() -> Optional[Path]:
     """Find the directory containing a Node.js 14 installation.
 
-    Checks:
-    1. Bundled node in runtime_root() / 'node'
-    2. Volta Node 14 image directory (e.g. AppData/Local/Volta/tools/image/node/14.*)
-    3. NVM Node 14 directory (e.g. AppData/Roaming/nvm/v14.* or NVM_HOME/v14.*)
+    Scans each runtime root for node.exe (same order as electron/runtime.js).
+    System Node (Volta/NVM/PATH) is intentionally not used as a fallback.
     """
-    # 1. Bundled runtime
-    root = runtime_root()
-    cand = root / "node"
-    if (cand / "node.exe").is_file() or (cand / "bin" / "node").is_file() or (cand / "node").is_file():
-        return cand
-
-    # 2. Volta image directory
-    if os.name == "nt":
-        volta_node_dir = Path.home() / "AppData" / "Local" / "Volta" / "tools" / "image" / "node"
-    else:
-        volta_node_dir = Path.home() / ".volta" / "tools" / "image" / "node"
-    if volta_node_dir.is_dir():
-        v14_dirs = [d for d in volta_node_dir.iterdir() if d.is_dir() and d.name.startswith("14.")]
-        if v14_dirs:
-            v14_dirs.sort(key=lambda d: [int(p) if p.isdigit() else 0 for p in d.name.split(".")], reverse=True)
-            return v14_dirs[0]
-
-    # 3. NVM directory
-    if os.name == "nt":
-        nvm_dir = Path(os.environ.get("NVM_HOME", Path.home() / "AppData" / "Roaming" / "nvm"))
-    else:
-        nvm_dir = Path.home() / ".nvm" / "versions" / "node"
-    if nvm_dir.is_dir():
-        v14_dirs = [d for d in nvm_dir.iterdir() if d.is_dir() and (d.name.startswith("v14.") or d.name.startswith("14."))]
-        if v14_dirs:
-            v14_dirs.sort(key=lambda d: [int(p) if p.isdigit() else 0 for p in d.name.lstrip("v").split(".")], reverse=True)
-            return v14_dirs[0]
-
+    for root in _runtime_roots():
+        cand = root / "node"
+        if (cand / "node.exe").is_file() or (cand / "bin" / "node").is_file() or (cand / "node").is_file():
+            return cand
     return None
 
 
 def bundled_node() -> Optional[str]:
     """Path to the Node.js 14 executable, or None."""
+    override = _read_override("node")
+    if override:
+        return override
     node14_dir = find_node14_dir()
     if node14_dir:
         if os.name == "nt":
@@ -255,7 +292,7 @@ def bundled_npm() -> Optional[str]:
     Returns the generated shim path so callers never hit stock ``npm.cmd``'s
     global-prefix redirect onto a foreign (newer) npm.
     """
-    if not bundled_node() and not _stock_npm_path() and not shutil.which("volta"):
+    if not bundled_node() and not _stock_npm_path():
         return None
     shim = node_shim_dir()
     if os.name == "nt":
@@ -267,7 +304,7 @@ def bundled_npm() -> Optional[str]:
 
 def bundled_npx() -> Optional[str]:
     """Path to a safe npx entrypoint for Node 14 (shim preferred), or None."""
-    if not bundled_node() and not _stock_npx_path() and not shutil.which("volta"):
+    if not bundled_node() and not _stock_npx_path():
         return None
     shim = node_shim_dir()
     if os.name == "nt":
@@ -389,21 +426,6 @@ def node_shim_dir() -> Path:
             shim_npx.chmod(0o755)
         except Exception:
             pass
-    elif shutil.which("volta"):
-        # Fallback to Volta if no direct Node 14 directory was located
-        (shim_dir / "node.cmd").write_bytes(b'@echo off\r\nvolta run --node 14 node %*\r\n')
-        (shim_dir / "npm.cmd").write_bytes(b'@echo off\r\nvolta run --node 14 --npm 6 npm %*\r\n')
-        (shim_dir / "npx.cmd").write_bytes(b'@echo off\r\nvolta run --node 14 --npm 6 npx %*\r\n')
-        for tool, args in [("node", "--node 14 node"), ("npm", "--node 14 --npm 6 npm"), ("npx", "--node 14 --npm 6 npx")]:
-            shim = shim_dir / tool
-            shim.write_text(
-                f'#!/bin/sh\nexec volta run {args} "$@"\n',
-                encoding="utf-8", newline="\n"
-            )
-            try:
-                shim.chmod(0o755)
-            except Exception:
-                pass
 
     return shim_dir
 
@@ -509,18 +531,14 @@ def bundled_node_major_version() -> Optional[int]:
 
 
 def ensure_required_node_version() -> bool:
-    """Check that the bundled (or system) Node meets the required version.
+    """Check that the bundled Node meets the required version.
 
     Returns True if the requirement is satisfied, False otherwise.
+    System Node is not consulted as a fallback.
     """
     ver = bundled_node_version()
     if not ver:
-        # Try system node
-        try:
-            r = run_process(["node", "--version"])
-            ver = r.stdout.strip().lstrip("v")
-        except Exception:
-            return False
+        return False
 
     required_parts = [int(x) for x in REQUIRED_NODE_VERSION.split(".")]
     actual_parts = [int(x) for x in ver.split(".")[:3]]

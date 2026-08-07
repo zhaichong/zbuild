@@ -1,62 +1,78 @@
 # setup_runtime.ps1
 # ---------------------------------------------------------------
-# 下载 Python 3.11 embeddable 并安装必要依赖到 runtime/python/
-# 运行完毕后执行 npm run dist 打包，Python 会自动随安装包分发。
+# 构建带锁定依赖的 Python 3.11 预制运行环境 ZIP，并同步到 runtime/python/
 #
 # 用法：
 #   在项目根目录运行:  .\tools\setup_runtime.ps1
+#   可选参数:
+#     -PyVersion 3.11.9
+#     -PrimaryUrl https://...
+#     -BackupUrl  https://...
+#     -SkipManifestFill   仅构建 ZIP，不回填 manifest
+#
+# 产物：
+#   - runtime/python/           开发模式使用（与打包一致，已裁剪）
+#   - release/zbuild-python-<version>-win-x64.zip   预制 ZIP（含 SHA256）
+#   - electron/runtime-manifest.json  回填 python.sha256 / size（及可选 URL）
 # ---------------------------------------------------------------
 
 param(
-    [string]$PyVersion = "3.11.9"
+    [string]$PyVersion = "3.11.9",
+    [string]$PrimaryUrl = "",
+    [string]$BackupUrl = "",
+    [switch]$SkipManifestFill
 )
 
 $ErrorActionPreference = "Stop"
 
-# PS5 compatible path construction (Join-Path only takes 2 args in PS5)
+# 精确锁定（与 pyproject.toml 保持一致）— 必须用数组，避免作为单一参数传给 pip
+$PINNED_PKGS = @("openpyxl==3.1.5", "paramiko==5.0.0")
+
+# PS5 compatible path construction
 $ROOT        = (Get-Item (Join-Path $PSScriptRoot "..")).FullName
 $RUNTIME_DIR = "$ROOT\runtime\python"
-New-Item -ItemType Directory -Force -Path $RUNTIME_DIR | Out-Null
-$RUNTIME_DIR = (Get-Item $RUNTIME_DIR).FullName
+$BUILD_DIR   = "$ROOT\tools\build-runtime\python"
 $TEMP_ZIP    = "$env:TEMP\zbuild-python-embed.zip"
-$PY_EXE      = "$RUNTIME_DIR\python.exe"
+$OUT_ZIP     = "$ROOT\release\zbuild-python-$PyVersion-win-x64.zip"
 $PY_URL      = "https://www.python.org/ftp/python/$PyVersion/python-$PyVersion-embed-amd64.zip"
+
+function Remove-Tree($path) {
+    if (Test-Path $path) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue }
+}
 
 Write-Host ""
 Write-Host "=== zbuild Python Runtime Setup ===" -ForegroundColor Cyan
 Write-Host "Python version : $PyVersion"
-Write-Host "Target dir     : $RUNTIME_DIR"
+Write-Host "Pinned packages: $($PINNED_PKGS -join ' ')"
+Write-Host "Output ZIP     : $OUT_ZIP"
 Write-Host ""
 
 # ── 1. 下载 embeddable zip ────────────────────────────────────────────────────
-Write-Host "[1/4] Downloading Python $PyVersion embeddable ..." -ForegroundColor Yellow
-if (Test-Path $PY_EXE) {
-    Write-Host "      Already exists, skipping download." -ForegroundColor DarkGray
-} else {
+Write-Host "[1/7] Downloading Python $PyVersion embeddable ..." -ForegroundColor Yellow
+if (-not (Test-Path $TEMP_ZIP)) {
     try {
         Invoke-WebRequest -Uri $PY_URL -OutFile $TEMP_ZIP -UseBasicParsing
     } catch {
         Write-Host "ERROR: Download failed: $_" -ForegroundColor Red
         Write-Host "Please download manually from: $PY_URL" -ForegroundColor Red
-        Write-Host "and extract to: $RUNTIME_DIR" -ForegroundColor Red
+        Write-Host "and save to: $TEMP_ZIP" -ForegroundColor Red
         exit 1
     }
-
-    # ── 2. 解压 ────────────────────────────────────────────────────────────────
-    Write-Host "[2/4] Extracting ..." -ForegroundColor Yellow
-    Expand-Archive -Path $TEMP_ZIP -DestinationPath $RUNTIME_DIR -Force
-    Remove-Item $TEMP_ZIP -Force
+} else {
+    Write-Host "      Using cached $TEMP_ZIP" -ForegroundColor DarkGray
 }
+
+# ── 2. 解压到 staging ────────────────────────────────────────────────────────
+Write-Host "[2/7] Extracting to staging ..." -ForegroundColor Yellow
+Remove-Tree $BUILD_DIR
+New-Item -ItemType Directory -Force -Path $BUILD_DIR | Out-Null
+Expand-Archive -Path $TEMP_ZIP -DestinationPath $BUILD_DIR -Force
+$PY_EXE = "$BUILD_DIR\python.exe"
 
 # ── 3. 启用 site-packages ────────────────────────────────────────────────────
-# 必须在安装 pip 之前完成，否则 -m pip 找不到已安装的模块。
-# embeddable Python 的 pth 文件名形如 python311._pth（注意下划线）。
-Write-Host "[3/4] Enabling site-packages ..." -ForegroundColor Yellow
-$pthFiles = Get-ChildItem "$RUNTIME_DIR" -Filter "python3*._pth" -ErrorAction SilentlyContinue
-if (-not $pthFiles) {
-    # 兜底：扫描所有 ._pth 文件
-    $pthFiles = Get-ChildItem "$RUNTIME_DIR" -Filter "*._pth" -ErrorAction SilentlyContinue
-}
+Write-Host "[3/7] Enabling site-packages ..." -ForegroundColor Yellow
+$pthFiles = Get-ChildItem "$BUILD_DIR" -Filter "python3*._pth" -ErrorAction SilentlyContinue
+if (-not $pthFiles) { $pthFiles = Get-ChildItem "$BUILD_DIR" -Filter "*._pth" -ErrorAction SilentlyContinue }
 if ($pthFiles) {
     foreach ($pthFile in $pthFiles) {
         $content = Get-Content $pthFile.FullName -Raw -Encoding Ascii
@@ -64,41 +80,73 @@ if ($pthFiles) {
             $content = $content -replace '#import site', 'import site'
             Set-Content -Path $pthFile.FullName -Value $content -Encoding Ascii -NoNewline
             Write-Host "      Patched: $($pthFile.Name)" -ForegroundColor Green
-        } else {
-            Write-Host "      Already enabled: $($pthFile.Name)" -ForegroundColor DarkGray
         }
     }
 } else {
-    Write-Host "      WARNING: No ._pth file found in $RUNTIME_DIR" -ForegroundColor DarkYellow
-    Get-ChildItem $RUNTIME_DIR | Select-Object Name | ForEach-Object { Write-Host "        $($_.Name)" }
+    throw "No ._pth file found in $BUILD_DIR"
 }
 
-# ── 4. 安装 pip + 依赖包 ──────────────────────────────────────────────────────
-Write-Host "[4/4] Installing pip and required packages ..." -ForegroundColor Yellow
-
-# 检查 pip 是否已安装
+# ── 4. 安装 pip + 锁定依赖 ──────────────────────────────────────────────────
+Write-Host "[4/7] Installing pip and pinned packages ..." -ForegroundColor Yellow
 $hasPip = & $PY_EXE -m pip --version 2>&1
 if ($LASTEXITCODE -ne 0) {
     $getPipPath = Join-Path $env:TEMP "get-pip.py"
-    Write-Host "      Downloading get-pip.py ..." -ForegroundColor DarkGray
     Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
     & $PY_EXE $getPipPath --no-warn-script-location 2>&1 | Write-Host
     Remove-Item $getPipPath -Force -ErrorAction SilentlyContinue
 }
+& $PY_EXE -m pip install @PINNED_PKGS --no-warn-script-location 2>&1 | Write-Host
+if ($LASTEXITCODE -ne 0) { throw "pip install failed for: $($PINNED_PKGS -join ' ')" }
 
-# 安装依赖：openpyxl (Excel生成), paramiko (SSH上传)
-Write-Host "      Installing packages: openpyxl paramiko ..." -ForegroundColor DarkGray
-& $PY_EXE -m pip install openpyxl paramiko --no-warn-script-location 2>&1 | Write-Host
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "WARNING: Some packages may not have installed correctly." -ForegroundColor DarkYellow
-    Write-Host "         Try running manually: $PY_EXE -m pip install openpyxl paramiko" -ForegroundColor DarkYellow
+# ── 5. 裁剪（与打包后状态一致）───────────────────────────────────────────────
+Write-Host "[5/7] Pruning pip/setuptools/wheel/Scripts/__pycache__ ..." -ForegroundColor Yellow
+$sp = "$BUILD_DIR\Lib\site-packages"
+foreach ($p in @("pip", "setuptools", "wheel", "pkg_resources", "_distutils_hack")) {
+    Remove-Tree (Join-Path $sp $p)
 }
+Get-ChildItem $sp -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^(pip|setuptools|wheel)-' } |
+    ForEach-Object { Remove-Tree $_.FullName }
+Remove-Tree "$BUILD_DIR\Scripts"
+Get-ChildItem $BUILD_DIR -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
+    ForEach-Object { Remove-Tree $_.FullName }
+
+# ── 6. 健康检查（含精确版本）──────────────────────────────────────────────────
+Write-Host "[6/7] Health check (openpyxl==3.1.5, paramiko==5.0.0) ..." -ForegroundColor Yellow
+$health = & $PY_EXE -c "import openpyxl, paramiko; assert openpyxl.__version__=='3.1.5', openpyxl.__version__; assert paramiko.__version__=='5.0.0', paramiko.__version__; print('OK', openpyxl.__version__, paramiko.__version__)" 2>&1
+if ($LASTEXITCODE -ne 0) { throw "Health check failed: $health" }
+Write-Host "      $health" -ForegroundColor Green
+
+# ── 7. 同步 dev runtime + 生成预制 ZIP + 回填 manifest ────────────────────────
+Write-Host "[7/7] Syncing dev runtime and building ZIP ..." -ForegroundColor Yellow
+Remove-Tree $RUNTIME_DIR
+New-Item -ItemType Directory -Force -Path "$ROOT\runtime" | Out-Null
+Move-Item $BUILD_DIR $RUNTIME_DIR
+
+New-Item -ItemType Directory -Force -Path "$ROOT\release" | Out-Null
+Remove-Item $OUT_ZIP -Force -ErrorAction SilentlyContinue
+Compress-Archive -Path "$RUNTIME_DIR\*" -DestinationPath $OUT_ZIP -CompressionLevel Optimal -Force
+
+$fileInfo = Get-Item $OUT_ZIP
+$hash = (Get-FileHash $OUT_ZIP -Algorithm SHA256).Hash.ToLower()
+$sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
 
 Write-Host ""
 Write-Host "=== Setup Complete ===" -ForegroundColor Green
-Write-Host "Python runtime is ready at: $RUNTIME_DIR"
+Write-Host "Dev runtime : $RUNTIME_DIR"
+Write-Host "Runtime ZIP : $OUT_ZIP ($sizeMB MB)"
+Write-Host "SHA256      : $hash"
 Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  npm run dist    -- build and package the installer"
+
+if (-not $SkipManifestFill) {
+    $fillArgs = @("tools/fill-runtime-manifest.cjs", "--python-zip", $OUT_ZIP)
+    if ($PrimaryUrl) { $fillArgs += @("--primary", $PrimaryUrl) }
+    if ($BackupUrl)  { $fillArgs += @("--backup", $BackupUrl) }
+    Write-Host "Filling electron/runtime-manifest.json ..." -ForegroundColor Yellow
+    & node @fillArgs
+    if ($LASTEXITCODE -ne 0) { throw "fill-runtime-manifest.cjs failed" }
+    Write-Host "Manifest updated." -ForegroundColor Green
+} else {
+    Write-Host "SkipManifestFill set — remember to fill python.sha256/size/primary/backup before release." -ForegroundColor Yellow
+}
 Write-Host ""

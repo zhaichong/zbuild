@@ -89,7 +89,7 @@ jobs:
 
       - name: Prepare bundled runtime
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File tools\setup_runtime.ps1
+        run: .\tools\setup_runtime.ps1
 
       - name: Prepare Node 14 runtime
         shell: pwsh
@@ -150,7 +150,7 @@ jobs:
 
       - name: Prepare bundled runtime
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File tools\setup_runtime.ps1
+        run: .\tools\setup_runtime.ps1
 
       - name: Prepare Node 14 runtime
         shell: pwsh
@@ -176,12 +176,13 @@ jobs:
         run: npm run build
 
       - name: Build and publish Electron app to GitHub Release
+        id: publish
         run: npm run dist -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update GitHub Release notes
-        if: always()
+        if: steps.publish.outcome == 'success'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

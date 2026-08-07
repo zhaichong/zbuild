@@ -89,7 +89,9 @@ jobs:
 
       - name: Prepare bundled runtime
         shell: pwsh
-        run: .\tools\setup_runtime.ps1
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+          .\tools\setup_runtime.ps1
 
       - name: Prepare Node 14 runtime
         shell: pwsh
@@ -115,7 +117,7 @@ jobs:
         run: npm run build
 
       - name: Build Electron app
-        run: npm run dist
+        run: npm run dist -- --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -150,7 +152,9 @@ jobs:
 
       - name: Prepare bundled runtime
         shell: pwsh
-        run: .\tools\setup_runtime.ps1
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+          .\tools\setup_runtime.ps1
 
       - name: Prepare Node 14 runtime
         shell: pwsh
@@ -175,20 +179,43 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build and publish Electron app to GitHub Release
-        id: publish
-        run: npm run dist -- --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Electron app
+        run: npm run dist -- --publish never
 
-      - name: Update GitHub Release notes
-        if: steps.publish.outcome == 'success'
+      - name: Create or update GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
           VER="${GITHUB_REF_NAME#v}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PACKAGE_VERSION" != "$VER" ]; then
+            echo "版本不一致: tag=$VER package.json=$PACKAGE_VERSION"
+            exit 1
+          fi
           PREV=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || true)
           if [ -z "$PREV" ]; then RANGE="HEAD"; else RANGE="$PREV..HEAD"; fi
-          NOTES="## 变更内容"$'\n'"$(git log "$RANGE" --oneline --no-merges | sed 's/^/- /')"
-          gh release edit "$GITHUB_REF_NAME" --title "v$VER" --notes "$NOTES"
+          NOTES="## 变更内容"$'\n'"$(git log "$RANGE" --oneline --no-merges -30 | sed 's/^/- /')"
+          shopt -s nullglob
+          EXE_FILES=(release/*.exe)
+          BLOCKMAP_FILES=(release/*.blockmap)
+          if [ "${#EXE_FILES[@]}" -ne 1 ] || [ "${#BLOCKMAP_FILES[@]}" -ne 1 ] || [ ! -f release/latest.yml ]; then
+            echo "发布资产不完整"
+            printf 'exe: %s\n' "${EXE_FILES[*]:-none}"
+            printf 'blockmap: %s\n' "${BLOCKMAP_FILES[*]:-none}"
+            test -f release/latest.yml || echo 'latest.yml: missing'
+            exit 1
+          fi
+          if ! grep -q "^version: $VER$" release/latest.yml; then
+            echo "latest.yml 版本与 tag 不一致"
+            exit 1
+          fi
+          FILES=("${EXE_FILES[@]}" "${BLOCKMAP_FILES[@]}" release/latest.yml)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "v$VER" --notes "$NOTES" --prerelease=false --latest
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" --title "v$VER" --notes "$NOTES" --latest
+          fi

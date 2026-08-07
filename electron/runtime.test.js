@@ -145,6 +145,61 @@ test('isUsableRuntime rejects incomplete dev runtime that fails health', () => {
   );
 });
 
+test('isUsableRuntime falls through incomplete dev to healthy user runtime', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const { writeReady, isRuntimeReady } = require('./runtime-setup');
+
+  const devPy = pathJoin('C:/app', 'runtime', 'python', 'python.exe');
+  // Real on-disk user runtime so isRuntimeReady / isUsableRuntime hit shipped code.
+  const userRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'zbuild-usable-'));
+  const pyDir = path.join(userRoot, 'python');
+  fs.mkdirSync(pyDir, { recursive: true });
+  fs.writeFileSync(path.join(pyDir, 'python.exe'), 'fake');
+  const resource = {
+    version: '3.11.9',
+    sha256: 'b'.repeat(64),
+    healthCheck: ['python.exe', '--version'],
+    healthVersion: ['python.exe', '--version'],
+  };
+  writeReady(userRoot, 'python', resource);
+  const manifestPath = path.join(userRoot, 'runtime-manifest.json');
+  fs.writeFileSync(manifestPath, JSON.stringify({
+    version: 1,
+    resources: { python: resource },
+  }));
+
+  try {
+    assert.equal(
+      isRuntimeReady(userRoot, 'python', resource, {
+        runHealthCheck: () => ({ ok: true }),
+        checkVersion: () => ({ ok: true }),
+      }),
+      true,
+    );
+
+    // Incomplete dev exe present, but user runtime is ready → usable.
+    assert.equal(
+      isUsableRuntime('C:/app', 'python', {
+        env: {
+          LOCALAPPDATA: path.join(userRoot, 'local'),
+          ZBUILD_RUNTIME_ROOT: userRoot,
+        },
+        existsSync: (p) => (p === devPy ? true : fs.existsSync(p)),
+        deps: {
+          validateOverrideExecutable: () => ({ ok: false, error: 'incomplete dev' }),
+          runHealthCheck: () => ({ ok: true }),
+          checkVersion: () => ({ ok: true }),
+        },
+        manifestPath,
+      }),
+      true,
+    );
+  } finally {
+    try { fs.rmSync(userRoot, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
 test('isUsableRuntime rejects override that fails health even if path exists', () => {
   const overridePy = 'C:\\custom\\python.exe';
   assert.equal(

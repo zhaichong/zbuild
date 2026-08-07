@@ -107,7 +107,8 @@ function isUsableRuntime(root, kind, options = {}) {
   const devExe = path.join(root, 'runtime', kind, kind === 'python' ? 'python.exe' : 'node.exe');
   if (existsSync(devExe)) {
     // Dev trees must pass version/deps health — a bare python.exe is not enough.
-    return !!check(kind, devExe, expected).ok;
+    // On failure, fall through (same as override) so a healthy user runtime can still win.
+    if (check(kind, devExe, expected).ok) return true;
   }
 
   if (!manifestPath) return false;

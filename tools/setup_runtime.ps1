@@ -88,15 +88,27 @@ if ($pthFiles) {
 
 # ── 4. 安装 pip + 锁定依赖 ──────────────────────────────────────────────────
 Write-Host "[4/7] Installing pip and pinned packages ..." -ForegroundColor Yellow
-$hasPip = & $PY_EXE -m pip --version 2>&1
-if ($LASTEXITCODE -ne 0) {
+# embeddable Python has no pip; stderr would abort under ErrorActionPreference=Stop
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& $PY_EXE -m pip --version 2>&1 | Out-Null
+$hasPip = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEap
+if (-not $hasPip) {
     $getPipPath = Join-Path $env:TEMP "get-pip.py"
     Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
+    $ErrorActionPreference = 'Continue'
     & $PY_EXE $getPipPath --no-warn-script-location 2>&1 | Write-Host
+    $getPipExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
     Remove-Item $getPipPath -Force -ErrorAction SilentlyContinue
+    if ($getPipExit -ne 0) { throw "get-pip.py failed with exit $getPipExit" }
 }
+$ErrorActionPreference = 'Continue'
 & $PY_EXE -m pip install @PINNED_PKGS --no-warn-script-location 2>&1 | Write-Host
-if ($LASTEXITCODE -ne 0) { throw "pip install failed for: $($PINNED_PKGS -join ' ')" }
+$pipExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+if ($pipExit -ne 0) { throw "pip install failed for: $($PINNED_PKGS -join ' ')" }
 
 # ── 5. 裁剪（与打包后状态一致）───────────────────────────────────────────────
 Write-Host "[5/7] Pruning pip/setuptools/wheel/Scripts/__pycache__ ..." -ForegroundColor Yellow
@@ -107,14 +119,22 @@ foreach ($p in @("pip", "setuptools", "wheel", "pkg_resources", "_distutils_hack
 Get-ChildItem $sp -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^(pip|setuptools|wheel)-' } |
     ForEach-Object { Remove-Tree $_.FullName }
+# leftover .pth from setuptools causes stderr noise and can break embeddable site
+Get-ChildItem $sp -Filter "*.pth" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match 'distutils|setuptools|pip|wheel' } |
+    ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
 Remove-Tree "$BUILD_DIR\Scripts"
 Get-ChildItem $BUILD_DIR -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
     ForEach-Object { Remove-Tree $_.FullName }
 
 # ── 6. 健康检查（含精确版本）──────────────────────────────────────────────────
 Write-Host "[6/7] Health check (openpyxl==3.1.5, paramiko==5.0.0) ..." -ForegroundColor Yellow
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 $health = & $PY_EXE -c "import openpyxl, paramiko; assert openpyxl.__version__=='3.1.5', openpyxl.__version__; assert paramiko.__version__=='5.0.0', paramiko.__version__; print('OK', openpyxl.__version__, paramiko.__version__)" 2>&1
-if ($LASTEXITCODE -ne 0) { throw "Health check failed: $health" }
+$healthExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+if ($healthExit -ne 0) { throw "Health check failed: $health" }
 Write-Host "      $health" -ForegroundColor Green
 
 # ── 7. 同步 dev runtime + 生成预制 ZIP + 回填 manifest ────────────────────────

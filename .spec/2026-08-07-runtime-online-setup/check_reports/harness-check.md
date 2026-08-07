@@ -20,6 +20,9 @@
 | Node 单测 | `npm run test:node` | PASS (44/44) | runtime-setup 含升级/健康失败重装/HTTPS 降级/maxBytes/abort/锁 token 等 |
 | Python 单测 | `npm run test:py` | PASS (78/78) | bundled.py 选择逻辑回归 |
 | Manifest 空失败 | `node tools/fill-runtime-manifest.cjs --require-complete` | FAIL（预期） | python.sha256/primary 为空时 exit≠0 |
+| 生成 Python ZIP | `.\tools\setup_runtime.ps1` | PASS | release/zbuild-python-3.11.9-win-x64.zip 16.9MB；SHA256=60473ae0…8229db69；health OK 3.1.5/5.0.0 |
+| 真实 Python e2e | ensureRuntime('python') 本机 HTTP 提供 ZIP | PASS | phases: starting→downloading→verifying→extracting→health-check→installing→done；ready=true |
+| 分支推送 | `git push origin 1.0.1_去依赖版本` | PASS | 4c4c754 + 54c925a 已上远端 |
 | 类型检查 | `npm run typecheck` | 未在本轮重跑 | 前端未改契约 |
 
 ## 验收标准对照（更新）

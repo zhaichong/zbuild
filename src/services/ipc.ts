@@ -1,4 +1,5 @@
 import { toRaw } from 'vue'
+import pkg from '../../package.json'
 import type {
   AppConfig,
   ToolPaths,
@@ -9,6 +10,7 @@ import type {
   TaskTemplate,
   ExecutionRecord,
   RunEvent,
+  UpdateStatus,
 } from '@/types'
 
 /** Convert Vue proxy or reactive objects to plain JS objects for contextBridge structured-clone compatibility */
@@ -18,6 +20,8 @@ function toPlainObject<T>(obj: T): T {
 }
 
 export const ipc = {
+  version: pkg.version || '',
+
   getConfig: (): Promise<AppConfig> => window.tool.getConfig(),
 
   saveConfig: (config: AppConfig): Promise<AppConfig> => window.tool.saveConfig(toPlainObject(config)),
@@ -116,4 +120,22 @@ export const ipc = {
     window.tool.executeDbSql
       ? window.tool.executeDbSql(toPlainObject(payload))
       : Promise.resolve({ success: false, error: 'Web浏览器模式暂不支持直连 MySQL，请下载运行 Electron 客户端或复制 SQL 执行' }),
+
+  checkForUpdates: (): Promise<UpdateStatus> =>
+    window.tool.checkForUpdates
+      ? window.tool.checkForUpdates()
+      : Promise.resolve({ state: 'not-available' }),
+
+  downloadUpdate: (): Promise<UpdateStatus> =>
+    window.tool.downloadUpdate
+      ? window.tool.downloadUpdate()
+      : Promise.resolve({ state: 'error', message: '更新接口不可用' }),
+
+  installUpdate: (): Promise<boolean> =>
+    window.tool.installUpdate ? window.tool.installUpdate() : Promise.resolve(false),
+
+  onUpdateStatus: (handler: (status: UpdateStatus) => void): (() => void) => {
+    if (!window.tool.onUpdateStatus) return () => {}
+    return window.tool.onUpdateStatus(handler)
+  },
 }

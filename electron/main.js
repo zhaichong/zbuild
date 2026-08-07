@@ -4,6 +4,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const os = require('os');
 const net = require('net');
+const { autoUpdater } = require('electron-updater');
 const { resolvePython } = require('./runtime');
 const {
   MOCK_HTTP_ALLOWED_METHODS,
@@ -83,6 +84,89 @@ function debugLog(msg) {
     fs.appendFileSync(debugLogPath, `[${new Date().toISOString()}] ${msg}\n`, 'utf8');
   } catch (_) {}
 }
+
+// ---- Auto-update ----
+
+let updateDownloadInProgress = false;
+
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.disableWebInstaller = true;
+autoUpdater.logger = {
+  info: (msg) => debugLog('updater info: ' + msg),
+  warn: (msg) => debugLog('updater warn: ' + msg),
+  error: (msg) => debugLog('updater error: ' + msg),
+  debug: (msg) => debugLog('updater debug: ' + msg),
+};
+
+function sendUpdateStatus(status) {
+  debugLog('sendUpdateStatus: ' + JSON.stringify(status));
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update:status', status);
+  }
+}
+
+function updateState(state, extra) {
+  sendUpdateStatus(Object.assign({ state }, extra || {}));
+}
+
+autoUpdater.on('checking-for-update', () => updateState('checking'));
+autoUpdater.on('update-available', (info) => {
+  updateState('available', { version: info.version || '', releaseNotes: info.releaseNotes || '' });
+});
+autoUpdater.on('update-not-available', () => updateState('not-available'));
+autoUpdater.on('error', (err) => {
+  debugLog('updater error event: ' + (err && err.message || err));
+  updateState('error', { message: (err && err.message) || String(err) });
+});
+autoUpdater.on('download-progress', (progress) => {
+  const percent = typeof progress.percent === 'number' ? Math.round(progress.percent * 10) / 10 : 0;
+  updateState('downloading', {
+    percent,
+    bytesPerSecond: progress.bytesPerSecond || 0,
+    transferred: progress.transferred || 0,
+    total: progress.total || 0,
+  });
+});
+autoUpdater.on('update-downloaded', (info) => {
+  updateState('downloaded', { version: info.version || '' });
+});
+
+function initUpdater() {
+  if (!app.isPackaged) {
+    debugLog('updater skipped (dev mode)');
+    return;
+  }
+  debugLog('updater initialized, renderer will trigger check');
+}
+
+ipcMain.handle('update:check', async () => {
+  if (!app.isPackaged) return { state: 'not-available' };
+  try {
+    await autoUpdater.checkForUpdates();
+    return { state: 'checking' };
+  } catch (err) {
+    return { state: 'error', message: (err && err.message) || String(err) };
+  }
+});
+ipcMain.handle('update:download', async () => {
+  if (!app.isPackaged) return { state: 'not-available' };
+  try {
+    updateDownloadInProgress = true;
+    await autoUpdater.downloadUpdate();
+    updateDownloadInProgress = false;
+    return { state: 'downloaded' };
+  } catch (err) {
+    updateDownloadInProgress = false;
+    updateState('error', { message: (err && err.message) || String(err) });
+    return { state: 'error', message: (err && err.message) || String(err) };
+  }
+});
+ipcMain.handle('update:install', async () => {
+  if (!app.isPackaged) return false;
+  autoUpdater.quitAndInstall();
+  return true;
+});
 
 // ---- Window management ----
 
@@ -1051,6 +1135,14 @@ ipcMain.handle('db:execute-sql', async (_event, payload) => {
 // ---- App lifecycle ----
 process.on('uncaughtException', (err) => { debugLog('uncaughtException: ' + (err && err.stack || err)); });
 process.on('unhandledRejection', (reason) => { debugLog('unhandledRejection: ' + reason); });
-app.whenReady().then(() => { debugLog('app ready'); createWindow(); });
-app.on('window-all-closed', () => { debugLog('window-all-closed'); stopCurrentRun(); if (process.platform !== 'darwin') app.quit(); });
+app.whenReady().then(() => { debugLog('app ready'); createWindow(); initUpdater(); });
+app.on('window-all-closed', () => {
+  debugLog('window-all-closed');
+  stopCurrentRun();
+  if (updateDownloadInProgress) {
+    debugLog('download in progress, keeping app alive');
+    return;
+  }
+  if (process.platform !== 'darwin') app.quit();
+});
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

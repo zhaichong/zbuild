@@ -143,6 +143,7 @@
       ref="confirmRef"
       @confirm="onConfirmExecute"
     />
+    <UpdateDialog ref="updateRef" />
 
     <!-- Toast notifications container -->
     <div class="fixed top-4 right-4 z-[9999] space-y-2 pointer-events-none w-80">
@@ -225,6 +226,7 @@ import ActionBar from '@/components/ActionBar.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 import StashDialog from '@/components/StashDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import UpdateDialog from '@/components/UpdateDialog.vue'
 import { refreshProjects } from '@/composables/useProjects'
 import { setupRunListeners, startRun, stopRun } from '@/composables/usePipeline'
 import { checkLocalChanges } from '@/composables/useProjects'
@@ -265,6 +267,7 @@ const activeSideTab = ref<'pipeline' | 'logs'>('pipeline')
 const settingsRef = ref<InstanceType<typeof SettingsDialog> | null>(null)
 const confirmRef = ref<InstanceType<typeof ConfirmDialog> | null>(null)
 const stashRef = ref<InstanceType<typeof StashDialog> | null>(null)
+const updateRef = ref<InstanceType<typeof UpdateDialog> | null>(null)
 const pendingPayload = ref<RunPayload | null>(null)
 const pendingDirtyNames = ref<Set<string>>(new Set())
 
@@ -607,6 +610,13 @@ onMounted(async () => {
       console.warn('Failed to refresh projects on startup:', e)
     }
     setupRunListeners()
+    try {
+      if (updateRef.value) {
+        await updateRef.value.check()
+      }
+    } catch (e) {
+      console.warn('Update check failed on startup:', e)
+    }
   } catch (error) {
     console.error('Failed to initialize:', error)
   }

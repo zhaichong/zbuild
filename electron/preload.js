@@ -69,6 +69,16 @@ contextBridge.exposeInMainWorld('tool', {
 
   // db execute sql
   executeDbSql: (payload) => ipcRenderer.invoke('db:execute-sql', parsePayload(payload)),
+
+  // auto update
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: (handler) => {
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('update:status', listener);
+    return () => ipcRenderer.removeListener('update:status', listener);
+  },
 });
 
 contextBridge.exposeInMainWorld('mini', {

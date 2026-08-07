@@ -430,10 +430,12 @@ test('acquireLock times out when another instance holds the lock', () => {
   }
 });
 
-test('acquireLock steals a lock left by a dead process', () => {
+test('acquireLock steals a stale lock', () => {
   const root = tmpDir();
   fs.mkdirSync(root, { recursive: true });
-  fs.writeFileSync(path.join(root, '.install-node.lock'), JSON.stringify({ pid: 99999999, token: 'old', at: new Date(0).toISOString() }));
+  const lockPath = path.join(root, '.install-node.lock');
+  fs.writeFileSync(lockPath, JSON.stringify({ pid: 99999999, token: 'old' }));
+  fs.utimesSync(lockPath, new Date(0), new Date(0));
   const info = acquireLock(root, 'node', { timeoutMs: 1000 });
   try {
     assert.ok(fs.existsSync(info.path));

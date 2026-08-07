@@ -1,6 +1,14 @@
 const fs = require('fs');
 const path = require('path');
-const { getRuntimeRoot, runtimeConfigPath, isRuntimeReady, loadManifest } = require('./runtime-setup');
+const {
+  getRuntimeRoot,
+  runtimeConfigPath,
+  isRuntimeReady,
+  loadManifest,
+  validateOverrideExecutable,
+} = require('./runtime-setup');
+
+const EXPECTED = { python: '3.11.9', node: '14.21.3' };
 
 function readOverride(kind, env, readFileSync) {
   const file = runtimeConfigPath(env);
@@ -60,7 +68,7 @@ function findNode(root, deps) {
 
 /**
  * Whether a named runtime is ready for use without reinstall.
- * - override: executable exists (caller should have validated version via validateOverride)
+ * - override: version + dependency/health (validateOverrideExecutable)
  * - dev runtime: executable exists under root/runtime/{kind}
  * - user runtime: marker + sha256 + health (isRuntimeReady)
  */
@@ -74,7 +82,12 @@ function isUsableRuntime(root, kind, options = {}) {
   } = options;
 
   const override = readOverride(kind, env, readFileSync);
-  if (override && existsSync(override)) return true;
+  if (override && existsSync(override)) {
+    const check = deps.validateOverrideExecutable || validateOverrideExecutable;
+    const expected = EXPECTED[kind] || '';
+    if (check(kind, override, expected).ok) return true;
+    // Invalid override does not count as usable (main validateOverride should clear it).
+  }
 
   const devExe = path.join(root, 'runtime', kind, kind === 'python' ? 'python.exe' : 'node.exe');
   if (existsSync(devExe)) return true;

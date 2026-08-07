@@ -93,6 +93,36 @@ test('isUsableRuntime prefers override / dev exe without requiring marker', () =
   );
 });
 
+test('isUsableRuntime rejects override that fails health even if path exists', () => {
+  const overridePy = 'C:\\custom\\python.exe';
+  assert.equal(
+    isUsableRuntime('C:/app', 'python', {
+      env: makeEnv(),
+      readFileSync: () => JSON.stringify({ overridePython: overridePy }),
+      existsSync: (p) => p === overridePy,
+      deps: {
+        validateOverrideExecutable: () => ({ ok: false, error: 'no deps' }),
+      },
+    }),
+    false,
+  );
+});
+
+test('isUsableRuntime accepts override when health check passes', () => {
+  const overridePy = 'C:\\custom\\python.exe';
+  assert.equal(
+    isUsableRuntime('C:/app', 'python', {
+      env: makeEnv(),
+      readFileSync: () => JSON.stringify({ overridePython: overridePy }),
+      existsSync: (p) => p === overridePy,
+      deps: {
+        validateOverrideExecutable: () => ({ ok: true, version: '3.11.9' }),
+      },
+    }),
+    true,
+  );
+});
+
 test('isUsableRuntime is false when nothing is present', () => {
   assert.equal(
     isUsableRuntime('C:/app', 'python', {

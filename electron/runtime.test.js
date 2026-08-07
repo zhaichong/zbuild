@@ -39,8 +39,19 @@ test('prefers the per-user runtime root in production', () => {
   const result = resolvePython('C:/app', {
     env: makeEnv(),
     existsSync: (p) => p === userPy,
+    validateOverrideExecutable: healthy,
   });
   assert.deepEqual(result, { exe: userPy, args: [] });
+});
+
+test('unhealthy user runtime is not selected by findPython', () => {
+  const userPy = 'C:\\Users\\test\\AppData\\Local\\zbuild\\runtime\\python\\python.exe';
+  const result = findPython('C:/app', {
+    env: makeEnv(),
+    existsSync: (p) => p === userPy,
+    validateOverrideExecutable: () => ({ ok: false, error: 'broken user install' }),
+  });
+  assert.equal(result, null);
 });
 
 test('dev repository runtime wins over the user root', () => {
@@ -98,6 +109,7 @@ test('findNode looks up the node executable', () => {
   const result = findNode('C:/app', {
     env: makeEnv(),
     existsSync: (p) => p === node,
+    validateOverrideExecutable: () => ({ ok: true, version: '14.21.3' }),
   });
   assert.equal(result, node);
 });

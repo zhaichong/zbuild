@@ -57,13 +57,20 @@ function findExe(root, kind, deps) {
   const override = readOverride(kind, env, readFileSync);
   const exeName = kind === 'python' ? 'python.exe' : 'node.exe';
   const devExe = path.join(root, 'runtime', kind, exeName);
+  const userRoot = getRuntimeRoot(env);
+  const userExe = userRoot ? path.join(userRoot, kind, exeName) : null;
   const expected = EXPECTED[kind] || '';
   const candidates = buildCandidates(root, kind, env, deps);
   return candidates.find((p) => {
     if (!existsSync(p)) return false;
     const norm = path.normalize(p);
-    // Override and dev repo trees must pass version/deps health before use.
-    if ((override && norm === path.normalize(override)) || norm === path.normalize(devExe)) {
+    // Override, dev, and per-user managed trees must pass version/deps health
+    // before spawn — bare exe presence is not enough (aligns with install-skip).
+    const needsHealth =
+      (override && norm === path.normalize(override)) ||
+      norm === path.normalize(devExe) ||
+      (userExe && norm === path.normalize(userExe));
+    if (needsHealth) {
       return !!checkHealth(kind, p, expected).ok;
     }
     return true;

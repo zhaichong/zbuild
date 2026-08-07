@@ -12,6 +12,7 @@ const {
   writeRuntimeConfig,
   validateOverrideExecutable,
 } = require('./runtime-setup');
+const { resolveManagedNodeNpm } = require('./node-tools');
 const {
   MOCK_HTTP_ALLOWED_METHODS,
   DB_ALLOWED_DATABASES,
@@ -860,21 +861,17 @@ function nodeDetectTools(configTools) {
     'D:\\TortoiseSVN\\bin\\svn.exe',
   ]);
 
-  // Node/npm: only managed runtimes (override / dev / per-user). No system Node
-  // and no legacy resources/runtime — those bypass the locked Node 14 pin.
-  const managedNode = findNode(rootDir);
-  tools.node = findExecutable('node', configured.node, [
-    managedNode,
-    path.join(rootDir, 'runtime', 'node', 'node.exe'),
-    path.join(getRuntimeRoot(), 'node', 'node.exe'),
-  ], { allowPathLookup: false });
-  const nodeDir = tools.node ? path.dirname(tools.node) : '';
-  tools.npm = findExecutable('npm', configured.npm, [
-    nodeDir && path.join(nodeDir, 'npm.cmd'),
-    nodeDir && path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(rootDir, 'runtime', 'node', 'npm.cmd'),
-    path.join(getRuntimeRoot(), 'node', 'npm.cmd'),
-  ], { allowPathLookup: false });
+  // Node/npm: health-gated managed finder only (no bare existsSync re-select of
+  // trees that findNode already rejected). System Node is never auto-probed.
+  const managed = resolveManagedNodeNpm({
+    rootDir,
+    env: process.env,
+    configured: { node: configured.node, npm: configured.npm },
+    findNodeFn: findNode,
+    existsSync: fs.existsSync,
+  });
+  tools.node = managed.node;
+  tools.npm = managed.npm;
 
   const resultTools = {};
   for (const [k, v] of Object.entries(tools)) {

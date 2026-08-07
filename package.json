@@ -49,6 +49,7 @@
   "build": {
     "appId": "com.zbuild.app",
     "productName": "智慧病房系统构建与调试工具",
+    "afterPack": "./build/afterPack.js",
     "directories": {
       "output": "release"
     },

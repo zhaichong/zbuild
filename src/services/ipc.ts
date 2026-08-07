@@ -111,9 +111,9 @@ export const ipc = {
       ? window.tool.mockQueryRequest(toPlainObject({ url, method, body }))
       : Promise.reject(new Error('IPC unavailable')),
 
-  testDbConnection: (host: string, port: string | number): Promise<{ success: boolean; message?: string; error?: string }> =>
+  testDbConnection: (payload: { host: string; port: string | number; user?: string; password?: string; database?: string }): Promise<{ success: boolean; message?: string; error?: string }> =>
     window.tool.testDbConnection
-      ? window.tool.testDbConnection(toPlainObject({ host, port }))
+      ? window.tool.testDbConnection(toPlainObject(payload))
       : Promise.resolve({ success: true, message: 'Web模式已默认通过连通性检查' }),
 
   executeDbSql: (payload: { host?: string; port?: string | number; user?: string; password?: string; database?: string; sqlStatements: string[] }): Promise<{ success: boolean; successCount?: number; skippedCount?: number; errorCount?: number; logs?: string; error?: string }> =>

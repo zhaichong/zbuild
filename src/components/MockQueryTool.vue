@@ -159,7 +159,7 @@
                     <svg v-if="testingDbConn" class="w-3 h-3 animate-spin text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    <span>{{ testingDbConn ? '测试中...' : '测试连通性' }}</span>
+                    <span>{{ testingDbConn ? '验证中...' : '测试数据库连接' }}</span>
                   </button>
                   <span class="text-[10px] text-slate-400 font-mono">YHDB</span>
                 </div>
@@ -667,19 +667,36 @@ async function onStartExtract() {
 
 async function onTestDbConnection() {
   if (!dbHost.value.trim()) {
-    store.showToast('请输入目标数据库 Host', 'error')
+    store.showToast('请输入数据库 Host', 'error')
+    return
+  }
+  if (!dbUser.value.trim()) {
+    store.showToast('请输入数据库账户', 'error')
+    return
+  }
+  if (!dbPass.value) {
+    store.showToast('请输入数据库密码后再验证', 'error')
     return
   }
   testingDbConn.value = true
 
   try {
-    const res = await ipc.testDbConnection(dbHost.value.trim(), dbPort.value || 3306)
+    const host = dbHost.value.trim()
+    const port = dbPort.value || 3306
+    const user = dbUser.value.trim()
+    const res = await ipc.testDbConnection({
+      host,
+      port,
+      user,
+      password: dbPass.value,
+      database: 'YHDB',
+    })
     if (res.success) {
-      store.showToast(res.message || `数据库 [${dbHost.value.trim()}:${dbPort.value || 3306}] 网络连通测试成功！`, 'success')
-      formattedResult.value = `[${new Date().toLocaleTimeString()}] ✅ 连通性测试通过！\n目标数据库网络端口 [${dbHost.value.trim()}:${dbPort.value || 3306}] 可正常握手接入。\n账户: ${dbUser.value || 'root'}`
+      store.showToast(res.message || `数据库 [${host}:${port}/YHDB] 认证成功！`, 'success')
+      formattedResult.value = `[${new Date().toLocaleTimeString()}] ✅ 数据库连接成功！\n目标数据库 [${host}:${port}/YHDB] 认证通过，可以执行造数操作。\n账户: ${user}`
     } else {
-      store.showToast(res.error || '连通失败，请检查主机/端口', 'error')
-      formattedResult.value = `[${new Date().toLocaleTimeString()}] ❌ 连通性测试失败！\n原因: ${res.error || '连接超时或被拒绝'}`
+      store.showToast(res.error || '数据库认证失败，请检查 Host、账户和密码', 'error')
+      formattedResult.value = `[${new Date().toLocaleTimeString()}] ❌ 数据库连接失败！\n原因: ${res.error || '请检查数据库地址、账户和密码'}`
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

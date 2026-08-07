@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const os = require('os');
-const net = require('net');
 const { autoUpdater } = require('electron-updater');
 const { resolvePython } = require('./runtime');
 const {
@@ -970,7 +969,9 @@ ipcMain.handle('mini:open-main', async () => {
 });
 ipcMain.handle('mini:dismiss', async () => { miniDismissed = true; closeMiniWindow(); return true; });
 
-// DB Connection Test
+const mysql = require('mysql2/promise');
+
+// MySQL connection and credential test
 ipcMain.handle('db:test-connection', async (_event, payload) => {
   let host;
   try {
@@ -982,47 +983,49 @@ ipcMain.handle('db:test-connection', async (_event, payload) => {
   if (!Number.isFinite(port) || port < 1 || port > 65535) {
     return { success: false, error: '无效的数据库端口' };
   }
+  const user = String((payload && payload.user) || 'root').slice(0, 64);
+  const password = String((payload && payload.password) || '');
+  const database = String((payload && payload.database) || 'YHDB');
+  if (!DB_ALLOWED_DATABASES.has(database)) {
+    return { success: false, error: `不允许的数据库名: ${database}` };
+  }
 
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    let settled = false;
-
-    socket.setTimeout(4000);
-
-    socket.on('connect', () => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve({ success: true, message: `成功连接目标 ${host}:${port}` });
+  let connection = null;
+  try {
+    connection = await mysql.createConnection({
+      host,
+      port,
+      user,
+      password,
+      database,
+      connectTimeout: 5000,
+      multipleStatements: false,
     });
-
-    socket.on('timeout', () => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve({ success: false, error: `连接超时: 无法访问目标 ${host}:${port}` });
-    });
-
-    socket.on('error', (err) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve({ success: false, error: `连接失败 (${err.code || err.message || '网络无法到达'})` });
-    });
-
-    try {
-      socket.connect(port, host);
-    } catch (err) {
-      if (settled) return;
-      settled = true;
-      resolve({ success: false, error: `连接异常: ${err.message}` });
+    await connection.query('SELECT 1');
+    return {
+      success: true,
+      message: `数据库连接成功：${user}@${host}:${port}/${database}`,
+    };
+  } catch (err) {
+    const code = err && err.code;
+    if (code === 'ER_ACCESS_DENIED_ERROR' || code === 'ER_DBACCESS_DENIED_ERROR') {
+      return { success: false, error: '数据库认证失败：用户名或密码错误，或账号没有数据库权限' };
     }
-  });
+    if (code === 'ER_BAD_DB_ERROR') {
+      return { success: false, error: `数据库不存在：${database}` };
+    }
+    if (code === 'ETIMEDOUT' || code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
+      return { success: false, error: `无法连接数据库服务器 ${host}:${port}（${code}）` };
+    }
+    return { success: false, error: `数据库连接失败（${code || 'UNKNOWN'}）` };
+  } finally {
+    if (connection) {
+      try { await connection.end(); } catch (_) {}
+    }
+  }
 });
 
 // Direct MySQL Execute SQL Handler (INSERT-only, private hosts, YHDB)
-const mysql = require('mysql2/promise');
-
 ipcMain.handle('db:execute-sql', async (_event, payload) => {
   let host;
   try {

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('tool', {
 
   // tools
   detectTools: (payload) => ipcRenderer.invoke('tools:detect', parsePayload(payload)),
+  launchTool: (payload) => ipcRenderer.invoke('tools:launch', parsePayload(payload)),
 
   // projects
   discoverProjects: (payload) => ipcRenderer.invoke('projects:discover', parsePayload(payload)),

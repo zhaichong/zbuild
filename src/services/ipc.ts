@@ -29,6 +29,9 @@ export const ipc = {
   detectTools: (config: Partial<AppConfig>): Promise<ToolDetectionResult> =>
     window.tool.detectTools(toPlainObject(config)),
 
+  launchTool: (payload: { pathOrUrl: string; launchType?: string; isCmd?: boolean; cmdWorkDir?: string }): Promise<{ success: boolean; mode: string }> =>
+    window.tool.launchTool(toPlainObject(payload)),
+
   discoverProjects: (rootPath: string, tools: ToolPaths): Promise<ProjectInfo[]> =>
     window.tool.discoverProjects(toPlainObject({ rootPath, tools })),
 

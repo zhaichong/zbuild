@@ -21,7 +21,7 @@
         <button
           type="button"
           class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs"
-          @click="showAddAppModal = true"
+          @click="openAddAppModal"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -83,13 +83,37 @@
                 <span v-else>{{ app.icon }}</span>
               </div>
 
-              <span
-                class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border"
-                :class="app.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'"
-              >
-                <span class="w-1.5 h-1.5 rounded-full" :class="app.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'" />
-                {{ app.statusLabel || (app.status === 'active' ? '就绪' : '扩展') }}
-              </span>
+              <div class="flex items-center gap-1.5">
+                <span
+                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border"
+                  :class="app.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="app.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'" />
+                  {{ app.statusLabel || (app.status === 'active' ? '就绪' : '扩展') }}
+                </span>
+
+                <button
+                  v-if="app.id.startsWith('custom-')"
+                  type="button"
+                  title="编辑此扩展"
+                  class="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors cursor-pointer text-[10px] shrink-0"
+                  @click.stop="openEditAppModal(app)"
+                >
+                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+
+                <button
+                  v-if="app.id.startsWith('custom-')"
+                  type="button"
+                  title="删除此扩展"
+                  class="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer text-[10px] font-bold shrink-0"
+                  @click.stop="deleteApp(app.id)"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <!-- Title & Description -->
@@ -132,7 +156,7 @@
         <!-- Dashed Add Card -->
         <div
           class="card p-5 border-2 border-dashed border-slate-300 hover:border-blue-400 bg-white/70 hover:bg-white transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[200px] group"
-          @click="showAddAppModal = true"
+          @click="openAddAppModal"
         >
           <div class="w-10 h-10 rounded-lg bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 border border-slate-200 flex items-center justify-center mb-2.5 transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,7 +183,7 @@
         <div class="bg-white rounded-xl border border-slate-200 max-w-md w-full p-5 shadow-xl space-y-3 text-slate-800">
           <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
             <h3 class="text-sm font-bold text-slate-900">
-              添加自定义扩展应用
+              {{ isEditing ? '编辑自定义扩展应用' : '添加自定义扩展应用' }}
             </h3>
             <button
               class="text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -190,6 +214,73 @@
                 <option value="扩展应用">扩展应用</option>
               </select>
             </div>
+            
+            <div>
+              <label class="block text-slate-600 mb-1 font-medium">启动方式</label>
+              <div class="flex items-center gap-4 mt-1 mb-2">
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input type="radio" value="url" v-model="newApp.launchType" class="text-blue-600">
+                  <span>网页链接</span>
+                </label>
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input type="radio" value="file" v-model="newApp.launchType" class="text-blue-600">
+                  <span>本地程序/目录</span>
+                </label>
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input type="radio" value="cmd" v-model="newApp.launchType" class="text-blue-600">
+                  <span>命令行脚本</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-600 mb-1 font-medium">
+                {{ newApp.launchType === 'url' ? '网页链接 (URL)' : newApp.launchType === 'file' ? '本地路径 (程序或目录)' : '执行命令 (Cmd/Powershell指令)' }}
+              </label>
+              <div class="flex gap-2">
+                <input
+                  v-model="newApp.pathOrUrl"
+                  type="text"
+                  class="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                  :placeholder="newApp.launchType === 'url' ? '例如: https://github.com' : newApp.launchType === 'file' ? '例如: C:\\Windows\\notepad.exe 或 D:\\build' : '例如: npm run dev 或 ping 127.0.0.1'"
+                >
+                <button
+                  v-if="newApp.launchType === 'file'"
+                  type="button"
+                  class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs border border-slate-300 transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                  @click="chooseFileForPath"
+                >
+                  选择文件
+                </button>
+                <button
+                  v-if="newApp.launchType === 'file'"
+                  type="button"
+                  class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs border border-slate-300 transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                  @click="chooseDirForPath"
+                >
+                  选择目录
+                </button>
+              </div>
+            </div>
+
+            <div v-if="newApp.launchType === 'cmd'">
+              <label class="block text-slate-600 mb-1 font-medium">脚本工作目录 (CMD Cwd - 可选)</label>
+              <div class="flex gap-2">
+                <input
+                  v-model="newApp.cmdWorkDir"
+                  type="text"
+                  class="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                  placeholder="留空则默认为项目根目录..."
+                >
+                <button
+                  type="button"
+                  class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs border border-slate-300 transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                  @click="chooseDirForCwd"
+                >
+                  选择目录
+                </button>
+              </div>
+            </div>
             <div>
               <label class="block text-slate-600 mb-1 font-medium">功能说明描述</label>
               <textarea
@@ -214,7 +305,7 @@
               class="px-3.5 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer shadow-2xs"
               @click="confirmAddApp"
             >
-              添加应用
+              {{ isEditing ? '保存修改' : '添加应用' }}
             </button>
           </div>
         </div>
@@ -226,6 +317,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAppStore } from '@/stores/appStore'
+import { ipc } from '@/services/ipc'
 
 export interface PortalApp {
   id: string
@@ -238,6 +330,9 @@ export interface PortalApp {
   status: 'active' | 'extension'
   statusLabel?: string
   iconBg?: string
+  launchType?: 'url' | 'file' | 'cmd'
+  pathOrUrl?: string
+  cmdWorkDir?: string
 }
 
 const emit = defineEmits<{
@@ -246,6 +341,8 @@ const emit = defineEmits<{
 
 const store = useAppStore()
 const showAddAppModal = ref(false)
+const isEditing = ref(false)
+const editingAppId = ref<string | null>(null)
 const selectedCategory = ref<string>('all')
 const searchQuery = ref<string>('')
 
@@ -261,9 +358,12 @@ const newApp = ref({
   icon: '🛠️',
   category: '扩展应用',
   description: '',
+  launchType: 'url' as 'url' | 'file' | 'cmd',
+  pathOrUrl: '',
+  cmdWorkDir: '',
 })
 
-const apps = ref<PortalApp[]>([
+const defaultApps: PortalApp[] = [
   {
     id: 'zbuild',
     name: '智慧病房系统构建与调试工具',
@@ -288,6 +388,15 @@ const apps = ref<PortalApp[]>([
     statusLabel: '内置',
     iconBg: 'bg-amber-50 text-amber-600 border-amber-100',
   },
+]
+
+// Load custom apps from localStorage
+const storedCustom = localStorage.getItem('zbuild_custom_apps')
+const initialCustomApps = storedCustom ? JSON.parse(storedCustom) : []
+
+const apps = ref<PortalApp[]>([
+  ...defaultApps,
+  ...initialCustomApps
 ])
 
 const filteredApps = computed(() => {
@@ -305,14 +414,101 @@ const filteredApps = computed(() => {
   })
 })
 
-function onLaunchApp(app: PortalApp) {
+async function onLaunchApp(app: PortalApp) {
   if (app.id === 'zbuild') {
     emit('launch-app', 'zbuild')
   } else if (app.id === 'mock-query') {
     emit('launch-app', 'mock-query')
+  } else if (app.id.startsWith('custom-')) {
+    try {
+      store.showToast(`正在拉起「${app.name}」...`, 'info')
+      await ipc.launchTool({
+        pathOrUrl: app.pathOrUrl || '',
+        launchType: app.launchType,
+        cmdWorkDir: app.cmdWorkDir,
+      })
+    } catch (err: any) {
+      store.showToast(`拉起失败: ${err.message}`, 'error')
+    }
   } else {
     store.showToast(`已拉起「${app.name}」扩展环境`, 'info')
   }
+}
+
+async function chooseFileForPath() {
+  try {
+    const file = await ipc.chooseExecutable()
+    if (file) {
+      newApp.value.pathOrUrl = file
+    }
+  } catch (err: any) {
+    store.showToast(`选择文件失败: ${err.message}`, 'error')
+  }
+}
+
+async function chooseDirForPath() {
+  try {
+    const dir = await ipc.chooseDirectory()
+    if (dir) {
+      newApp.value.pathOrUrl = dir
+    }
+  } catch (err: any) {
+    store.showToast(`选择目录失败: ${err.message}`, 'error')
+  }
+}
+
+async function chooseDirForCwd() {
+  try {
+    const dir = await ipc.chooseDirectory()
+    if (dir) {
+      newApp.value.cmdWorkDir = dir
+    }
+  } catch (err: any) {
+    store.showToast(`选择目录失败: ${err.message}`, 'error')
+  }
+}
+
+function saveCustomApps() {
+  const customList = apps.value.filter((app) => app.id.startsWith('custom-'))
+  localStorage.setItem('zbuild_custom_apps', JSON.stringify(customList))
+}
+
+function deleteApp(appId: string) {
+  if (confirm('确认要删除这个自定义扩展应用吗？')) {
+    apps.value = apps.value.filter((app) => app.id !== appId)
+    saveCustomApps()
+    store.showToast('已成功删除该扩展应用', 'success')
+  }
+}
+
+function openAddAppModal() {
+  isEditing.value = false
+  editingAppId.value = null
+  newApp.value = {
+    name: '',
+    icon: '🛠️',
+    category: '扩展应用',
+    description: '',
+    launchType: 'url',
+    pathOrUrl: '',
+    cmdWorkDir: '',
+  }
+  showAddAppModal.value = true
+}
+
+function openEditAppModal(app: PortalApp) {
+  isEditing.value = true
+  editingAppId.value = app.id
+  newApp.value = {
+    name: app.name,
+    icon: app.icon || '🛠️',
+    category: app.category || '扩展应用',
+    description: app.description || '',
+    launchType: app.launchType || 'url',
+    pathOrUrl: app.pathOrUrl || '',
+    cmdWorkDir: app.cmdWorkDir || '',
+  }
+  showAddAppModal.value = true
 }
 
 function confirmAddApp() {
@@ -320,20 +516,68 @@ function confirmAddApp() {
     store.showToast('请输入应用名称', 'warning')
     return
   }
-  apps.value.push({
-    id: 'custom-' + Date.now(),
-    name: newApp.value.name.trim(),
-    description: newApp.value.description.trim() || '自定义扩展工具入口',
-    icon: newApp.value.icon || '🛠️',
-    iconType: 'custom',
-    category: newApp.value.category || '扩展应用',
-    tags: ['自定义扩展', '脚本入口'],
-    status: 'extension',
-    statusLabel: '扩展',
-    iconBg: 'bg-purple-50 text-purple-600 border-purple-100',
-  })
-  newApp.value = { name: '', icon: '🛠️', category: '扩展应用', description: '' }
+  if (!newApp.value.pathOrUrl.trim()) {
+    store.showToast('请输入链接、路径或指令', 'warning')
+    return
+  }
+
+  if (isEditing.value && editingAppId.value) {
+    const idx = apps.value.findIndex((app) => app.id === editingAppId.value)
+    if (idx !== -1) {
+      apps.value[idx] = {
+        ...apps.value[idx],
+        name: newApp.value.name.trim(),
+        description: newApp.value.description.trim() || '自定义扩展工具入口',
+        icon: newApp.value.icon || '🛠️',
+        category: newApp.value.category || '扩展应用',
+        tags: [
+          newApp.value.launchType === 'url' ? '网页链接' : newApp.value.launchType === 'file' ? '本地程序/目录' : '终端命令',
+          '自定义扩展',
+        ],
+        launchType: newApp.value.launchType,
+        pathOrUrl: newApp.value.pathOrUrl.trim(),
+        cmdWorkDir: newApp.value.launchType === 'cmd' ? newApp.value.cmdWorkDir.trim() : undefined,
+      }
+      saveCustomApps()
+      store.showToast('保存修改成功', 'success')
+    }
+  } else {
+    const customApp: PortalApp = {
+      id: 'custom-' + Date.now(),
+      name: newApp.value.name.trim(),
+      description: newApp.value.description.trim() || '自定义扩展工具入口',
+      icon: newApp.value.icon || '🛠️',
+      iconType: 'custom',
+      category: newApp.value.category || '扩展应用',
+      tags: [
+        newApp.value.launchType === 'url' ? '网页链接' : newApp.value.launchType === 'file' ? '本地程序/目录' : '终端命令',
+        '自定义扩展',
+      ],
+      status: 'extension',
+      statusLabel: '扩展',
+      iconBg: 'bg-purple-50 text-purple-600 border-purple-100',
+      launchType: newApp.value.launchType,
+      pathOrUrl: newApp.value.pathOrUrl.trim(),
+      cmdWorkDir: newApp.value.launchType === 'cmd' ? newApp.value.cmdWorkDir.trim() : undefined,
+    }
+
+    apps.value.push(customApp)
+    saveCustomApps()
+    store.showToast('成功添加自定义应用入口', 'success')
+  }
+
+  // Reset
+  newApp.value = {
+    name: '',
+    icon: '🛠️',
+    category: '扩展应用',
+    description: '',
+    launchType: 'url',
+    pathOrUrl: '',
+    cmdWorkDir: '',
+  }
+  isEditing.value = false
+  editingAppId.value = null
   showAddAppModal.value = false
-  store.showToast('成功添加自定义应用入口', 'success')
 }
 </script>

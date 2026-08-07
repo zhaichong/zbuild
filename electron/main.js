@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, screen, Notification } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, screen, Notification, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -894,8 +894,41 @@ ipcMain.handle('dialog:directory', async (_, p) => {
   return r.canceled ? '' : r.filePaths[0];
 });
 ipcMain.handle('dialog:executable', async (_, p) => {
-  const r = await dialog.showOpenDialog(mainWindow, { defaultPath: p || pyRoot, filters: [{ name: 'Executable', extensions: ['exe'] }, { name: 'All files', extensions: ['*'] }], properties: ['openFile'] });
+  const r = await dialog.showOpenDialog(mainWindow, { defaultPath: p || pyRoot, filters: [{ name: 'Executable/Scripts', extensions: ['exe', 'bat', 'cmd'] }, { name: 'All files', extensions: ['*'] }], properties: ['openFile'] });
   return r.canceled ? '' : r.filePaths[0];
+});
+
+ipcMain.handle('tools:launch', async (_, payload) => {
+  const { pathOrUrl, launchType, isCmd, cmdWorkDir } = payload || {};
+  if (!pathOrUrl) throw new Error('路径或命令不能为空');
+
+  const lowerPath = pathOrUrl.trim().toLowerCase();
+  const isUrlType = launchType === 'url' || lowerPath.startsWith('http://') || lowerPath.startsWith('https://');
+  const isCmdType = launchType === 'cmd' || isCmd;
+
+  if (isCmdType) {
+    const { exec } = require('child_process');
+    const cwd = cmdWorkDir || pyRoot;
+    const cmd = `start cmd.exe /k "cd /d ${cwd} && ${pathOrUrl}"`;
+    exec(cmd, (err) => {
+      if (err) {
+        debugLog('Failed to launch command in cmd: ' + err.message);
+      }
+    });
+    return { success: true, mode: 'cmd' };
+  } else if (isUrlType) {
+    await shell.openExternal(pathOrUrl);
+    return { success: true, mode: 'url' };
+  } else {
+    if (!fs.existsSync(pathOrUrl)) {
+      throw new Error(`路径不存在: ${pathOrUrl}`);
+    }
+    const err = await shell.openPath(pathOrUrl);
+    if (err) {
+      throw new Error(`打开路径失败: ${err}`);
+    }
+    return { success: true, mode: 'file' };
+  }
 });
 
 // run lifecycle

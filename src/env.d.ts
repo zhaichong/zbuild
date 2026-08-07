@@ -6,6 +6,7 @@ declare global {
       getConfig: () => Promise<AppConfig>
       saveConfig: (payload: unknown) => Promise<AppConfig>
       detectTools: (payload: unknown) => Promise<ToolDetectionResult>
+      launchTool: (payload: unknown) => Promise<{ success: boolean; mode: string }>
       discoverProjects: (payload: unknown) => Promise<ProjectInfo[]>
       refreshProjectBranches: (payload: unknown) => Promise<ProjectInfo>
       checkLocalChanges: (payload: unknown) => Promise<LocalChangeSummary[]>

@@ -21,7 +21,7 @@
     "verify:pack": "powershell -ExecutionPolicy Bypass -File tools\\verify-packaged-runtime.ps1",
     "release": "node scripts/release.mjs",
     "release:reset": "node scripts/release-reset.mjs",
-    "test:node": "node --test electron/*.test.js",
+    "test:node": "node --test",
     "test:py": "py -m unittest discover -s scripts/tests -v"
   },
   "dependencies": {

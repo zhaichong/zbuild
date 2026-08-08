@@ -1,6 +1,6 @@
 {
   "name": "zbuild",
-  "version": "2.0.7",
+  "version": "1.0.0",
   "private": true,
   "description": "智慧病房系统构建与调试工具 — Vue 3 + Vite + Electron",
   "main": "electron/main.js",

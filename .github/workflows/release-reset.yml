@@ -1,0 +1,40 @@
+name: Release Reset
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clean Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "正在清理所有 GitHub Releases..."
+          releases=$(gh release list --limit 1000 --json tagName -q '.[].tagName')
+          for tag in $releases; do
+            echo "删除 Release: $tag"
+            gh release delete "$tag" --yes --cleanup-tag || true
+          done
+
+      - name: Clean Actions Workflow Runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "正在清理所有 GitHub Actions 运行历史..."
+          CURRENT_RUN_ID="${{ github.run_id }}"
+          runs=$(gh run list --limit 1000 --json databaseId -q '.[].databaseId')
+          for run_id in $runs; do
+            if [ "$run_id" != "$CURRENT_RUN_ID" ]; then
+              echo "删除 Action Run #$run_id"
+              gh run delete "$run_id" || true
+            fi
+          done
+          echo "所有发布与 Actions 历史清理完成！"

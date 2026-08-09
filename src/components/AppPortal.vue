@@ -7,7 +7,7 @@
         <div class="space-y-1">
           <div class="flex items-center gap-2">
             <span class="text-base font-bold text-slate-900">开发者中心与应用工作台</span>
-            <span class="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-mono font-bold">v2.0</span>
+            <span class="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-mono font-bold">{{ appVersion }}</span>
             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-medium">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               内部服务正常
@@ -340,6 +340,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useAppStore()
+const appVersion = computed(() => (ipc.version ? `v${ipc.version}` : 'v1.0.1'))
 const showAddAppModal = ref(false)
 const isEditing = ref(false)
 const editingAppId = ref<string | null>(null)

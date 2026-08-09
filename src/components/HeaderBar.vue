@@ -1,9 +1,9 @@
 <template>
   <header class="app-header">
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2.5 min-w-0 shrink-0">
       <!-- App Hub Launcher / Return Button -->
       <button
-        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none"
+        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none shrink-0 whitespace-nowrap"
         :style="activeApp === 'portal' ? 'background: #fff; color: #1e40af;' : 'background: rgba(255,255,255,0.18); color: #fff;'"
         :title="activeApp === 'portal' ? '当前在开发者中心' : '返回开发者中心'"
         @click="emit('switch-app', activeApp === 'portal' ? 'zbuild' : 'portal')"
@@ -19,25 +19,29 @@
         <span>{{ activeApp === 'portal' ? '开发者中心' : '返回' }}</span>
       </button>
 
-      <span class="text-white/30 text-xs">/</span>
+      <span class="text-white/30 text-xs shrink-0">/</span>
 
-      <h1 class="text-sm font-semibold tracking-wide flex items-center gap-2">
+      <h1 class="text-xs sm:text-sm font-semibold tracking-wide flex items-center gap-2 shrink-0 whitespace-nowrap">
         <span v-if="activeApp === 'mock-query'">终端数据链路提取控制台</span>
         <span v-else-if="activeApp === 'portal'">开发者中心</span>
-        <span v-else>智慧病房系统构建与调试工具</span>
+        <span v-else>智慧病房构建工具</span>
       </h1>
 
-      <div v-if="activeApp === 'zbuild'" class="mode-switch">
+      <div v-if="activeApp === 'zbuild'" class="mode-switch shrink-0">
         <button
           v-for="m in modes"
           :key="m.value"
-          class="mode-btn"
+          class="mode-btn whitespace-nowrap"
           :class="{ active: store.mode === m.value }"
           @click="emit('set-mode', m.value)"
         >
           {{ m.label }}
         </button>
       </div>
+
+      <div v-if="activeApp === 'zbuild'" class="h-4 w-px bg-white/20 my-auto mx-0.5 shrink-0" />
+
+      <TemplateSelector v-if="activeApp === 'zbuild'" class="shrink-0" />
     </div>
     <div class="flex items-center gap-3">
       <!-- Tool status indicators (only in zbuild mode) -->
@@ -141,6 +145,7 @@
 
       <!-- Settings button -->
       <button
+        v-if="activeApp === 'zbuild'"
         class="w-[34px] h-[34px] rounded-lg flex items-center justify-center transition-colors"
         style="background: rgba(255,255,255,.12); color: #fff; border: none; cursor: pointer;"
         title="设置"
@@ -175,6 +180,7 @@ import { computed, ref, toRaw } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import type { UploadMode } from '@/types'
+import TemplateSelector from '@/components/TemplateSelector.vue'
 
 withDefaults(defineProps<{
   activeApp?: string

@@ -32,7 +32,6 @@
       <!-- Left: Main scrollable column -->
       <div class="main-col">
         <div class="space-y-3">
-          <TemplateSelector />
           <CommandForm />
           <ProjectTable />
           <ActionBar
@@ -217,7 +216,6 @@ import { ipc } from '@/services/ipc'
 import HeaderBar from '@/components/HeaderBar.vue'
 import AppPortal from '@/components/AppPortal.vue'
 import MockQueryTool from '@/components/MockQueryTool.vue'
-import TemplateSelector from '@/components/TemplateSelector.vue'
 import CommandForm from '@/components/CommandForm.vue'
 import ProjectTable from '@/components/ProjectTable.vue'
 import PipelineView from '@/components/PipelineView.vue'

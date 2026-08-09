@@ -62,6 +62,7 @@
       "references/project-defaults.json",
       "references/template_test_order.xlsx",
       "references/全部升级说明.docx",
+      "assets/**/*",
       "!**/__pycache__/**",
       "!**/*.pyc"
     ],
@@ -69,6 +70,7 @@
       "runtime/**/*"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",

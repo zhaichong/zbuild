@@ -24,6 +24,7 @@ export const useAppStore = defineStore('app', () => {
   const projectStates = ref<Record<string, ProjectRunState>>({})
   const logs = ref<LogEntry[]>([])
   const templates = ref<TaskTemplate[]>([])
+  const activeTemplateId = ref<string>('')
   const toasts = ref<ToastInfo[]>([])
 
   const mode = computed<UploadMode>(() => {
@@ -129,6 +130,7 @@ export const useAppStore = defineStore('app', () => {
     projectStates,
     logs,
     templates,
+    activeTemplateId,
     mode,
     selectedCount,
     successCount,

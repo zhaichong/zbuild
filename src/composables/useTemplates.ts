@@ -11,7 +11,10 @@ export async function loadTemplates(): Promise<TaskTemplate[]> {
 
 export async function applyTemplate(templateId: string): Promise<void> {
   const store = useAppStore()
-  if (!templateId) return
+  if (!templateId) {
+    store.activeTemplateId = ''
+    return
+  }
   const template = await ipc.getTemplate(templateId)
 
   if (template && template.config) {
@@ -26,8 +29,10 @@ export async function applyTemplate(templateId: string): Promise<void> {
         },
       }
     }
+    let count = 0
     if (Array.isArray(cfg.selectedProjects)) {
       store.selectedProjects = new Set(cfg.selectedProjects)
+      count = cfg.selectedProjects.length
     }
     if (cfg.projectBranches && typeof cfg.projectBranches === 'object') {
       store.projectBranches = { ...store.projectBranches, ...cfg.projectBranches }
@@ -41,13 +46,17 @@ export async function applyTemplate(templateId: string): Promise<void> {
     if (cfg.projectBuildCommands && typeof cfg.projectBuildCommands === 'object') {
       store.projectBuildCommands = { ...store.projectBuildCommands, ...cfg.projectBuildCommands }
     }
-    store.showToast(`已应用模板「${template.name}」`, 'info')
+
+    store.activeTemplateId = templateId
+    const modeName = store.mode === 'svn' ? 'SVN提测' : store.mode === 'server' ? '服务器部署' : '本地输出'
+    store.showToast(`已成功载入模板「${template.name}」(${modeName}模式，已自动勾选 ${count} 个项目)`, 'success', 4000)
   }
 }
 
 export async function saveCurrentAsTemplate(
   name: string,
   description?: string,
+  id?: string,
 ): Promise<TaskTemplate> {
   const store = useAppStore()
   if (!store.config) throw new Error('未加载配置')
@@ -62,13 +71,14 @@ export async function saveCurrentAsTemplate(
   }
 
   const template = await ipc.saveTemplate({
+    id,
     name,
     description: description || '',
     config: fullConfig as any,
   })
 
   await loadTemplates()
-  store.showToast(`模板「${name}」保存成功`, 'success')
+  store.showToast(id ? `模板「${name}」更新成功` : `模板「${name}」保存成功`, 'success')
   return template
 }
 

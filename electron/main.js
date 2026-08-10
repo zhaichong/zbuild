@@ -145,7 +145,18 @@ ipcMain.handle('update:check', async () => {
     await autoUpdater.checkForUpdates();
     return { state: 'checking' };
   } catch (err) {
-    return { state: 'error', message: (err && err.message) || String(err) };
+    const msg = (err && err.message) || String(err);
+    if (msg.includes('ERR_NETWORK_CHANGED')) {
+      debugLog('updater: ERR_NETWORK_CHANGED detected, retrying after 1s...');
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await autoUpdater.checkForUpdates();
+        return { state: 'checking' };
+      } catch (retryErr) {
+        return { state: 'error', message: (retryErr && retryErr.message) || String(retryErr) };
+      }
+    }
+    return { state: 'error', message: msg };
   }
 });
 ipcMain.handle('update:download', async () => {

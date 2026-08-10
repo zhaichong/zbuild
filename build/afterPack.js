@@ -36,6 +36,34 @@ function walkDirs(start, name) {
   return result
 }
 
+function pruneNpmDocs(root, track, size) {
+  const docDirs = new Set(['benchmark', 'benchmarks', 'doc', 'docs', 'example', 'examples', 'man', 'test', 'tests'])
+  const docFiles = /^(authors|changelog|contributing|history|readme|todo)(\..*)?$/i
+  let removedBytes = 0
+  const walk = (dir) => {
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (docDirs.has(entry.name.toLowerCase())) {
+          removedBytes += size(full)
+          rmDir(full, root)
+        } else {
+          walk(full)
+        }
+      } else if (entry.isFile() && docFiles.test(entry.name)) {
+        try {
+          removedBytes += fs.statSync(full).size
+          fs.unlinkSync(full)
+        } catch {}
+      }
+    }
+  }
+  walk(root)
+  track(removedBytes, 'npm nested documentation')
+}
+
 module.exports = async function (context) {
   const runtime = path.join(context.appOutDir, 'resources', 'runtime')
   const log = (msg) => console.log(`[prune] ${msg}`)
@@ -114,12 +142,13 @@ module.exports = async function (context) {
           track(dirSize(subPath), `npm ${sub}`)
           rmDir(subPath, runtime)
         }
-        for (const f of ['AUTHORS', 'CHANGELOG.md', 'CONTRIBUTING.md', 'README.md', 'LICENSE', 'Makefile', 'make.bat', 'configure', '.travis.yml', '.npmignore', '.npmrc', '.mailmap', '.licensee.json']) {
+        for (const f of ['AUTHORS', 'CHANGELOG.md', 'CONTRIBUTING.md', 'README.md', 'Makefile', 'make.bat', 'configure', '.travis.yml', '.npmignore', '.npmrc', '.mailmap', '.licensee.json']) {
           const fp = path.join(npmRoot, f)
           if (fs.existsSync(fp)) {
             try { track(fs.statSync(fp).size, `npm ${f}`); fs.unlinkSync(fp) } catch {}
           }
         }
+        pruneNpmDocs(npmRoot, track, dirSize)
       }
     }
   }

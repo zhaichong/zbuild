@@ -108,7 +108,7 @@
         <!-- error -->
         <template v-else-if="status.state === 'error'">
           <div class="rounded-xl bg-red-50 border border-red-200 p-4 text-xs text-red-700 leading-relaxed break-words">
-            {{ status.message || '检查更新失败，请稍后重试' }}
+            {{ errorMessageFormatted }}
           </div>
         </template>
       </div>
@@ -164,10 +164,16 @@
         </template>
         <template v-else-if="status.state === 'error'">
           <button
-            class="px-6 py-2 text-sm rounded-xl bg-primary text-white hover:opacity-90 transition-colors font-medium"
+            class="px-4 py-2 text-sm rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
             @click="dismiss"
           >
-            确定
+            取消
+          </button>
+          <button
+            class="px-6 py-2 text-sm rounded-xl bg-primary text-white hover:opacity-90 transition-colors font-medium shadow-md shadow-primary/20"
+            @click="retry"
+          >
+            重试
           </button>
         </template>
       </div>
@@ -207,6 +213,23 @@ const downloadSpeedText = computed(() => {
   return `${Math.round(bps)} B/s`
 })
 
+const errorMessageFormatted = computed(() => {
+  const msg = status.value.message || ''
+  if (msg.includes('ERR_NETWORK_CHANGED')) {
+    return '网络连接已变更（如切换了网络/VPN），导致检查更新中断。请确认网络就绪后点击“重试”。'
+  }
+  if (msg.includes('ERR_INTERNET_DISCONNECTED')) {
+    return '当前网络已断开，请检查网络连接后重试。'
+  }
+  if (msg.includes('ERR_CONNECTION_TIMED_OUT') || msg.includes('ETIMEDOUT')) {
+    return '连接服务器超时，请检查网络或代理设置。'
+  }
+  if (msg.includes('ERR_NAME_NOT_RESOLVED')) {
+    return '域名解析失败，请检查 DNS 或代理设置。'
+  }
+  return msg || '检查更新失败，请稍后重试'
+})
+
 function handleStatus(next: UpdateStatus) {
   status.value = next
   if (next.state === 'available' || next.state === 'downloaded' || next.state === 'error') {
@@ -241,6 +264,14 @@ async function install() {
 
 function check() {
   return ipc.checkForUpdates()
+}
+
+async function retry() {
+  status.value = { state: 'checking' }
+  const res = await check()
+  if (res && res.state === 'error') {
+    status.value = res
+  }
 }
 
 onMounted(() => {

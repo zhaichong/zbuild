@@ -284,6 +284,13 @@
               <span class="text-text-3 block text-[11px]">包含勾选项目</span>
               <span class="font-bold text-text-1">{{ getProjectCount(selectedTemplate) }} 个</span>
             </div>
+            <div
+              v-if="getHospitalName(selectedTemplate)"
+              class="p-2.5 rounded-xl bg-bg-base border border-border-light col-span-2"
+            >
+              <span class="text-text-3 block text-[11px]">医院名称</span>
+              <span class="font-bold text-text-1">{{ getHospitalName(selectedTemplate) }}</span>
+            </div>
           </div>
 
           <!-- Project List -->

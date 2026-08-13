@@ -561,6 +561,11 @@ const defaultConfig: AppConfig = {
 }
 
 onMounted(async () => {
+  if (!window.tool) {
+    store.config = JSON.parse(JSON.stringify(defaultConfig))
+    return
+  }
+
   try {
     try {
       store.config = await ipc.getConfig()

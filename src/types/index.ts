@@ -40,6 +40,7 @@ export interface AppConfig {
   serverUploadPaths: Record<string, string>
   form: FormConfig
   enableDeskPet?: boolean
+  deskPetStyle?: 'pixel' | 'blob'
   deskPetAutoHideDelay?: number
 }
 
@@ -146,6 +147,7 @@ export interface MiniStatus {
   stepTotal?: number
   percent?: number
   latestLog?: string
+  petStyle?: 'pixel' | 'blob'
   message?: string
 }
 

@@ -139,31 +139,40 @@ function initUpdater() {
   debugLog('updater initialized, renderer will trigger check');
 }
 
+function isTransientNetworkError(err) {
+  const msg = (err && err.message) || String(err);
+  return msg.includes('ERR_NETWORK_CHANGED') ||
+         msg.includes('ERR_CONNECTION_RESET') ||
+         msg.includes('ETIMEDOUT');
+}
+
+async function withNetworkRetry(fn, label) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isTransientNetworkError(err)) {
+      debugLog(`updater: ${label} network glitch detected (${err.message || err}), retrying after 1s...`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return await fn();
+    }
+    throw err;
+  }
+}
+
 ipcMain.handle('update:check', async () => {
   if (!app.isPackaged) return { state: 'not-available' };
   try {
-    await autoUpdater.checkForUpdates();
+    await withNetworkRetry(() => autoUpdater.checkForUpdates(), 'checkForUpdates');
     return { state: 'checking' };
   } catch (err) {
-    const msg = (err && err.message) || String(err);
-    if (msg.includes('ERR_NETWORK_CHANGED')) {
-      debugLog('updater: ERR_NETWORK_CHANGED detected, retrying after 1s...');
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        await autoUpdater.checkForUpdates();
-        return { state: 'checking' };
-      } catch (retryErr) {
-        return { state: 'error', message: (retryErr && retryErr.message) || String(retryErr) };
-      }
-    }
-    return { state: 'error', message: msg };
+    return { state: 'error', message: (err && err.message) || String(err) };
   }
 });
 ipcMain.handle('update:download', async () => {
   if (!app.isPackaged) return { state: 'not-available' };
   try {
     updateDownloadInProgress = true;
-    await autoUpdater.downloadUpdate();
+    await withNetworkRetry(() => autoUpdater.downloadUpdate(), 'downloadUpdate');
     updateDownloadInProgress = false;
     return { state: 'downloaded' };
   } catch (err) {
@@ -529,6 +538,8 @@ function pyConfigToFrontend(py) {
     uploadToServer: py.mode === 'server',
     localOutputDir: py.local_output || '',
     serverUploadPaths: py.server_upload_paths || {},
+    enableDeskPet: py.enable_desk_pet !== false,
+    deskPetStyle: py.desk_pet_style === 'blob' ? 'blob' : 'pixel',
     form: {
       hospitalName: py.hospital_name || '',
       orderNo: py.order_no || '',
@@ -591,6 +602,8 @@ function frontendConfigToPy(fe) {
     order_no: form.orderNo || '',
     order_notes: form.orderNotes || '',
     server_upload_paths: fe.serverUploadPaths || {},
+    enable_desk_pet: fe.enableDeskPet !== false,
+    desk_pet_style: fe.deskPetStyle === 'blob' ? 'blob' : 'pixel',
     projects: [],
   };
 }
@@ -1054,6 +1067,7 @@ ipcMain.handle('run:start', async (_, payload) => {
     completed: 0,
     successCount: 0,
     failureCount: 0,
+    petStyle: payload.config?.deskPetStyle === 'blob' ? 'blob' : 'pixel',
     currentProject: '',
     currentStep: '正在准备打包环境...',
     message: '正在准备打包任务'

@@ -3,7 +3,7 @@
     <div class="max-w-6xl mx-auto space-y-4">
       
       <!-- Top Banner / Header Card (Matches Tool Design System) -->
-      <div class="card p-5 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 border-l-blue-600 shadow-2xs">
+      <div class="card p-5 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
         <div class="space-y-1">
           <div class="flex items-center gap-2">
             <span class="text-base font-bold text-slate-900">开发者中心与应用工作台</span>
@@ -54,8 +54,10 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
+            id="portal-app-search"
             v-model="searchQuery"
             type="text"
+            name="portal-app-search"
             placeholder="搜索工具或扩展应用..."
             class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:border-blue-500 transition-all font-sans shadow-2xs"
           >
@@ -68,8 +70,7 @@
         <div
           v-for="app in filteredApps"
           :key="app.id"
-          class="card p-5 bg-white hover:border-blue-400 transition-all duration-200 flex flex-col justify-between group cursor-pointer hover:shadow-md"
-          @click="onLaunchApp(app)"
+          class="card p-5 bg-white hover:border-blue-400 transition-colors duration-200 flex flex-col justify-between group"
         >
           <div>
             <!-- Top Icon & Status -->
@@ -153,6 +154,26 @@
           </div>
         </div>
 
+        <div
+          v-if="filteredApps.length === 0"
+          class="card col-span-full min-h-[240px] flex flex-col items-center justify-center text-center p-8"
+        >
+          <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20l-4.5-4.5m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <h2 class="text-sm font-bold text-slate-900">未找到匹配的工具</h2>
+          <p class="mt-1 text-xs text-slate-500">请调整关键词或切换工具分类后重试。</p>
+          <button
+            type="button"
+            class="mt-4 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+            @click="clearFilters"
+          >
+            清除筛选
+          </button>
+        </div>
+
         <!-- Dashed Add Card -->
         <div
           class="card p-5 border-2 border-dashed border-slate-300 hover:border-blue-400 bg-white/70 hover:bg-white transition-all flex flex-col items-center justify-center text-center cursor-pointer min-h-[200px] group"
@@ -199,6 +220,7 @@
               <input
                 v-model="newApp.name"
                 type="text"
+                aria-label="应用名称"
                 class="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
                 placeholder="例如: 接口 Mock 抓包工具"
               >
@@ -207,6 +229,7 @@
               <label class="block text-slate-600 mb-1 font-medium">应用类别</label>
               <select
                 v-model="newApp.category"
+                aria-label="应用类别"
                 class="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
               >
                 <option value="核心构建">核心构建</option>
@@ -241,6 +264,7 @@
                 <input
                   v-model="newApp.pathOrUrl"
                   type="text"
+                  aria-label="启动方式的地址、路径或命令"
                   class="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
                   :placeholder="newApp.launchType === 'url' ? '例如: https://github.com' : newApp.launchType === 'file' ? '例如: C:\\Windows\\notepad.exe 或 D:\\build' : '例如: npm run dev 或 ping 127.0.0.1'"
                 >
@@ -269,6 +293,7 @@
                 <input
                   v-model="newApp.cmdWorkDir"
                   type="text"
+                  aria-label="命令工作目录"
                   class="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
                   placeholder="留空则默认为项目根目录..."
                 >
@@ -286,6 +311,7 @@
               <textarea
                 v-model="newApp.description"
                 rows="2"
+                aria-label="功能说明描述"
                 class="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
                 placeholder="简要说明该扩展工具的功用..."
               />
@@ -414,6 +440,11 @@ const filteredApps = computed(() => {
     return matchesCategory && matchesSearch
   })
 })
+
+function clearFilters() {
+  selectedCategory.value = 'all'
+  searchQuery.value = ''
+}
 
 async function onLaunchApp(app: PortalApp) {
   if (app.id === 'zbuild') {

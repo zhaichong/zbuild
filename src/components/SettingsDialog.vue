@@ -613,6 +613,47 @@
                   <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
                 </label>
               </div>
+              <fieldset class="space-y-2" :disabled="!deskPetEnabled">
+                <legend class="text-xs font-semibold text-text-1">桌宠外观</legend>
+                <div class="grid grid-cols-2 gap-2">
+                  <label
+                    class="cursor-pointer rounded-lg border px-3 py-2.5 transition-colors"
+                    :class="deskPetStyle === 'pixel' ? 'border-primary bg-primary-light' : 'border-border bg-white hover:bg-slate-50'"
+                  >
+                    <input
+                      v-model="deskPetStyle"
+                      value="pixel"
+                      type="radio"
+                      class="h-3.5 w-3.5 shrink-0 accent-primary"
+                    >
+                    <span class="flex items-center gap-2">
+                      <span class="text-base leading-none" aria-hidden="true">🕺</span>
+                      <span>
+                        <span class="block text-xs font-semibold text-text-1">像素助手</span>
+                        <span class="block text-[11px] text-text-3 mt-0.5">经典动效</span>
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    class="cursor-pointer rounded-lg border px-3 py-2.5 transition-colors"
+                    :class="deskPetStyle === 'blob' ? 'border-primary bg-primary-light' : 'border-border bg-white hover:bg-slate-50'"
+                  >
+                    <input
+                      v-model="deskPetStyle"
+                      value="blob"
+                      type="radio"
+                      class="h-3.5 w-3.5 shrink-0 accent-primary"
+                    >
+                    <span class="flex items-center gap-2">
+                      <span class="inline-flex h-4 w-4 items-center justify-center rounded-[45%] bg-slate-950 text-[8px] tracking-[-2px] text-white" aria-hidden="true">••</span>
+                      <span>
+                        <span class="block text-xs font-semibold text-text-1">黑团子</span>
+                        <span class="block text-[11px] text-text-3 mt-0.5">安静陪伴</span>
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
             </div>
           </section>
         </div>
@@ -679,6 +720,17 @@ const deskPetEnabled = computed({
   set(val: boolean) {
     if (store.config) {
       store.config.enableDeskPet = val
+    }
+  },
+})
+
+const deskPetStyle = computed({
+  get() {
+    return store.config?.deskPetStyle === 'blob' ? 'blob' : 'pixel'
+  },
+  set(val: 'pixel' | 'blob') {
+    if (store.config) {
+      store.config.deskPetStyle = val
     }
   },
 })

@@ -5,7 +5,9 @@ import glob
 import hashlib
 import logging
 import os
+import re
 import subprocess
+import tarfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -16,6 +18,9 @@ from tools.exec import run_process, run_process_stream
 from git.branches import safe_git
 
 logger = logging.getLogger(__name__)
+
+_TAR_MISSING_PATH = re.compile(r"^tar: .+: Cannot stat: No such file or directory$")
+_TAR_FAILURE_SUMMARY = "tar: Exiting with failure status due to previous errors"
 
 
 def get_commit_sha(project_path: Union[Path, str]) -> str:
@@ -174,6 +179,17 @@ def build_project(
             except Exception:
                 logger.warning("Failed to restore %s line endings", script_file_to_restore)
 
+    if result.returncode != 0:
+        artifact = latest_changed_artifact(project, pre_snapshot, candidate_paths=artifact_paths)
+        if not artifact:
+            artifact = _fresh_artifact(project, build_start, candidate_paths=artifact_paths)
+        if is_ignorable_tar_stat_failure(result, artifact):
+            logger.info(
+                "Ignoring known non-fatal tar missing-path error; verified artifact: %s",
+                artifact,
+            )
+            return result, artifact
+
     # A non-zero build is never publishable, even if it left a partial archive.
     if result.returncode != 0:
         raise BuildError(
@@ -199,6 +215,30 @@ def build_project(
         )
 
     return result, artifact
+
+
+def is_ignorable_tar_stat_failure(
+    result: subprocess.CompletedProcess, artifact: Optional[Path]
+) -> bool:
+    """Accept one legacy tar missing-path error only after archive validation."""
+    if result.returncode == 0 or not artifact or not artifact.is_file():
+        return False
+
+    tar_lines = [
+        line.strip()
+        for line in (result.stdout or "").splitlines()
+        if line.lstrip().startswith("tar:")
+    ]
+    if len(tar_lines) != 2 or not _TAR_MISSING_PATH.fullmatch(tar_lines[0]):
+        return False
+    if tar_lines[1] != _TAR_FAILURE_SUMMARY:
+        return False
+
+    try:
+        with tarfile.open(artifact, "r:*") as archive:
+            return bool(archive.getmembers())
+    except (OSError, tarfile.TarError):
+        return False
 
 
 def _fresh_artifact(

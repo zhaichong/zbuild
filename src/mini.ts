@@ -24,7 +24,8 @@ function updateUI(status: MiniStatus) {
 
   // Update pet sprite animation state
   if (pixelPetEl && !isWaveInteracting) {
-    pixelPetEl.className = `pixel-pet state-${status.state || 'idle'}`
+    const petStyle = status.petStyle === 'blob' ? 'blob-pet' : ''
+    pixelPetEl.className = `pixel-pet ${petStyle} state-${status.state || 'idle'}`
   }
 
   // 1. Project Badge & Status Pill
@@ -119,7 +120,8 @@ if (mascotBoxEl) {
     if (!pixelPetEl || isWaveInteracting) return
     isWaveInteracting = true
     const prevClass = pixelPetEl.className
-    pixelPetEl.className = 'pixel-pet state-wave'
+    const petStyle = pixelPetEl.classList.contains('blob-pet') ? 'blob-pet' : ''
+    pixelPetEl.className = `pixel-pet ${petStyle} state-wave`
     setTimeout(() => {
       isWaveInteracting = false
       pixelPetEl.className = prevClass

@@ -49,8 +49,8 @@
     </div>
 
     <!-- Companion Status Banner -->
-    <div class="px-3 py-2 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border-b border-slate-100 flex items-center gap-3 flex-shrink-0">
-      <PixelPet :state="petState" size="mini" tooltip="点击与桌宠互动" />
+    <div class="px-3 py-1.5 bg-slate-50/80 border-b border-slate-200/80 flex items-center gap-2.5 flex-shrink-0">
+      <PixelPet :state="petState" :variant="deskPetStyle" size="mini" tooltip="点击与桌宠互动" />
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
           <span class="text-[11px] font-bold text-slate-800">{{ petBannerTitle }}</span>
@@ -191,7 +191,7 @@
     <!-- Pixel Mascot Character -->
     <div class="mb-3 relative group">
       <div class="w-20 h-24 flex items-end justify-center">
-        <PixelPet state="idle" size="md" tooltip="点击与桌宠打招呼！" />
+        <PixelPet state="idle" :variant="deskPetStyle" size="md" tooltip="点击与桌宠打招呼！" />
       </div>
       <!-- Soft Shadow Base -->
       <div class="w-16 h-2 bg-slate-300/50 rounded-full mx-auto -mt-1 blur-[1px]"></div>
@@ -237,6 +237,10 @@ const petState = computed<'idle' | 'running' | 'complete' | 'error'>(() => {
   }
   return 'idle'
 })
+
+const deskPetStyle = computed<'pixel' | 'blob'>(() =>
+  store.config?.deskPetStyle === 'blob' ? 'blob' : 'pixel'
+)
 
 const petBannerTitle = computed(() => {
   if (store.running) return '桌宠正在监工打包中...'

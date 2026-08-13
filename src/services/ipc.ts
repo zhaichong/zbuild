@@ -125,20 +125,20 @@ export const ipc = {
       : Promise.resolve({ success: false, error: 'Web浏览器模式暂不支持直连 MySQL，请下载运行 Electron 客户端或复制 SQL 执行' }),
 
   checkForUpdates: (): Promise<UpdateStatus> =>
-    window.tool.checkForUpdates
+    window.tool?.checkForUpdates
       ? window.tool.checkForUpdates()
       : Promise.resolve({ state: 'not-available' }),
 
   downloadUpdate: (): Promise<UpdateStatus> =>
-    window.tool.downloadUpdate
+    window.tool?.downloadUpdate
       ? window.tool.downloadUpdate()
       : Promise.resolve({ state: 'error', message: '更新接口不可用' }),
 
   installUpdate: (): Promise<boolean> =>
-    window.tool.installUpdate ? window.tool.installUpdate() : Promise.resolve(false),
+    window.tool?.installUpdate ? window.tool.installUpdate() : Promise.resolve(false),
 
   onUpdateStatus: (handler: (status: UpdateStatus) => void): (() => void) => {
-    if (!window.tool.onUpdateStatus) return () => {}
+    if (!window.tool?.onUpdateStatus) return () => {}
     return window.tool.onUpdateStatus(handler)
   },
 }

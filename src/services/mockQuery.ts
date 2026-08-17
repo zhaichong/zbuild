@@ -10,6 +10,12 @@ export interface DeptItem {
   deptId: string
   deptName?: string
   deptKey?: string
+  parentId?: string
+  deptType?: string
+  level?: number
+  pathNames?: string[]
+  fullPathName?: string
+  children?: DeptItem[]
   [key: string]: unknown
 }
 
@@ -110,15 +116,159 @@ export async function fetchOrgs(baseUrl: string): Promise<OrgItem[]> {
   return []
 }
 
+/**
+ * 递归解析并标准化部门/护理单元树
+ */
+export function parseDeptTree(rawList: unknown[]): DeptItem[] {
+  if (!Array.isArray(rawList) || rawList.length === 0) return []
+
+  const extractChildren = (item: Record<string, unknown>): unknown[] => {
+    if (Array.isArray(item.children)) return item.children
+    if (Array.isArray(item.childList)) return item.childList
+    if (Array.isArray(item.childs)) return item.childs
+    if (Array.isArray(item.subDepts)) return item.subDepts
+    if (Array.isArray(item.depts)) return item.depts
+    if (Array.isArray(item.nodes)) return item.nodes
+    if (Array.isArray(item.treeList)) return item.treeList
+    return []
+  }
+
+  const hasNestedChildren = rawList.some(
+    (item) => item && typeof item === 'object' && extractChildren(item as Record<string, unknown>).length > 0,
+  )
+
+  if (!hasNestedChildren) {
+    const hasParentField = rawList.some(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        ('parentId' in item || 'pId' in item || 'parentDeptId' in item || 'pid' in item),
+    )
+
+    if (hasParentField) {
+      return buildTreeFromFlatList(rawList as Record<string, unknown>[])
+    }
+  }
+
+  function normalizeNode(raw: Record<string, unknown>, level = 1, parentPath: string[] = []): DeptItem {
+    const deptId = String(raw.deptId || raw.id || '')
+    const deptName = String(raw.deptName || raw.name || raw.title || deptId)
+    const deptKey = String(raw.deptKey || raw.key || raw.code || deptId)
+    const currentPath = [...parentPath, deptName]
+    const rawKids = extractChildren(raw)
+
+    const node: DeptItem = {
+      ...raw,
+      deptId,
+      deptName,
+      deptKey,
+      level,
+      pathNames: currentPath,
+      fullPathName: currentPath.join(' / '),
+      children: [],
+    }
+
+    if (rawKids.length > 0) {
+      node.children = rawKids
+        .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+        .map((c) => normalizeNode(c, level + 1, currentPath))
+    }
+
+    return node
+  }
+
+  return rawList
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item) => normalizeNode(item, 1, []))
+}
+
+function buildTreeFromFlatList(flatList: Record<string, unknown>[]): DeptItem[] {
+  const nodeMap = new Map<string, DeptItem>()
+  const roots: DeptItem[] = []
+
+  for (const raw of flatList) {
+    const deptId = String(raw.deptId || raw.id || '')
+    if (!deptId) continue
+    const deptName = String(raw.deptName || raw.name || raw.title || deptId)
+    const deptKey = String(raw.deptKey || raw.key || raw.code || deptId)
+    const parentId = String(raw.parentId || raw.pId || raw.parentDeptId || raw.pid || '')
+
+    nodeMap.set(deptId, {
+      ...raw,
+      deptId,
+      deptName,
+      deptKey,
+      parentId,
+      level: 1,
+      pathNames: [deptName],
+      fullPathName: deptName,
+      children: [],
+    })
+  }
+
+  for (const node of nodeMap.values()) {
+    const pId = node.parentId
+    if (pId && nodeMap.has(pId) && pId !== node.deptId) {
+      nodeMap.get(pId)!.children!.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  function updatePaths(nodes: DeptItem[], level = 1, parentPath: string[] = []) {
+    for (const n of nodes) {
+      n.level = level
+      n.pathNames = [...parentPath, n.deptName || n.deptId]
+      n.fullPathName = n.pathNames.join(' / ')
+      if (n.children && n.children.length > 0) {
+        updatePaths(n.children, level + 1, n.pathNames)
+      }
+    }
+  }
+
+  updatePaths(roots, 1, [])
+  return roots
+}
+
+/**
+ * 展平部门树为带有层级缩进或路径的一维数组
+ */
+export function flattenDeptTree(tree: DeptItem[]): DeptItem[] {
+  const result: DeptItem[] = []
+  function traverse(nodes: DeptItem[]) {
+    for (const node of nodes) {
+      result.push(node)
+      if (node.children && node.children.length > 0) {
+        traverse(node.children)
+      }
+    }
+  }
+  traverse(tree)
+  return result
+}
+
 export async function fetchDepts(baseUrl: string, orgId: string): Promise<DeptItem[]> {
   const host = cleanBaseUrl(baseUrl)
   const targetUrl = `${host}/omms/app-org/depts?orgId=${encodeURIComponent(orgId)}`
   const res = await requestApi<unknown>(targetUrl)
-  if (Array.isArray(res)) return res as DeptItem[]
-  if (res && typeof res === 'object' && Array.isArray((res as { list?: DeptItem[] }).list)) {
-    return (res as { list: DeptItem[] }).list
+
+  let rawList: unknown[] = []
+  if (Array.isArray(res)) {
+    rawList = res
+  } else if (res && typeof res === 'object') {
+    const obj = res as Record<string, unknown>
+    if (Array.isArray(obj.list)) {
+      rawList = obj.list
+    } else if (Array.isArray(obj.depts)) {
+      rawList = obj.depts
+    } else if (Array.isArray(obj.data)) {
+      rawList = obj.data
+    } else if (Array.isArray(obj.children)) {
+      rawList = obj.children
+    }
   }
-  return []
+
+  return parseDeptTree(rawList)
 }
 
 export async function fetchDevices(baseUrl: string, deptId: string): Promise<DeviceItem[]> {

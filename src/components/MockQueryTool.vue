@@ -60,24 +60,104 @@
               </select>
             </div>
 
-            <!-- Step 3: Dept Select -->
-            <div class="space-y-1.5">
-              <label class="block text-xs font-semibold text-slate-700">
-                3. 选择护理单元 (Department)
-              </label>
-              <select
-                v-model="selectedDeptId"
-                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-xs text-slate-800 outline-none transition-all disabled:opacity-50 cursor-pointer"
-                :disabled="depts.length === 0"
-                @change="onDeptChange"
-              >
-                <option value="" disabled>
-                  {{ depts.length > 0 ? '-- 请选择护理单元 --' : '请先选择机构' }}
-                </option>
-                <option v-for="dept in depts" :key="dept.deptId" :value="dept.deptId">
-                  {{ dept.deptName || dept.deptId }} (Key: {{ dept.deptKey || dept.deptId }})
-                </option>
-              </select>
+            <!-- Step 3: Dept Select (Multi-level cascading & search) -->
+            <div class="space-y-2 bg-slate-50/70 border border-slate-200/80 rounded-xl p-3">
+              <div class="flex items-center justify-between">
+                <label class="block text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <span>3. 选择护理单元 (Department)</span>
+                  <span v-if="cascadeLevels.length > 1" class="px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[10px] rounded font-bold">
+                    {{ cascadeLevels.length }} 级架构
+                  </span>
+                </label>
+                <div v-if="flatDepts.length > 1" class="flex items-center gap-1 text-[11px]">
+                  <button
+                    type="button"
+                    class="px-2 py-0.5 rounded transition-all cursor-pointer font-medium"
+                    :class="deptSelectMode === 'cascade' ? 'bg-white text-blue-600 shadow-2xs font-bold border border-slate-200' : 'text-slate-500 hover:text-slate-800'"
+                    @click="deptSelectMode = 'cascade'"
+                  >
+                    分级选择
+                  </button>
+                  <button
+                    type="button"
+                    class="px-2 py-0.5 rounded transition-all cursor-pointer font-medium"
+                    :class="deptSelectMode === 'flat' ? 'bg-white text-blue-600 shadow-2xs font-bold border border-slate-200' : 'text-slate-500 hover:text-slate-800'"
+                    @click="deptSelectMode = 'flat'"
+                  >
+                    全路径/搜索
+                  </button>
+                </div>
+              </div>
+
+              <!-- Mode 1: Cascading selects for each level -->
+              <div v-if="deptSelectMode === 'cascade'" class="space-y-2">
+                <div v-if="cascadeLevels.length === 0" class="text-xs text-slate-400 py-1.5">
+                  {{ selectedOrgId ? '当前机构下无可用科室/护理单元' : '请先选择机构' }}
+                </div>
+                <div
+                  v-for="(level, idx) in cascadeLevels"
+                  :key="level.levelIndex"
+                  class="space-y-1"
+                >
+                  <div class="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                    <span class="flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full" :class="idx === cascadeLevels.length - 1 ? 'bg-blue-600' : 'bg-slate-400'" />
+                      <span>{{ level.label }}</span>
+                    </span>
+                    <span v-if="idx === cascadeLevels.length - 1" class="text-[10px] text-blue-600 font-bold">最终匹配单元</span>
+                  </div>
+                  <select
+                    :value="cascadeDeptIds[idx]"
+                    class="w-full px-3 py-1.5 bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-xs text-slate-800 outline-none transition-all cursor-pointer shadow-2xs"
+                    @change="(e) => onCascadeChange(idx, (e.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="dept in level.options" :key="dept.deptId" :value="dept.deptId">
+                      {{ dept.deptName || dept.deptId }} (Key: {{ dept.deptKey || dept.deptId }})
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Mode 2: Flat search & full path select -->
+              <div v-else class="space-y-2">
+                <input
+                  v-model="deptSearchQuery"
+                  type="text"
+                  placeholder="输入科室/病区名称或 Key 快速搜索..."
+                  class="w-full px-2.5 py-1.5 bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-xs outline-none transition-all"
+                >
+                <select
+                  :value="selectedDeptId"
+                  class="w-full px-3 py-1.5 bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-xs text-slate-800 outline-none transition-all cursor-pointer shadow-2xs"
+                  @change="(e) => onFlatDeptChange((e.target as HTMLSelectElement).value)"
+                >
+                  <option value="" disabled>-- 请选择护理单元 --</option>
+                  <option
+                    v-for="dept in filteredFlatDepts"
+                    :key="dept.deptId"
+                    :value="dept.deptId"
+                  >
+                    {{ dept.fullPathName || dept.deptName }} (Key: {{ dept.deptKey || dept.deptId }})
+                  </option>
+                </select>
+              </div>
+
+              <!-- Selected dept breadcrumb footer -->
+              <div v-if="selectedDeptInfo" class="pt-1.5 border-t border-slate-200/60 flex flex-col gap-1 text-[11px]">
+                <div class="text-slate-600 flex items-center gap-1.5 flex-wrap">
+                  <span class="text-slate-400 font-medium shrink-0">当前选中:</span>
+                  <span class="font-bold text-blue-700 bg-blue-50/80 px-1.5 py-0.5 rounded border border-blue-100/80 font-mono">
+                    {{ selectedDeptInfo.fullPathName || selectedDeptInfo.deptName }}
+                  </span>
+                  <span class="text-slate-400 text-[10px] font-mono">ID: {{ selectedDeptInfo.deptId }}</span>
+                </div>
+                <div v-if="selectedDeptInfo.children && selectedDeptInfo.children.length > 0" class="text-amber-600 bg-amber-50/80 px-2 py-1 rounded text-[10px] border border-amber-200/60 flex items-center gap-1">
+                  <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>提示：当前所选部门包含 {{ selectedDeptInfo.children.length }} 个子级病区，若未匹配到设备请选择下级护理单元</span>
+                </div>
+              </div>
             </div>
 
             <!-- Mode Selector Tabs -->
@@ -497,7 +577,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import {
@@ -505,6 +585,7 @@ import {
   fetchDepts,
   fetchDevices,
   extractLinkData,
+  flattenDeptTree,
   type OrgItem,
   type DeptItem,
   type DeviceItem,
@@ -569,24 +650,151 @@ watch(
 )
 
 const orgs = ref<OrgItem[]>([])
-const depts = ref<DeptItem[]>([])
+const deptTree = ref<DeptItem[]>([])
+const flatDepts = computed(() => flattenDeptTree(deptTree.value))
 const devices = ref<DeviceItem[]>([])
 
 const selectedOrgId = ref('')
 const selectedDeptId = ref('')
 const selectedDeviceId = ref('')
 
+// Cascader & Search state for multi-level departments
+const cascadeDeptIds = ref<string[]>([])
+const deptSearchQuery = ref('')
+const deptSelectMode = ref<'cascade' | 'flat'>('cascade')
+
 const formattedResult = ref('')
+
+// Recursively find the path IDs from tree for a given deptId
+function findPathIds(nodes: DeptItem[], targetId: string): string[] | null {
+  for (const node of nodes) {
+    if (node.deptId === targetId) {
+      return [node.deptId]
+    }
+    if (node.children && node.children.length > 0) {
+      const sub = findPathIds(node.children, targetId)
+      if (sub) {
+        return [node.deptId, ...sub]
+      }
+    }
+  }
+  return null
+}
+
+// Compute the cascading level selects
+const cascadeLevels = computed(() => {
+  const levels: {
+    levelIndex: number
+    label: string
+    options: DeptItem[]
+    selectedId: string
+  }[] = []
+  if (deptTree.value.length === 0) return levels
+
+  let currentOptions = deptTree.value
+  let levelIndex = 0
+
+  while (currentOptions && currentOptions.length > 0) {
+    const selId = cascadeDeptIds.value[levelIndex] || ''
+    const currentLevel = levelIndex + 1
+    const levelLabel =
+      currentLevel === 1
+        ? '一级 (楼栋/大科室)'
+        : currentLevel === 2
+          ? '二级 (楼层/科室)'
+          : currentLevel === 3
+            ? '三级 (护理单元/病区)'
+            : `${currentLevel}级部门`
+
+    levels.push({
+      levelIndex,
+      label: levelLabel,
+      options: currentOptions,
+      selectedId: selId,
+    })
+
+    const foundNode = currentOptions.find((item) => item.deptId === selId) || currentOptions[0]
+    if (foundNode && foundNode.children && foundNode.children.length > 0) {
+      currentOptions = foundNode.children
+      levelIndex++
+    } else {
+      break
+    }
+  }
+
+  return levels
+})
+
+// Current selected dept info node
+const selectedDeptInfo = computed(() => {
+  if (!selectedDeptId.value) return null
+  return flatDepts.value.find((d) => d.deptId === selectedDeptId.value) || null
+})
+
+// Filtered flat departments for search
+const filteredFlatDepts = computed(() => {
+  if (!deptSearchQuery.value.trim()) return flatDepts.value
+  const q = deptSearchQuery.value.trim().toLowerCase()
+  return flatDepts.value.filter((d) => {
+    return (
+      (d.deptName && d.deptName.toLowerCase().includes(q)) ||
+      (d.deptKey && d.deptKey.toLowerCase().includes(q)) ||
+      (d.fullPathName && d.fullPathName.toLowerCase().includes(q)) ||
+      (d.deptId && d.deptId.toLowerCase().includes(q))
+    )
+  })
+})
+
+function onCascadeChange(levelIndex: number, newDeptId: string) {
+  const newIds = cascadeDeptIds.value.slice(0, levelIndex)
+  newIds.push(newDeptId)
+
+  // Traverse down and pick the first child at each subsequent level
+  let currentNodes = deptTree.value
+  for (let i = 0; i <= levelIndex; i++) {
+    const targetId = newIds[i]
+    const node = currentNodes.find((item) => item.deptId === targetId)
+    if (node && node.children && node.children.length > 0) {
+      currentNodes = node.children
+    } else {
+      currentNodes = []
+    }
+  }
+
+  while (currentNodes.length > 0) {
+    const first = currentNodes[0]
+    newIds.push(first.deptId)
+    currentNodes = first.children || []
+  }
+
+  cascadeDeptIds.value = newIds
+  const finalDeptId = newIds[newIds.length - 1]
+  if (finalDeptId !== selectedDeptId.value) {
+    selectedDeptId.value = finalDeptId
+    onDeptChange()
+  }
+}
+
+function onFlatDeptChange(deptId: string) {
+  if (!deptId) return
+  selectedDeptId.value = deptId
+  const path = findPathIds(deptTree.value, deptId)
+  if (path) {
+    cascadeDeptIds.value = path
+  }
+  onDeptChange()
+}
 
 async function onConnect() {
   if (!baseUrl.value.trim()) return
   connecting.value = true
   orgs.value = []
-  depts.value = []
+  deptTree.value = []
   devices.value = []
   selectedOrgId.value = ''
   selectedDeptId.value = ''
   selectedDeviceId.value = ''
+  cascadeDeptIds.value = []
   formattedResult.value = ''
 
   try {
@@ -607,16 +815,25 @@ async function onConnect() {
 
 async function onOrgChange() {
   if (!selectedOrgId.value) return
-  depts.value = []
+  deptTree.value = []
   devices.value = []
   selectedDeptId.value = ''
   selectedDeviceId.value = ''
+  cascadeDeptIds.value = []
 
   try {
     const list = await fetchDepts(baseUrl.value, selectedOrgId.value)
-    depts.value = list
+    deptTree.value = list
     if (list.length > 0) {
-      selectedDeptId.value = list[0].deptId
+      const defaultIds: string[] = []
+      let curr = list
+      while (curr && curr.length > 0) {
+        const first = curr[0]
+        defaultIds.push(first.deptId)
+        curr = first.children || []
+      }
+      cascadeDeptIds.value = defaultIds
+      selectedDeptId.value = defaultIds[defaultIds.length - 1]
       await onDeptChange()
     }
   } catch (err: unknown) {

@@ -484,14 +484,18 @@ class SvnUploader(BaseUploader):
             if log_fn:
                 log_fn("警告：SVN 凭据未配置，上传可能会失败")
 
-        # Determine the SVN leaf name from the matching project config
+        # Determine the SVN root and leaf name from the matching project config
         svn_leaf = ""
         proj_branch = ""
+        proj_svn_root = config.get("project_svn_roots", {}).get(project_name)
         for proj in config.get("projects", []):
             if proj.get("name") == project_name:
                 svn_leaf = proj.get("svn_leaf", project_name)
                 proj_branch = proj.get("branch", "")
+                if proj.get("svn_root"):
+                    proj_svn_root = proj.get("svn_root")
                 break
+        svn_root = proj_svn_root or config.get("svn_root", DEFAULT_SVN_ROOT)
         if not svn_leaf and project_name:
             svn_leaf = project_name
         if not svn_leaf:

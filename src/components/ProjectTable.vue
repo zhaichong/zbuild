@@ -124,13 +124,23 @@
                 </button>
               </div>
             </td>
-            <td>
-              <input
-                class="px-2 py-1 border border-border rounded-md text-xs bg-white text-text-2 outline-none w-full max-w-[140px] focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-                :value="store.projectSvnLeaves[project.projectName] || project.defaultSvnLeaf || ''"
-                placeholder="svn leaf 路径"
-                @input="onSvnLeafInput(project.projectName, ($event.target as HTMLInputElement).value)"
-              >
+            <td v-if="store.mode === 'svn'">
+              <div class="flex items-center gap-1.5">
+                <input
+                  class="px-2 py-1 border border-border rounded-md text-xs bg-white text-text-2 outline-none w-full max-w-[130px] focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+                  :value="store.projectSvnLeaves[project.projectName] || project.defaultSvnLeaf || ''"
+                  placeholder="svn leaf 路径"
+                  :title="'SVN 根仓库: ' + getProjectSvnRoot(project.projectName)"
+                  @input="onSvnLeafInput(project.projectName, ($event.target as HTMLInputElement).value)"
+                >
+                <span
+                  v-if="hasCustomSvnRoot(project.projectName)"
+                  class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-primary border border-blue-200/80 font-mono whitespace-nowrap cursor-help"
+                  :title="'独立SVN仓库: ' + getProjectSvnRoot(project.projectName)"
+                >
+                  独立
+                </span>
+              </div>
             </td>
             <td v-if="store.mode === 'server'">
               <input
@@ -226,6 +236,17 @@ function statusLabel(status: StepStatusType): string {
 function defaultServerPath(projectName: string): string {
   if (!store.config?.serverUploadPaths) return ''
   return store.config.serverUploadPaths[projectName] || ''
+}
+
+function getProjectSvnRoot(projectName: string): string {
+  if (store.config?.projectSvnRoots && store.config.projectSvnRoots[projectName]) {
+    return store.config.projectSvnRoots[projectName]
+  }
+  return store.config?.svnRootUrl || ''
+}
+
+function hasCustomSvnRoot(projectName: string): boolean {
+  return !!(store.config?.projectSvnRoots && store.config.projectSvnRoots[projectName])
 }
 
 async function openBranchPicker(project: ProjectInfo) {

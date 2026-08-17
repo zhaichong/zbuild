@@ -237,6 +237,34 @@ class TestSvnUploader(unittest.TestCase):
             svn_url = upload_artifact.call_args.args[1]
             self.assertIn("%E5%8C%BB%E9%99%A2%20A/ORDER-1/web/project.tar.gz", svn_url)
 
+    def test_upload_uses_project_specific_svn_root(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact = Path(temp_dir) / "project.tar.gz"
+            artifact.write_bytes(b"artifact")
+            config = {
+                "svn_root": "https://svn.example/global-root",
+                "project_svn_roots": {
+                    "project": "https://svn.example/custom-repo",
+                },
+                "svn_credentials": {"username": "user", "password": "secret"},
+                "hospital_name": "医院B",
+                "order_no": "ORDER-2",
+                "projects": [{"name": "project", "branch": "main", "svn_leaf": "custom-leaf"}],
+            }
+            expected = UploadResult(True, "https://svn.example/custom-repo", "uploaded")
+
+            with patch("uploaders.svn.ensure_svn_path") as ensure_path, patch(
+                "uploaders.svn.upload_artifact", return_value=expected
+            ) as upload_artifact:
+                result = SvnUploader().upload(artifact, config, logging.getLogger(__name__), "project")
+
+            self.assertTrue(result.success)
+            ensure_path.assert_called_once()
+            root_arg = ensure_path.call_args.args[1]
+            self.assertEqual(root_arg, "https://svn.example/custom-repo")
+            svn_url = upload_artifact.call_args.args[1]
+            self.assertTrue(svn_url.startswith("https://svn.example/custom-repo/"))
+
 
 if __name__ == "__main__":
     unittest.main()

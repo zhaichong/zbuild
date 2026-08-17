@@ -55,6 +55,22 @@ class TestBuildCmdValidation(unittest.TestCase):
             self.assertEqual(argv[0], r"C:\Git\bin\bash.exe")
             self.assertEqual(cmd, "deploy.sh")
 
+    def test_auto_detects_package_json_build_command(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir)
+            (project / "package.json").write_text('{"scripts": {"build:prod": "vite build"}}', encoding="utf-8")
+            # Without deploy.sh present, requesting deploy.sh should auto-detect package.json
+            argv = validate_build_command(project, "deploy.sh")
+            self.assertEqual(argv, ["npm", "run", "build:prod"])
+
+    def test_auto_detects_pnpm_lock(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir)
+            (project / "package.json").write_text('{"scripts": {"build": "vue-tsc && vite build"}}', encoding="utf-8")
+            (project / "pnpm-lock.yaml").write_text("lockfileVersion: 5.4", encoding="utf-8")
+            argv = validate_build_command(project, "deploy.sh")
+            self.assertEqual(argv, ["pnpm", "run", "build"])
+
 
 if __name__ == "__main__":
     unittest.main()

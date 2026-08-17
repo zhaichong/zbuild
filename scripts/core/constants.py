@@ -63,6 +63,7 @@ class ProjectInfo:
     current_branch: str
     branches: List[str]
     default_svn_leaf: str
+    svn_root: str = ""
     server_upload_path: str = ""
     build_command: str = DEFAULT_BUILD_COMMAND
 

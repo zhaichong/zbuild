@@ -26,6 +26,7 @@ def cmd_discover(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "current_branch": p.current_branch,
                 "branches": p.branches,
                 "default_svn_leaf": p.default_svn_leaf,
+                "svn_root": p.svn_root,
                 "server_upload_path": p.server_upload_path,
                 "build_command": p.build_command,
             }

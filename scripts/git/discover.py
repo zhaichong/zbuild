@@ -18,6 +18,7 @@ from core.constants import (
 )
 from core.config import load_json
 from git.branches import read_current_branch, read_branches
+from git.build_cmd import detect_project_build_command
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,16 @@ def _load_project_defaults() -> Dict[str, dict]:
     return {}
 
 
+def _resolve_build_command(project_path: Path, raw_build_cmd: str) -> str:
+    """Resolve build command, auto-detecting package.json scripts if default script is missing."""
+    cmd = (raw_build_cmd or DEFAULT_BUILD_COMMAND).strip()
+    if cmd == DEFAULT_BUILD_COMMAND and not (project_path / "deploy.sh").is_file():
+        detected = detect_project_build_command(project_path)
+        if detected:
+            return " ".join(detected)
+    return cmd
+
+
 # ---------------------------------------------------------------------------
 # Discovery
 # ---------------------------------------------------------------------------
@@ -58,14 +69,7 @@ def discover_projects(
     Parameters
     ----------
     search_dirs:
-        List of directory paths to scan.  Each immediate subdirectory
-        that contains a ``.git`` folder is treated as a project.
-        If empty, returns an empty list.
-
-    Returns
-    -------
-    List[ProjectInfo]:
-        Discovered projects with branch metadata populated.
+        List of directory paths to scan. If empty/None, returns empty list.
     """
     if not search_dirs:
         return []
@@ -86,8 +90,10 @@ def discover_projects(
             all_branches = read_branches(base)
             proj_default = defaults.get(name, {})
             default_svn_leaf = proj_default.get("defaultSvnLeaf") or proj_default.get("default_svn_leaf", name)
+            svn_root = proj_default.get("svnRoot") or proj_default.get("svn_root", "")
             server_upload_path = proj_default.get("serverUploadPath") or proj_default.get("server_upload_path") or DEFAULT_SERVER_UPLOAD_PATHS.get(name, "")
-            build_command = proj_default.get("buildCommand") or proj_default.get("build_command") or DEFAULT_BUILD_COMMANDS.get(name, DEFAULT_BUILD_COMMAND)
+            raw_build_command = proj_default.get("buildCommand") or proj_default.get("build_command") or DEFAULT_BUILD_COMMANDS.get(name, DEFAULT_BUILD_COMMAND)
+            build_command = _resolve_build_command(base, raw_build_command)
 
             projects.append(ProjectInfo(
                 name=name,
@@ -95,6 +101,7 @@ def discover_projects(
                 current_branch=current_branch,
                 branches=all_branches,
                 default_svn_leaf=default_svn_leaf,
+                svn_root=svn_root,
                 server_upload_path=server_upload_path,
                 build_command=build_command,
             ))
@@ -113,8 +120,10 @@ def discover_projects(
             all_branches = read_branches(child)
             proj_default = defaults.get(name, {})
             default_svn_leaf = proj_default.get("defaultSvnLeaf") or proj_default.get("default_svn_leaf", name)
+            svn_root = proj_default.get("svnRoot") or proj_default.get("svn_root", "")
             server_upload_path = proj_default.get("serverUploadPath") or proj_default.get("server_upload_path") or DEFAULT_SERVER_UPLOAD_PATHS.get(name, "")
-            build_command = proj_default.get("buildCommand") or proj_default.get("build_command") or DEFAULT_BUILD_COMMANDS.get(name, DEFAULT_BUILD_COMMAND)
+            raw_build_command = proj_default.get("buildCommand") or proj_default.get("build_command") or DEFAULT_BUILD_COMMANDS.get(name, DEFAULT_BUILD_COMMAND)
+            build_command = _resolve_build_command(child, raw_build_command)
 
             projects.append(ProjectInfo(
                 name=name,
@@ -122,6 +131,7 @@ def discover_projects(
                 current_branch=current_branch,
                 branches=all_branches,
                 default_svn_leaf=default_svn_leaf,
+                svn_root=svn_root,
                 server_upload_path=server_upload_path,
                 build_command=build_command,
             ))

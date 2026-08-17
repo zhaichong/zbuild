@@ -11,12 +11,16 @@ and dangerous runner flags such as ``bash -c``.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import shlex
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from core.errors import BuildError
+
+logger = logging.getLogger(__name__)
 
 # First token must be one of these basenames (case-insensitive) when not a project script.
 _ALLOWED_RUNNERS = frozenset({
@@ -27,6 +31,8 @@ _ALLOWED_RUNNERS = frozenset({
     "node", "node.exe",
     "bash", "bash.exe",
     "sh", "sh.exe",
+    "mvn", "mvn.cmd", "mvn.exe",
+    "gradle", "gradle.cmd", "gradle.bat",
 })
 
 # bash/sh flags that enable arbitrary code execution
@@ -73,6 +79,49 @@ def _normalize_rel(script: str) -> str:
     return s
 
 
+def detect_project_build_command(project_path: "Path | str") -> Optional[List[str]]:
+    """Auto-detect package.json scripts or build tools in project when no custom script exists."""
+    project = Path(project_path).resolve()
+
+    # 1. Check package.json
+    pkg_json = project / "package.json"
+    if pkg_json.is_file():
+        try:
+            with open(pkg_json, "r", encoding="utf-8", errors="ignore") as f:
+                data = json.load(f)
+            scripts = data.get("scripts", {})
+            if isinstance(scripts, dict) and scripts:
+                # Detect preferred package manager
+                pm = "npm"
+                if (project / "pnpm-lock.yaml").is_file():
+                    pm = "pnpm"
+                elif (project / "yarn.lock").is_file():
+                    pm = "yarn"
+
+                # Check prioritized script names
+                priority_scripts = ["build:prod", "build", "build:production", "release", "package", "dist"]
+                for name in priority_scripts:
+                    if name in scripts:
+                        return [pm, "run", name]
+
+                # Fallback: any script containing "build"
+                for s_name in scripts.keys():
+                    if "build" in s_name.lower():
+                        return [pm, "run", s_name]
+        except Exception as exc:
+            logger.debug("Failed to parse package.json for project %s: %s", project, exc)
+
+    # 2. Check pom.xml (Maven)
+    if (project / "pom.xml").is_file():
+        return ["mvn", "clean", "package", "-DskipTests"]
+
+    # 3. Check build.gradle (Gradle)
+    if (project / "build.gradle").is_file() or (project / "build.gradle.kts").is_file():
+        return ["gradle", "build", "-x", "test"]
+
+    return None
+
+
 def validate_build_command(project_path: "Path | str", build_command: str) -> List[str]:
     """Return argv for a safe build command, or raise ``BuildError``.
 
@@ -113,6 +162,16 @@ def validate_build_command(project_path: "Path | str", build_command: str) -> Li
         if looks_like_script:
             script_candidate = project / normalized
             if not script_candidate.is_file():
+                # If the default script "deploy.sh" is missing, try auto-detecting package.json/build tool
+                if cmd_str == "deploy.sh":
+                    auto_cmd = detect_project_build_command(project)
+                    if auto_cmd:
+                        logger.info(
+                            "项目 %s 未找到 deploy.sh，自动使用检测到的打包命令: %s",
+                            project.name,
+                            " ".join(auto_cmd),
+                        )
+                        return auto_cmd
                 raise BuildError(f"打包脚本 {cmd_str} 未找到 in {project}")
             if not _is_under(project, script_candidate):
                 raise BuildError(f"打包脚本路径逃逸项目目录: {cmd_str}")

@@ -18,6 +18,7 @@ export const useAppStore = defineStore('app', () => {
   const selectedProjects = ref<Set<string>>(new Set())
   const projectBranches = ref<Record<string, string>>({})
   const projectSvnLeaves = ref<Record<string, string>>({})
+  const projectSvnRoots = ref<Record<string, string>>({})
   const projectServerPaths = ref<Record<string, string>>({})
   const projectBuildCommands = ref<Record<string, string>>({})
   const running = ref(false)
@@ -124,6 +125,7 @@ export const useAppStore = defineStore('app', () => {
     selectedProjects,
     projectBranches,
     projectSvnLeaves,
+    projectSvnRoots,
     projectServerPaths,
     projectBuildCommands,
     running,

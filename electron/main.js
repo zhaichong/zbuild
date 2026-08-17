@@ -525,6 +525,7 @@ function pyConfigToFrontend(py) {
     selectedProjects: py.selected_projects || py.selectedProjects || [],
     projectBranches: py.project_branches || py.projectBranches || {},
     projectSvnLeaves: py.project_svn_leaves || py.projectSvnLeaves || {},
+    projectSvnRoots: py.project_svn_roots || py.projectSvnRoots || {},
     projectServerPaths: py.project_server_paths || py.projectServerPaths || py.server_upload_paths || {},
     projectBuildCommands: py.project_build_commands || py.projectBuildCommands || py.build_commands || {},
     tools: {
@@ -575,6 +576,7 @@ function frontendConfigToPy(fe) {
     selected_projects: fe.selectedProjects || [],
     project_branches: fe.projectBranches || {},
     project_svn_leaves: fe.projectSvnLeaves || {},
+    project_svn_roots: fe.projectSvnRoots || {},
     project_server_paths: fe.projectServerPaths || fe.serverUploadPaths || {},
     project_build_commands: fe.projectBuildCommands || fe.buildCommands || {},
     auto_install_deps: true,

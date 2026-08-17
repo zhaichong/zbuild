@@ -88,305 +88,311 @@
     </div>
 
     <!-- Save / Update Template Modal Dialog -->
-    <div
-      v-if="showSaveModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
+    <teleport to="body">
       <div
-        class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        @click="showSaveModal = false"
-      />
-      <div class="relative bg-surface rounded-2xl shadow-2xl w-full max-w-md z-10 flex flex-col overflow-hidden border border-border-light">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-light">
-          <h3 class="text-base font-bold text-text-1 flex items-center gap-2">
-            <svg
-              class="w-5 h-5 text-primary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-              />
-            </svg>
-            {{ isUpdating ? '更新模板' : '保存为新模板' }}
-          </h3>
-          <button
-            class="text-text-3 hover:text-text-2 transition-colors p-1 rounded-lg hover:bg-border-light"
-            @click="showSaveModal = false"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Content -->
-        <div class="p-6 space-y-4">
-          <!-- Action Mode Toggle (Only if template is currently selected) -->
-          <div
-            v-if="selectedTemplate"
-            class="flex p-1 bg-bg-base rounded-xl border border-border-light"
-          >
-            <button
-              type="button"
-              class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-              :class="saveMode === 'update' ? 'bg-surface text-primary shadow-xs' : 'text-text-3 hover:text-text-2'"
-              @click="setSaveMode('update')"
-            >
-              更新已有模板 ({{ selectedTemplate.name }})
-            </button>
-            <button
-              type="button"
-              class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-              :class="saveMode === 'new' ? 'bg-surface text-primary shadow-xs' : 'text-text-3 hover:text-text-2'"
-              @click="setSaveMode('new')"
-            >
-              另存为新模板
-            </button>
-          </div>
-
-          <!-- Template Name Input -->
-          <div>
-            <label class="block text-xs font-medium text-text-2 mb-1">
-              模板名称 <span class="text-error">*</span>
-            </label>
-            <input
-              v-model="templateForm.name"
-              type="text"
-              class="w-full form-input text-xs"
-              placeholder="请输入模板名称，如：日常常规版本发布"
-            >
-            <p
-              v-if="nameError"
-              class="text-[11px] text-error mt-1"
-            >
-              {{ nameError }}
-            </p>
-          </div>
-
-          <!-- Template Description Input -->
-          <div>
-            <label class="block text-xs font-medium text-text-2 mb-1">
-              模板描述 (可选)
-            </label>
-            <textarea
-              v-model="templateForm.description"
-              rows="2"
-              class="w-full form-input text-xs resize-none"
-              placeholder="添加模板使用说明或备注信息..."
-            />
-          </div>
-
-          <!-- Config Summary Card -->
-          <div class="rounded-xl bg-bg-base/70 border border-border-light p-3 space-y-2">
-            <div class="text-xs font-semibold text-text-2 flex items-center justify-between">
-              <span>将被保存的当前配置摘要</span>
-              <span class="px-2 py-0.5 text-[10px] rounded-md font-bold bg-primary/10 text-primary">
-                {{ store.mode === 'svn' ? 'SVN 模式' : store.mode === 'server' ? '服务器模式' : '本地模式' }}
-              </span>
-            </div>
-            <div class="grid grid-cols-2 gap-2 text-xs text-text-3">
-              <div>已选项目: <span class="font-bold text-text-1">{{ store.selectedProjects.size }} 个</span></div>
-              <div
-                class="truncate"
-                :title="store.config?.form?.hospitalName || '未设置'"
+        v-if="showSaveModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 text-text-1"
+      >
+        <div
+          class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          @click="showSaveModal = false"
+        />
+        <div class="relative bg-surface rounded-2xl shadow-2xl w-full max-w-md z-10 flex flex-col overflow-hidden border border-border-light">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-light">
+            <h3 class="text-base font-bold text-text-1 flex items-center gap-2">
+              <svg
+                class="w-5 h-5 text-primary"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                医院名称: <span class="font-bold text-text-1">{{ store.config?.form?.hospitalName || '-' }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light bg-bg-base/30">
-          <button
-            class="px-4 py-1.5 text-xs rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
-            @click="showSaveModal = false"
-          >
-            取消
-          </button>
-          <button
-            class="px-5 py-1.5 text-xs font-medium rounded-xl bg-primary text-white hover:opacity-90 transition-opacity"
-            @click="confirmSaveTemplate"
-          >
-            确认保存
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Preview Modal -->
-    <div
-      v-if="showPreviewModal && selectedTemplate"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
-      <div
-        class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        @click="showPreviewModal = false"
-      />
-      <div class="relative bg-surface rounded-2xl shadow-2xl w-full max-w-lg z-10 flex flex-col overflow-hidden border border-border-light max-h-[85vh]">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-light">
-          <div>
-            <h3 class="text-base font-bold text-text-1">
-              模板明细预览：「{{ selectedTemplate.name }}」
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                />
+              </svg>
+              {{ isUpdating ? '更新模板' : '保存为新模板' }}
             </h3>
-            <p
-              v-if="selectedTemplate.description"
-              class="text-xs text-text-3 mt-0.5"
+            <button
+              class="text-text-3 hover:text-text-2 transition-colors p-1 rounded-lg hover:bg-border-light"
+              @click="showSaveModal = false"
             >
-              {{ selectedTemplate.description }}
-            </p>
-          </div>
-          <button
-            class="text-text-3 hover:text-text-2 transition-colors p-1 rounded-lg hover:bg-border-light"
-            @click="showPreviewModal = false"
-          >
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Body -->
-        <div class="p-6 overflow-y-auto space-y-4 text-xs">
-          <div class="grid grid-cols-2 gap-3">
-            <div class="p-2.5 rounded-xl bg-bg-base border border-border-light">
-              <span class="text-text-3 block text-[11px]">执行模式</span>
-              <span class="font-bold text-text-1">{{ getModeLabel(selectedTemplate) }}</span>
-            </div>
-            <div class="p-2.5 rounded-xl bg-bg-base border border-border-light">
-              <span class="text-text-3 block text-[11px]">包含勾选项目</span>
-              <span class="font-bold text-text-1">{{ getProjectCount(selectedTemplate) }} 个</span>
-            </div>
-            <div
-              v-if="getHospitalName(selectedTemplate)"
-              class="p-2.5 rounded-xl bg-bg-base border border-border-light col-span-2"
-            >
-              <span class="text-text-3 block text-[11px]">医院名称</span>
-              <span class="font-bold text-text-1">{{ getHospitalName(selectedTemplate) }}</span>
-            </div>
-          </div>
-
-          <!-- Project List -->
-          <div>
-            <h4 class="font-bold text-text-2 mb-2">
-              模板包含的项目与分支配置
-            </h4>
-            <div
-              v-if="getTemplateProjects(selectedTemplate).length > 0"
-              class="border border-border-light rounded-xl divide-y divide-border-light overflow-hidden max-h-[30vh] overflow-y-auto"
-            >
-              <div
-                v-for="proj in getTemplateProjects(selectedTemplate)"
-                :key="proj"
-                class="px-3 py-2 bg-surface flex items-center justify-between"
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                <span class="font-semibold text-text-1">{{ proj }}</span>
-                <span class="text-text-3 text-[11px]">
-                  分支: <code class="bg-bg-base px-1.5 py-0.5 rounded text-primary">{{ getTemplateProjectBranch(selectedTemplate, proj) }}</code>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Content -->
+          <div class="p-6 space-y-4">
+            <!-- Action Mode Toggle (Only if template is currently selected) -->
+            <div
+              v-if="selectedTemplate"
+              class="flex p-1 bg-bg-base rounded-xl border border-border-light"
+            >
+              <button
+                type="button"
+                class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                :class="saveMode === 'update' ? 'bg-surface text-primary shadow-xs' : 'text-text-3 hover:text-text-2'"
+                @click="setSaveMode('update')"
+              >
+                更新已有模板 ({{ selectedTemplate.name }})
+              </button>
+              <button
+                type="button"
+                class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                :class="saveMode === 'new' ? 'bg-surface text-primary shadow-xs' : 'text-text-3 hover:text-text-2'"
+                @click="setSaveMode('new')"
+              >
+                另存为新模板
+              </button>
+            </div>
+
+            <!-- Template Name Input -->
+            <div>
+              <label class="block text-xs font-medium text-text-2 mb-1">
+                模板名称 <span class="text-error">*</span>
+              </label>
+              <input
+                v-model="templateForm.name"
+                type="text"
+                class="w-full form-input text-xs text-text-1"
+                placeholder="请输入模板名称，如：日常常规版本发布"
+              >
+              <p
+                v-if="nameError"
+                class="text-[11px] text-error mt-1"
+              >
+                {{ nameError }}
+              </p>
+            </div>
+
+            <!-- Template Description Input -->
+            <div>
+              <label class="block text-xs font-medium text-text-2 mb-1">
+                模板描述 (可选)
+              </label>
+              <textarea
+                v-model="templateForm.description"
+                rows="2"
+                class="w-full form-input text-xs text-text-1 resize-none"
+                placeholder="添加模板使用说明或备注信息..."
+              />
+            </div>
+
+            <!-- Config Summary Card -->
+            <div class="rounded-xl bg-bg-base/70 border border-border-light p-3 space-y-2">
+              <div class="text-xs font-semibold text-text-2 flex items-center justify-between">
+                <span>将被保存的当前配置摘要</span>
+                <span class="px-2 py-0.5 text-[10px] rounded-md font-bold bg-primary/10 text-primary">
+                  {{ store.mode === 'svn' ? 'SVN 模式' : store.mode === 'server' ? '服务器模式' : '本地模式' }}
                 </span>
               </div>
-            </div>
-            <div
-              v-else
-              class="text-text-3 italic p-4 text-center border border-dashed rounded-xl"
-            >
-              此模板未勾选特定项目
+              <div class="grid grid-cols-2 gap-2 text-xs text-text-3">
+                <div>已选项目: <span class="font-bold text-text-1">{{ store.selectedProjects.size }} 个</span></div>
+                <div
+                  class="truncate"
+                  :title="store.config?.form?.hospitalName || '未设置'"
+                >
+                  医院名称: <span class="font-bold text-text-1">{{ store.config?.form?.hospitalName || '-' }}</span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Footer -->
-        <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light bg-bg-base/30">
-          <button
-            class="px-4 py-1.5 text-xs rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
-            @click="showPreviewModal = false"
-          >
-            关闭
-          </button>
-          <button
-            class="px-5 py-1.5 text-xs font-medium rounded-xl bg-primary text-white hover:opacity-90 transition-opacity"
-            @click="reapplyCurrentTemplate(); showPreviewModal = false"
-          >
-            应用此模板
-          </button>
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light bg-bg-base/30">
+            <button
+              class="px-4 py-1.5 text-xs rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
+              @click="showSaveModal = false"
+            >
+              取消
+            </button>
+            <button
+              class="px-5 py-1.5 text-xs font-medium rounded-xl bg-primary text-white hover:opacity-90 transition-opacity"
+              @click="confirmSaveTemplate"
+            >
+              确认保存
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </teleport>
+
+    <!-- Preview Modal -->
+    <teleport to="body">
+      <div
+        v-if="showPreviewModal && selectedTemplate"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 text-text-1"
+      >
+        <div
+          class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          @click="showPreviewModal = false"
+        />
+        <div class="relative bg-surface rounded-2xl shadow-2xl w-full max-w-lg z-10 flex flex-col overflow-hidden border border-border-light max-h-[85vh]">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-light">
+            <div>
+              <h3 class="text-base font-bold text-text-1">
+                模板明细预览：「{{ selectedTemplate.name }}」
+              </h3>
+              <p
+                v-if="selectedTemplate.description"
+                class="text-xs text-text-3 mt-0.5"
+              >
+                {{ selectedTemplate.description }}
+              </p>
+            </div>
+            <button
+              class="text-text-3 hover:text-text-2 transition-colors p-1 rounded-lg hover:bg-border-light"
+              @click="showPreviewModal = false"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="p-6 overflow-y-auto space-y-4 text-xs">
+            <div class="grid grid-cols-2 gap-3">
+              <div class="p-2.5 rounded-xl bg-bg-base border border-border-light">
+                <span class="text-text-3 block text-[11px]">执行模式</span>
+                <span class="font-bold text-text-1">{{ getModeLabel(selectedTemplate) }}</span>
+              </div>
+              <div class="p-2.5 rounded-xl bg-bg-base border border-border-light">
+                <span class="text-text-3 block text-[11px]">包含勾选项目</span>
+                <span class="font-bold text-text-1">{{ getProjectCount(selectedTemplate) }} 个</span>
+              </div>
+              <div
+                v-if="getHospitalName(selectedTemplate)"
+                class="p-2.5 rounded-xl bg-bg-base border border-border-light col-span-2"
+              >
+                <span class="text-text-3 block text-[11px]">医院名称</span>
+                <span class="font-bold text-text-1">{{ getHospitalName(selectedTemplate) }}</span>
+              </div>
+            </div>
+
+            <!-- Project List -->
+            <div>
+              <h4 class="font-bold text-text-2 mb-2">
+                模板包含的项目与分支配置
+              </h4>
+              <div
+                v-if="getTemplateProjects(selectedTemplate).length > 0"
+                class="border border-border-light rounded-xl divide-y divide-border-light overflow-hidden max-h-[30vh] overflow-y-auto"
+              >
+                <div
+                  v-for="proj in getTemplateProjects(selectedTemplate)"
+                  :key="proj"
+                  class="px-3 py-2 bg-surface flex items-center justify-between"
+                >
+                  <span class="font-semibold text-text-1">{{ proj }}</span>
+                  <span class="text-text-3 text-[11px]">
+                    分支: <code class="bg-bg-base px-1.5 py-0.5 rounded text-primary">{{ getTemplateProjectBranch(selectedTemplate, proj) }}</code>
+                  </span>
+                </div>
+              </div>
+              <div
+                v-else
+                class="text-text-3 italic p-4 text-center border border-dashed rounded-xl"
+              >
+                此模板未勾选特定项目
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light bg-bg-base/30">
+            <button
+              class="px-4 py-1.5 text-xs rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
+              @click="showPreviewModal = false"
+            >
+              关闭
+            </button>
+            <button
+              class="px-5 py-1.5 text-xs font-medium rounded-xl bg-primary text-white hover:opacity-90 transition-opacity"
+              @click="reapplyCurrentTemplate(); showPreviewModal = false"
+            >
+              应用此模板
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <!-- Delete Confirmation Modal -->
-    <div
-      v-if="showDeleteModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
+    <teleport to="body">
       <div
-        class="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        @click="showDeleteModal = false"
-      />
-      <div class="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm z-10 flex flex-col overflow-hidden border border-border-light p-6 text-center">
-        <div class="w-12 h-12 rounded-full bg-error-light text-error flex items-center justify-center mx-auto mb-3">
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-          </svg>
-        </div>
-        <h3 class="text-base font-bold text-text-1 mb-1">
-          删除模板
-        </h3>
-        <p class="text-xs text-text-3 mb-5">
-          确定要删除模板「<span class="font-semibold text-text-1">{{ selectedTemplate?.name }}</span>」吗？此操作无法撤销。
-        </p>
-        <div class="flex items-center justify-center gap-3">
-          <button
-            class="px-4 py-1.5 text-xs rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
-            @click="showDeleteModal = false"
-          >
-            取消
-          </button>
-          <button
-            class="px-5 py-1.5 text-xs font-medium rounded-xl bg-error text-white hover:opacity-90 transition-opacity"
-            @click="confirmDeleteTemplate"
-          >
-            确认删除
-          </button>
+        v-if="showDeleteModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 text-text-1"
+      >
+        <div
+          class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          @click="showDeleteModal = false"
+        />
+        <div class="relative bg-surface rounded-2xl shadow-2xl w-full max-w-sm z-10 flex flex-col overflow-hidden border border-border-light p-6 text-center">
+          <div class="w-12 h-12 rounded-full bg-error-light text-error flex items-center justify-center mx-auto mb-3">
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          </div>
+          <h3 class="text-base font-bold text-text-1 mb-1">
+            删除模板
+          </h3>
+          <p class="text-xs text-text-3 mb-5">
+            确定要删除模板「<span class="font-semibold text-text-1">{{ selectedTemplate?.name }}</span>」吗？此操作无法撤销。
+          </p>
+          <div class="flex items-center justify-center gap-3">
+            <button
+              class="px-4 py-1.5 text-xs rounded-xl border border-border text-text-2 hover:bg-border-light transition-colors"
+              @click="showDeleteModal = false"
+            >
+              取消
+            </button>
+            <button
+              class="px-5 py-1.5 text-xs font-medium rounded-xl bg-error text-white hover:opacity-90 transition-opacity"
+              @click="confirmDeleteTemplate"
+            >
+              确认删除
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </teleport>
   </div>
 </template>
 

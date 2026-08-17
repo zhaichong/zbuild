@@ -103,6 +103,7 @@ def default_config() -> Dict[str, Any]:
         "build_commands": dict(DEFAULT_BUILD_COMMANDS),
         "artifact_paths": ["dist", "release", "build", "output", "target"],
         "project_artifact_paths": {},
+        "project_svn_roots": {},
         "server_upload_paths": dict(DEFAULT_SERVER_UPLOAD_PATHS),
     }
 
@@ -118,7 +119,8 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     project entries.
     """
     defaults = default_config()
-    config = {**defaults, **raw}
+    config = dict(defaults)
+    config.update(raw)
 
     # Ensure mode is valid
     if config["mode"] not in ("svn", "server", "local"):
@@ -131,9 +133,18 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     else:
         config["order_dir_path"] = ""
 
+    # Normalize project_svn_roots dict
+    proj_svn_roots = config.get("project_svn_roots")
+    if not isinstance(proj_svn_roots, dict):
+        config["project_svn_roots"] = {}
+    else:
+        config["project_svn_roots"] = {
+            k: str(v).strip() for k, v in proj_svn_roots.items() if str(v).strip()
+        }
+
     # Normalize build_command (global fallback)
     raw_build_cmd = raw.get("build_command")
-    if raw_build_cmd and isinstance(raw_build_cmd, str) and raw_build_cmd.strip():
+    if isinstance(raw_build_cmd, str) and raw_build_cmd.strip():
         config["build_command"] = raw_build_cmd.strip()
     else:
         config["build_command"] = DEFAULT_BUILD_COMMAND
@@ -198,6 +209,7 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
                     "path": "",
                     "branch": "",
                     "svn_leaf": proj,
+                    "svn_root": config["project_svn_roots"].get(proj, config["svn_root"]),
                     "enabled": True,
                     "server_upload_path": config["server_upload_paths"].get(proj, ""),
                     "build_command": config["build_commands"].get(proj, config["build_command"]),
@@ -209,6 +221,7 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
                     "path": proj.get("path", ""),
                     "branch": proj.get("branch", ""),
                     "svn_leaf": proj.get("svn_leaf", p_name),
+                    "svn_root": proj.get("svn_root") or config["project_svn_roots"].get(p_name, config["svn_root"]),
                     "enabled": proj.get("enabled", True),
                     "server_upload_path": proj.get("server_upload_path") or config["server_upload_paths"].get(p_name, ""),
                     "build_command": proj.get("build_command") or config["build_commands"].get(p_name, config["build_command"]),

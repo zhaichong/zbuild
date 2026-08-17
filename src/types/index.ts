@@ -23,6 +23,7 @@ export interface FormConfig {
 export interface AppConfig {
   rootPath: string
   svnRootUrl: string
+  projectSvnRoots?: Record<string, string>
   buildCommand?: string
   buildCommands?: Record<string, string>
   artifactPaths?: string[]
@@ -50,6 +51,7 @@ export interface ProjectInfo {
   currentBranch: string
   branches: string[]
   defaultSvnLeaf?: string
+  svnRoot?: string
   serverUploadPath?: string
   buildCommand?: string
   enabled?: boolean
@@ -168,4 +170,3 @@ export interface UpdateStatus {
   total?: number
   message?: string
 }
-

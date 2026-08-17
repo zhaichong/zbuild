@@ -20,6 +20,9 @@ from tools.bundled import (
 logger = logging.getLogger(__name__)
 
 
+FINGERPRINT_FILE = ".zbuild_deps_fingerprint"
+
+
 def dependency_fingerprint(project_path: Union[Path, str]) -> str:
     """Compute a fingerprint of the dependency specification.
 
@@ -50,7 +53,7 @@ def dependency_install_command(project_path: Union[Path, str]) -> List[str]:
     elif "yarn" in pm:
         return [pm, "install", "--frozen-lockfile"]
     else:
-        return [pm, "ci"]
+        return [pm, "install"]
 
 
 def _node_env() -> Dict[str, str]:
@@ -117,7 +120,7 @@ def ensure_dependencies(
     project_path:
         Path to the project directory.
     force:
-        If True, always reinstall even if node_modules exists.
+        If True, always reinstall even if node_modules exists and fingerprint matches.
     on_line:
         Optional callback for streaming output.
 
@@ -133,10 +136,18 @@ def ensure_dependencies(
     """
     project = Path(project_path)
     node_modules = project / "node_modules"
+    current_fp = dependency_fingerprint(project)
+    fp_file = node_modules / FINGERPRINT_FILE
 
-    if not force and node_modules.is_dir():
-        logger.debug("node_modules exists, skipping install for %s", project)
-        return True
+    if not force and node_modules.is_dir() and current_fp:
+        if fp_file.is_file():
+            try:
+                cached_fp = fp_file.read_text(encoding="utf-8").strip()
+                if cached_fp == current_fp:
+                    logger.info("Dependencies are up to date (fingerprint match), skipping install for %s", project)
+                    return True
+            except Exception as exc:
+                logger.warning("Failed to read dependency fingerprint for %s: %s", project, exc)
 
     cmd = dependency_install_command(project)
     env = _node_env()
@@ -156,6 +167,13 @@ def ensure_dependencies(
                 f"Dependency install failed (exit {result.returncode}): "
                 f"{result.stdout[-500:] if result.stdout else ''}"
             )
+
+        if current_fp and node_modules.is_dir():
+            try:
+                fp_file.write_text(current_fp, encoding="utf-8")
+            except Exception as exc:
+                logger.warning("Failed to write dependency fingerprint for %s: %s", project, exc)
+
         return True
     except DependencyError:
         raise

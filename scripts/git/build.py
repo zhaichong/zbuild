@@ -4,7 +4,6 @@
 import glob
 import hashlib
 import logging
-import os
 import re
 import subprocess
 import tarfile
@@ -160,21 +159,10 @@ def build_project(
 
     logger.info("Running build command '%s' in %s", cmd_str, project)
 
-    # Inherit system environment (system Node.js takes priority, bundled node as fallback)
-    env = os.environ.copy()
-    from tools.bundled import find_node14_dir
-    node14_dir = find_node14_dir()
-    if node14_dir:
-        cur_path = env.get("PATH", "") or env.get("Path", "")
-        if str(node14_dir).lower() not in cur_path.lower():
-            env["PATH"] = f"{cur_path}{os.pathsep}{node14_dir}" if cur_path else str(node14_dir)
-            env["Path"] = env["PATH"]
-    raw_opts = env.get("NODE_OPTIONS", "")
-    cleaned_opts = " ".join(f for f in raw_opts.split() if f != "--openssl-legacy-provider")
-    if cleaned_opts:
-        env["NODE_OPTIONS"] = cleaned_opts
-    elif "NODE_OPTIONS" in env:
-        del env["NODE_OPTIONS"]
+    # Use the same Node 14 shims and isolated npm prefix as dependency install.
+    # deploy.sh runs under Bash and otherwise resolves Volta/system Node first.
+    from git.deps import _node_env
+    env = _node_env()
 
     try:
         result = run_process_stream(

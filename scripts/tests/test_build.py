@@ -19,6 +19,21 @@ from workflow.steps import StepContext, StepResult
 
 
 class TestBuildFailure(unittest.TestCase):
+    def test_build_uses_isolated_node14_environment(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir)
+            (project / "deploy.sh").write_text("exit 1", encoding="utf-8")
+            expected_env = {"PATH": "node14-shims;system-path", "NPM_CONFIG_PREFIX": "isolated"}
+            failed = subprocess.CompletedProcess(["bash", "deploy.sh"], 1, "failed", "")
+
+            with patch("git.deps._node_env", return_value=expected_env), patch(
+                "git.build.run_process_stream", return_value=failed
+            ) as mock_run:
+                with self.assertRaises(BuildError):
+                    build_project(project)
+
+            self.assertEqual(mock_run.call_args.kwargs["env"], expected_env)
+
     def test_nonzero_build_is_failure_even_when_artifact_was_created(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             project = Path(temp_dir)

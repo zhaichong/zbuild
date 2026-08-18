@@ -164,14 +164,13 @@ def step_build(ctx: StepContext) -> StepResult:
     from git.build import build_project
     from runner.protocol import emit, emit_log
 
+    from git.build_cmd import resolve_branch_build_command
+
     bash_val = ctx.tools.get("bash", "bash")
     bash_path = bash_val.get("path", "bash") if isinstance(bash_val, dict) else str(bash_val or "bash")
     build_cmd = (
         ctx.extra.get("build_command")
-        or ctx.config.get("build_commands", {}).get(ctx.project_name)
-        or ctx.config.get("build_command")
-        or ctx.config.get("buildCommand")
-        or "deploy.sh"
+        or resolve_branch_build_command(ctx.config, ctx.project_name, ctx.branch)
     )
     artifact_paths = (
         ctx.extra.get("artifact_paths")

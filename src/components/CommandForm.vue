@@ -150,15 +150,16 @@
     <!-- 服务器模式: 服务器配置 -->
     <div
       v-if="store.mode === 'server'"
-      class="card p-5"
+      class="card p-4 bg-white border border-slate-200/90 shadow-2xs"
     >
-      <div class="flex items-center gap-1.5 mb-3 text-text-2 font-semibold text-sm">
+      <div class="flex items-center gap-1.5 mb-2.5 text-slate-800 font-bold text-xs tracking-tight">
         <svg
-          width="14"
-          height="14"
+          width="15"
+          height="15"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          class="text-blue-600 shrink-0"
         >
           <path
             stroke-linecap="round"
@@ -167,47 +168,47 @@
             d="M5 12h14M5 12a2 2 0 012-2h10a2 2 0 012 2m-14 0a2 2 0 002 2h10a2 2 0 002-2M7 8l5-5 5 5"
           />
         </svg>
-        服务器配置
+        <span>服务器连接配置</span>
       </div>
       <div class="flex items-end gap-3 flex-nowrap">
         <!-- 服务器地址 -->
-        <div class="flex flex-col gap-1.5 w-44 shrink-0">
-          <label class="text-xs text-text-3 font-medium">服务器地址</label>
+        <div class="flex flex-col gap-1 w-48 shrink-0">
+          <label class="text-xs text-slate-700 font-semibold">服务器地址</label>
           <input
             v-model="store.config.form.serverAddress"
             type="text"
-            class="form-input w-full"
+            class="form-input w-full font-mono text-xs text-slate-800"
             placeholder="例如 192.168.78.63"
           >
         </div>
 
         <!-- 服务器用户名 -->
-        <div class="flex flex-col gap-1.5 w-36 shrink-0">
-          <label class="text-xs text-text-3 font-medium">服务器用户名</label>
+        <div class="flex flex-col gap-1 w-36 shrink-0">
+          <label class="text-xs text-slate-700 font-semibold">服务器用户名</label>
           <input
             v-model="store.config.form.serverUsername"
             type="text"
-            class="form-input w-full"
+            class="form-input w-full text-xs text-slate-800"
             placeholder="用户名"
           >
         </div>
 
         <!-- 服务器密码 -->
-        <div class="flex flex-col gap-1.5 w-36 shrink-0">
-          <label class="text-xs text-text-3 font-medium">服务器密码</label>
+        <div class="flex flex-col gap-1 w-36 shrink-0">
+          <label class="text-xs text-slate-700 font-semibold">服务器密码</label>
           <input
             v-model="store.config.form.serverPassword"
             type="password"
-            class="form-input w-full"
+            class="form-input w-full text-xs text-slate-800"
             placeholder="密码"
           >
         </div>
 
         <!-- 测试连接 按钮 + 结果消息 (紧凑同行组合) -->
-        <div class="flex items-center gap-2 shrink-0 h-[38px]">
+        <div class="flex items-center gap-2 shrink-0 h-[36px]">
           <button
-            class="px-4 text-xs font-semibold rounded-lg transition-all whitespace-nowrap shadow-xs cursor-pointer flex items-center justify-center shrink-0 h-[38px]"
-            :class="testResult === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100' : testResult === 'error' ? 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100' : 'bg-primary text-white hover:opacity-90 active:scale-98'"
+            class="px-3.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap shadow-2xs cursor-pointer flex items-center justify-center shrink-0 h-[36px]"
+            :class="testResult === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100' : testResult === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100' : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-98'"
             :disabled="testing"
             @click="onTestServer"
           >
@@ -250,8 +251,8 @@
           >
             <div
               v-if="testMessage"
-              class="inline-flex items-center gap-1.5 px-3 rounded-lg text-xs font-medium border h-[38px] shrink-0 whitespace-nowrap"
-              :class="testResult === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' : 'bg-rose-50 text-rose-700 border-rose-200/80'"
+              class="inline-flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold border h-[36px] shrink-0 whitespace-nowrap shadow-2xs"
+              :class="testResult === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-300'"
             >
               <svg
                 v-if="testResult === 'success'"
@@ -263,7 +264,7 @@
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  stroke-width="2"
+                  stroke-width="2.5"
                   d="M5 13l4 4L19 7"
                 />
               </svg>

@@ -49,29 +49,29 @@
     </div>
 
     <!-- Companion Status Banner -->
-    <div class="px-3 py-1.5 bg-slate-50/80 border-b border-slate-200/80 flex items-center gap-2.5 flex-shrink-0">
+    <div class="px-3.5 py-2 bg-slate-100/70 border-b border-slate-200/90 flex items-center gap-2.5 flex-shrink-0">
       <PixelPet :state="petState" :variant="deskPetStyle" size="mini" tooltip="点击与桌宠互动" />
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-1.5">
-          <span class="text-[11px] font-bold text-slate-800">{{ petBannerTitle }}</span>
-          <span class="text-[10px] text-slate-400">({{ overallProgressPercent }}%)</span>
+          <span class="text-xs font-bold text-slate-800">{{ petBannerTitle }}</span>
+          <span class="text-[10.5px] font-semibold text-slate-500 font-mono">({{ overallProgressPercent }}%)</span>
         </div>
-        <p class="text-[10.5px] text-slate-500 truncate">{{ petBannerMessage }}</p>
+        <p class="text-[11px] text-slate-600 truncate mt-0.5">{{ petBannerMessage }}</p>
       </div>
     </div>
 
     <!-- Projects List -->
-    <div class="p-3 space-y-2.5 overflow-y-auto flex-1 min-h-0">
+    <div class="p-3 space-y-2.5 overflow-y-auto flex-1 min-h-0 bg-slate-50/40">
       <div
         v-for="(state, name) in store.projectStates"
         :key="name"
-        class="border border-slate-200 rounded-xl bg-slate-50/40 p-3.5 transition-all hover:border-slate-300 hover:shadow-sm"
+        class="border border-slate-200/90 rounded-xl bg-white p-3.5 transition-all hover:border-blue-200 hover:shadow-sm shadow-2xs"
       >
         <!-- Project Title & Branch & Status -->
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2 min-w-0">
             <svg
-              class="w-4 h-4 text-slate-500 flex-shrink-0"
+              class="w-4 h-4 text-blue-500/80 flex-shrink-0"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

@@ -47,14 +47,14 @@
               </label>
               <select
                 v-model="selectedOrgId"
-                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-xs text-slate-800 outline-none transition-all disabled:opacity-50 cursor-pointer"
+                class="w-full px-3 py-2.5 bg-white border border-slate-300 hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-[13px] font-medium text-slate-800 outline-none transition-all disabled:opacity-50 cursor-pointer shadow-xs leading-normal"
                 :disabled="orgs.length === 0"
                 @change="onOrgChange"
               >
-                <option value="" disabled>
+                <option value="" disabled class="py-2 text-[13px]">
                   {{ orgs.length > 0 ? '-- 请选择机构 --' : '尚未获取机构列表' }}
                 </option>
-                <option v-for="org in orgs" :key="org.orgId" :value="org.orgId">
+                <option v-for="org in orgs" :key="org.orgId" :value="org.orgId" class="py-2 text-[13px]">
                   {{ org.orgName || org.orgId }} (ID: {{ org.orgId }})
                 </option>
               </select>
@@ -108,10 +108,10 @@
                   </div>
                   <select
                     :value="cascadeDeptIds[idx]"
-                    class="w-full px-3 py-1.5 bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-xs text-slate-800 outline-none transition-all cursor-pointer shadow-2xs"
+                    class="w-full px-3 py-2.5 bg-white border border-slate-300 hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-[13px] font-medium text-slate-800 outline-none transition-all cursor-pointer shadow-xs leading-normal"
                     @change="(e) => onCascadeChange(idx, (e.target as HTMLSelectElement).value)"
                   >
-                    <option v-for="dept in level.options" :key="dept.deptId" :value="dept.deptId">
+                    <option v-for="dept in level.options" :key="dept.deptId" :value="dept.deptId" class="py-2 text-[13px]">
                       {{ dept.deptName || dept.deptId }} (Key: {{ dept.deptKey || dept.deptId }})
                     </option>
                   </select>
@@ -124,18 +124,19 @@
                   v-model="deptSearchQuery"
                   type="text"
                   placeholder="输入科室/病区名称或 Key 快速搜索..."
-                  class="w-full px-2.5 py-1.5 bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-xs outline-none transition-all"
+                  class="w-full px-3 py-2 bg-white border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-xs outline-none transition-all shadow-2xs"
                 >
                 <select
                   :value="selectedDeptId"
-                  class="w-full px-3 py-1.5 bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-xs text-slate-800 outline-none transition-all cursor-pointer shadow-2xs"
+                  class="w-full px-3 py-2.5 bg-white border border-slate-300 hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-[13px] font-medium text-slate-800 outline-none transition-all cursor-pointer shadow-xs leading-normal"
                   @change="(e) => onFlatDeptChange((e.target as HTMLSelectElement).value)"
                 >
-                  <option value="" disabled>-- 请选择护理单元 --</option>
+                  <option value="" disabled class="py-2 text-[13px]">-- 请选择护理单元 --</option>
                   <option
                     v-for="dept in filteredFlatDepts"
                     :key="dept.deptId"
                     :value="dept.deptId"
+                    class="py-2 text-[13px]"
                   >
                     {{ dept.fullPathName || dept.deptName }} (Key: {{ dept.deptKey || dept.deptId }})
                   </option>
@@ -193,13 +194,13 @@
                 </label>
                 <select
                   v-model="selectedDeviceId"
-                  class="w-full px-3 py-2 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:bg-white rounded-xl text-xs text-slate-800 outline-none transition-all disabled:opacity-50 cursor-pointer"
+                  class="w-full px-3 py-2.5 bg-white border border-slate-300 hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-[13px] font-medium text-slate-800 outline-none transition-all disabled:opacity-50 cursor-pointer shadow-xs leading-normal"
                   :disabled="devices.length === 0"
                 >
-                  <option value="" disabled>
+                  <option value="" disabled class="py-2 text-[13px]">
                     {{ devices.length > 0 ? '-- 请选择终端设备 --' : '请先选择护理单元' }}
                   </option>
-                  <option v-for="dev in devices" :key="dev.deviceId" :value="dev.deviceId">
+                  <option v-for="dev in devices" :key="dev.deviceId" :value="dev.deviceId" class="py-2 text-[13px]">
                     {{ dev.deviceName || dev.deviceId }} [床号: {{ dev.bedName || '未指定' }}]
                   </option>
                 </select>

@@ -445,9 +445,12 @@ function buildEnv() {
     p => fs.existsSync(p) && !((env.PATH || '').toLowerCase().includes(p.toLowerCase()))
   );
 
-  const allExtra = [...extraPaths, ...systemPaths];
-  if (allExtra.length) {
-    env.PATH = allExtra.join(path.delimiter) + path.delimiter + (env.PATH || '');
+  // Keep user's active system PATH first; append detected system tools and fallback runtime dirs
+  const additions = [...systemPaths, ...extraPaths];
+  const origPath = env.PATH || env.Path || '';
+  if (additions.length) {
+    env.PATH = origPath ? `${origPath}${path.delimiter}${additions.join(path.delimiter)}` : additions.join(path.delimiter);
+    env.Path = env.PATH;
   }
   const parts = (env.NODE_OPTIONS || '').split(/\s+/).filter(p => p && p !== '--openssl-legacy-provider');
   if (parts.length) env.NODE_OPTIONS = parts.join(' '); else delete env.NODE_OPTIONS;
@@ -528,6 +531,7 @@ function pyConfigToFrontend(py) {
     projectSvnRoots: py.project_svn_roots || py.projectSvnRoots || {},
     projectServerPaths: py.project_server_paths || py.projectServerPaths || py.server_upload_paths || {},
     projectBuildCommands: py.project_build_commands || py.projectBuildCommands || py.build_commands || {},
+    branchBuildCommands: py.branch_build_commands || py.branchBuildCommands || {},
     tools: {
       git: tools.git || '',
       bash: tools.bash || '',
@@ -579,6 +583,7 @@ function frontendConfigToPy(fe) {
     project_svn_roots: fe.projectSvnRoots || {},
     project_server_paths: fe.projectServerPaths || fe.serverUploadPaths || {},
     project_build_commands: fe.projectBuildCommands || fe.buildCommands || {},
+    branch_build_commands: fe.branchBuildCommands || {},
     auto_install_deps: true,
     auto_pull: true,
     skip_svn_commit: false,
@@ -1142,15 +1147,36 @@ ipcMain.handle('run:start', async (_, payload) => {
     ...pyConfig,
     mode: payload.mode || pyConfig.mode || 'svn',
     stash: payload.stash || false,
-    projects: (payload.projects || []).map(p => ({
-      name: p.name || p.project || '',
-      path: p.path || p.repoPath || '',
-      branch: p.branch || '',
-      svn_leaf: p.svn_leaf || p.svnLeaf || '',
-      server_upload_path: p.server_upload_path || p.serverUploadPath || '',
-      build_command: p.build_command || p.buildCommand || (payload.config && payload.config.buildCommands && payload.config.buildCommands[p.name || p.project]) || '',
-      enabled: p.enabled !== false,
-    })),
+    projects: (payload.projects || []).map(p => {
+      const pName = p.name || p.project || '';
+      const pBranch = p.branch || '';
+      let cmd = p.build_command || p.buildCommand || '';
+      if (!cmd && payload.config) {
+        const branchCmds = (payload.config.branchBuildCommands && payload.config.branchBuildCommands[pName]) || {};
+        if (pBranch && branchCmds[pBranch]) {
+          cmd = branchCmds[pBranch];
+        } else if (pBranch) {
+          for (const [pat, c] of Object.entries(branchCmds)) {
+            if (pat.endsWith('*') && pBranch.startsWith(pat.slice(0, -1))) {
+              cmd = c;
+              break;
+            }
+          }
+        }
+        if (!cmd && payload.config.buildCommands) {
+          cmd = payload.config.buildCommands[pName] || '';
+        }
+      }
+      return {
+        name: pName,
+        path: p.path || p.repoPath || '',
+        branch: pBranch,
+        svn_leaf: p.svn_leaf || p.svnLeaf || '',
+        server_upload_path: p.server_upload_path || p.serverUploadPath || '',
+        build_command: cmd,
+        enabled: p.enabled !== false,
+      };
+    }),
   };
   const py = resolvePython(pyRoot);
   miniStatus = {

@@ -42,6 +42,7 @@ export interface AppConfig {
   projectSvnLeaves?: Record<string, string>
   projectServerPaths?: Record<string, string>
   projectBuildCommands?: Record<string, string>
+  branchBuildCommands?: Record<string, Record<string, string>>
   tools: ToolPaths
   uploadAfterBuild: boolean
   uploadToServer: boolean

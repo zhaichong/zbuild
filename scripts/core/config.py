@@ -101,6 +101,7 @@ def default_config() -> Dict[str, Any]:
         "node_required_version": "14.21.3",
         "build_command": DEFAULT_BUILD_COMMAND,
         "build_commands": dict(DEFAULT_BUILD_COMMANDS),
+        "branch_build_commands": {},
         "artifact_paths": ["dist", "release", "build", "output", "target"],
         "project_artifact_paths": {},
         "project_svn_roots": {},
@@ -118,6 +119,8 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     Ensures all required keys exist with sane defaults and normalizes
     project entries.
     """
+    from git.build_cmd import resolve_branch_build_command
+
     defaults = default_config()
     config = dict(defaults)
     config.update(raw)
@@ -157,6 +160,19 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         merged_cmds = dict(DEFAULT_BUILD_COMMANDS)
         merged_cmds.update({k: str(v).strip() for k, v in build_commands.items() if str(v).strip()})
         config["build_commands"] = merged_cmds
+
+    # Normalize branch_build_commands dict
+    raw_branch_cmds = config.get("branch_build_commands")
+    if not isinstance(raw_branch_cmds, dict):
+        config["branch_build_commands"] = {}
+    else:
+        norm_branch_cmds = {}
+        for p_name, b_map in raw_branch_cmds.items():
+            if isinstance(b_map, dict):
+                norm_branch_cmds[str(p_name)] = {
+                    str(b): str(cmd).strip() for b, cmd in b_map.items() if str(cmd).strip()
+                }
+        config["branch_build_commands"] = norm_branch_cmds
 
     # Normalize artifact_paths list
     raw_art_paths = config.get("artifact_paths")
@@ -212,19 +228,20 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
                     "svn_root": config["project_svn_roots"].get(proj, config["svn_root"]),
                     "enabled": True,
                     "server_upload_path": config["server_upload_paths"].get(proj, ""),
-                    "build_command": config["build_commands"].get(proj, config["build_command"]),
+                    "build_command": resolve_branch_build_command(config, proj, ""),
                 })
             elif isinstance(proj, dict):
                 p_name = proj.get("name", "")
+                p_branch = proj.get("branch", "")
                 normalized_projects.append({
                     "name": p_name,
                     "path": proj.get("path", ""),
-                    "branch": proj.get("branch", ""),
+                    "branch": p_branch,
                     "svn_leaf": proj.get("svn_leaf", p_name),
                     "svn_root": proj.get("svn_root") or config["project_svn_roots"].get(p_name, config["svn_root"]),
                     "enabled": proj.get("enabled", True),
                     "server_upload_path": proj.get("server_upload_path") or config["server_upload_paths"].get(p_name, ""),
-                    "build_command": proj.get("build_command") or config["build_commands"].get(p_name, config["build_command"]),
+                    "build_command": proj.get("build_command") or resolve_branch_build_command(config, p_name, p_branch),
                 })
         config["projects"] = normalized_projects
 

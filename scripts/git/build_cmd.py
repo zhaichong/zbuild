@@ -256,3 +256,23 @@ def resolve_run_argv(
     if argv and _basename(argv[0]) in {"bash", "bash.exe", "sh", "sh.exe"}:
         argv = [bash_exe] + argv[1:]
     return argv, cmd_str
+
+
+def resolve_branch_build_command(
+    config: dict,
+    project_name: str,
+    branch: str = "",
+) -> str:
+    """Resolve build command for a specific project and branch from configuration."""
+    branch_cmds = config.get("branch_build_commands", {}).get(project_name, {})
+    if branch and isinstance(branch_cmds, dict):
+        if branch in branch_cmds:
+            return str(branch_cmds[branch]).strip()
+        for pattern, cmd in branch_cmds.items():
+            if pattern.endswith("*") and branch.startswith(pattern[:-1]):
+                return str(cmd).strip()
+    proj_cmds = config.get("build_commands", {})
+    if isinstance(proj_cmds, dict) and project_name in proj_cmds:
+        return str(proj_cmds[project_name]).strip()
+    return str(config.get("build_command") or "deploy.sh").strip()
+

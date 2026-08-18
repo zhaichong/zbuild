@@ -35,33 +35,45 @@
     <!-- App View 4: Special Order Build & Upload Tool -->
     <div
       v-else
-      class="app-shell flex-1"
+      class="app-shell flex-1 min-h-0"
     >
-      <!-- Left: Main scrollable column -->
-      <div class="main-col">
-        <div class="space-y-3">
-          <CommandForm />
-          <ProjectTable />
-          <ActionBar
-            @start="onStart"
-            @stop="onStop"
-            @retry="onRetry"
-          />
-        </div>
+      <!-- Left: Main column (Top fixed CommandForm, Middle scrollable ProjectTable, Bottom fixed ActionBar) -->
+      <div class="main-col flex flex-col h-full min-h-0 overflow-hidden gap-3">
+        <CommandForm class="shrink-0" />
+        <ProjectTable class="flex-1 min-h-0" />
+        <ActionBar
+          class="shrink-0"
+          @start="onStart"
+          @stop="onStop"
+          @retry="onRetry"
+        />
+      </div>
+
+      <!-- Drag Resizer Handle between main column and side panel -->
+      <div
+        class="w-1.5 hover:w-2 bg-slate-200/60 hover:bg-blue-400 active:bg-blue-600 transition-all cursor-col-resize select-none shrink-0 relative z-20 group flex items-center justify-center -mr-[1px]"
+        :class="{ '!bg-blue-600 !w-2': isResizing }"
+        title="按住拖拽调整面板宽度"
+        @mousedown="onStartResize"
+      >
+        <div class="h-6 w-0.5 bg-slate-400/80 group-hover:bg-white rounded-full transition-colors" />
       </div>
 
       <!-- Right: Side panel (progress + logs tabs) -->
-      <div class="side-col">
+      <div
+        class="side-col"
+        :style="{ width: `${sideWidth}px`, minWidth: `${sideWidth}px` }"
+      >
         <!-- Tabs Header -->
-        <div class="p-2 bg-slate-50 border-b border-slate-200 flex-shrink-0 select-none">
-          <div class="flex items-center gap-1 p-1 bg-slate-200/70 rounded-xl">
+        <div class="p-2 bg-slate-100/90 border-b border-slate-200 flex-shrink-0 select-none">
+          <div class="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl">
             <!-- Pipeline Tab -->
             <button
               type="button"
               class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer"
               :class="activeSideTab === 'pipeline'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'"
+                ? 'bg-white text-blue-700 shadow-xs border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-300/50'"
               @click="activeSideTab = 'pipeline'"
             >
               <svg
@@ -92,8 +104,8 @@
               type="button"
               class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer"
               :class="activeSideTab === 'logs'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'"
+                ? 'bg-white text-blue-700 shadow-xs border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-300/50'"
               @click="activeSideTab = 'logs'"
             >
               <svg
@@ -112,11 +124,24 @@
               <span>日志部分</span>
               <span
                 v-if="store.logs.length > 0"
-                class="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded-full"
-                :class="hasErrorLogs ? 'bg-red-100 text-red-700' : 'bg-slate-300/80 text-slate-700'"
+                class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full"
+                :class="hasErrorLogs ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'"
               >
                 {{ store.logs.length }}
               </span>
+            </button>
+
+            <!-- Width Toggle Button -->
+            <button
+              type="button"
+              class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-300/50 transition-colors cursor-pointer shrink-0"
+              :title="sideWidth > 520 ? '还原标准宽度 (460px)' : '展开宽屏视图 (680px)'"
+              @click="toggleSideWidth"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path v-if="sideWidth > 520" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
         </div>
@@ -280,6 +305,39 @@ const updateRef = ref<InstanceType<typeof UpdateDialog> | null>(null)
 const pendingPayload = ref<RunPayload | null>(null)
 const pendingDirtyNames = ref<Set<string>>(new Set())
 
+// Resizable Side Panel
+const sideWidth = ref(460)
+const isResizing = ref(false)
+
+function onStartResize(e: MouseEvent) {
+  isResizing.value = true
+  const startX = e.clientX
+  const startWidth = sideWidth.value
+
+  const onMouseMove = (moveEvent: MouseEvent) => {
+    const delta = startX - moveEvent.clientX
+    const newWidth = Math.min(Math.max(startWidth + delta, 360), 850)
+    sideWidth.value = newWidth
+  }
+
+  const onMouseUp = () => {
+    isResizing.value = false
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
+  }
+
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+}
+
+function toggleSideWidth() {
+  if (sideWidth.value > 520) {
+    sideWidth.value = 460
+  } else {
+    sideWidth.value = 680
+  }
+}
+
 // Switch to pipeline tab when running starts
 watch(
   () => store.running,
@@ -358,18 +416,14 @@ function buildPayload(onlyFailed = false): RunPayload {
   for (const name of names) {
     const proj = projectMap.get(name)
     if (proj) {
+      const branch = store.projectBranches[name] || proj.currentBranch || ''
       selectedList.push({
         name: proj.projectName,
         path: proj.repoPath,
-        branch: store.projectBranches[name] || proj.currentBranch || '',
+        branch,
         svn_leaf: store.projectSvnLeaves[name] || proj.defaultSvnLeaf || '',
         server_upload_path: store.projectServerPaths[name] || proj.serverUploadPath || '',
-        build_command:
-          store.projectBuildCommands[name] ||
-          store.config?.buildCommands?.[name] ||
-          proj.buildCommand ||
-          store.config?.buildCommand ||
-          'deploy.sh',
+        build_command: store.getEffectiveBuildCommand(name, branch),
         enabled: true,
       })
     }

@@ -119,6 +119,30 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  function getEffectiveBuildCommand(projectName: string, branch?: string): string {
+    const targetBranch = branch || projectBranches.value[projectName] || ''
+    const branchCmds = config.value?.branchBuildCommands?.[projectName]
+    if (branchCmds && targetBranch) {
+      if (branchCmds[targetBranch]) {
+        return branchCmds[targetBranch]
+      }
+      for (const [pattern, cmd] of Object.entries(branchCmds)) {
+        if (pattern.endsWith('*')) {
+          const prefix = pattern.slice(0, -1)
+          if (targetBranch.startsWith(prefix)) {
+            return cmd
+          }
+        }
+      }
+    }
+    return (
+      projectBuildCommands.value[projectName] ||
+      config.value?.buildCommands?.[projectName] ||
+      config.value?.buildCommand ||
+      'deploy.sh'
+    )
+  }
+
   return {
     config,
     projects,
@@ -147,5 +171,6 @@ export const useAppStore = defineStore('app', () => {
     deselectAll,
     setProjectState,
     setStepState,
+    getEffectiveBuildCommand,
   }
 })

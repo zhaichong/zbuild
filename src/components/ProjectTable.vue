@@ -1,95 +1,135 @@
 <template>
-  <div class="card overflow-hidden">
+  <div class="card bg-white border border-slate-200/90 rounded-2xl shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
     <!-- Toolbar -->
-    <div class="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
-      <h2 class="text-[15px] font-semibold text-text-1">
-        项目列表
-      </h2>
-      <div class="flex gap-1.5">
+    <div class="shrink-0 flex flex-wrap items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/60 gap-3">
+      <div class="flex items-center gap-2.5">
+        <h2 class="text-sm font-bold text-slate-900 tracking-tight">
+          项目列表
+        </h2>
+        <span class="text-xs text-slate-600 bg-slate-200/70 px-2.5 py-0.5 rounded-full font-mono font-bold">
+          已选 <strong class="text-blue-600 font-extrabold">{{ store.selectedCount }}</strong> / {{ store.projects.length }}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
         <button
-          class="px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-white text-text-2 hover:bg-border-light transition-colors"
+          type="button"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
           @click="store.selectAll()"
         >
           全选
         </button>
         <button
-          class="px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-white text-text-2 hover:bg-border-light transition-colors"
+          type="button"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
           @click="store.deselectAll()"
         >
           取消全选
         </button>
         <button
-          class="px-3 py-1.5 rounded-md text-xs font-medium bg-primary-light text-primary border-0 hover:bg-blue-200 transition-colors disabled:opacity-50"
+          type="button"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shadow-2xs"
           :disabled="loading"
           @click="onSmartSelect"
         >
-          {{ loading ? '检测中...' : '智能选择' }}
+          <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span>{{ loading ? '检测变动中...' : '智能选择变动' }}</span>
         </button>
         <button
-          class="px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-white text-text-2 hover:bg-border-light transition-colors"
+          type="button"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
           @click="onRefreshAll"
         >
-          刷新分支
+          <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>刷新全部分支</span>
         </button>
       </div>
     </div>
 
-    <!-- Table -->
-    <div class="overflow-x-auto">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th style="width: 40px">
+    <!-- Data Table (Scrollable with Sticky Header) -->
+    <div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
+      <table class="w-full border-collapse text-left">
+        <thead class="sticky top-0 z-10 bg-slate-100/90 backdrop-blur-xs shadow-2xs border-b border-slate-200">
+          <tr class="text-slate-700 text-xs font-bold uppercase tracking-wider">
+            <th class="w-12 px-4 py-3 text-center">
               <input
                 type="checkbox"
-                class="w-4 h-4 accent-primary cursor-pointer"
+                class="w-4 h-4 accent-blue-600 rounded cursor-pointer transition-colors"
                 :checked="allSelected"
                 @change="allSelected ? store.deselectAll() : store.selectAll()"
               >
             </th>
-            <th>项目名称</th>
-            <th>当前分支</th>
-            <th style="width: 160px">
+            <th class="px-4 py-3 font-bold text-slate-800 min-w-[200px]">
+              项目名称
+            </th>
+            <th class="px-4 py-3 font-bold text-slate-800 min-w-[180px]">
+              当前分支
+            </th>
+            <th class="px-4 py-3 font-bold text-slate-800 min-w-[220px]">
               切换分支
             </th>
-            <th>SVN Leaf</th>
-            <th v-if="store.mode === 'server'">
-              服务器路径
-            </th>
-            <th style="width: 90px">
-              状态
+            <th class="px-4 py-3 font-bold text-slate-800 w-32 text-center">
+              执行状态
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="divide-y divide-slate-100 text-slate-800 text-sm">
           <tr
             v-for="project in store.projects"
             :key="project.projectName"
-            :class="{ selected: store.selectedProjects.has(project.projectName) }"
+            class="transition-colors hover:bg-slate-50/90"
+            :class="{ 'bg-blue-50/40': store.selectedProjects.has(project.projectName) }"
           >
-            <td>
+            <!-- Checkbox -->
+            <td class="px-4 py-3.5 text-center">
               <input
                 type="checkbox"
-                class="w-4 h-4 accent-primary cursor-pointer"
+                class="w-4 h-4 accent-blue-600 rounded cursor-pointer transition-colors"
                 :checked="store.selectedProjects.has(project.projectName)"
                 @change="store.toggleProject(project.projectName)"
               >
             </td>
-            <td class="font-semibold text-text-1">
-              {{ project.projectName }}
+
+            <!-- Project Name (Bold & Larger) -->
+            <td class="px-4 py-3.5 font-bold text-slate-900 text-sm">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-blue-500/70 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span class="truncate" :title="project.projectName">
+                  {{ project.projectName }}
+                </span>
+              </div>
             </td>
-            <td class="text-text-2">
-              {{ store.projectBranches[project.projectName] || project.currentBranch }}
+
+            <!-- Current Branch (Bold & Clear) -->
+            <td class="px-4 py-3.5 font-mono">
+              <span
+                class="px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-200/80 text-xs font-bold truncate inline-block max-w-[200px]"
+                :title="store.projectBranches[project.projectName] || project.currentBranch"
+              >
+                {{ store.projectBranches[project.projectName] || project.currentBranch || '—' }}
+              </span>
             </td>
-            <td>
-              <div class="flex items-center gap-1">
+
+            <!-- Switch Branch Picker (Bold & Larger) -->
+            <td class="px-4 py-3.5">
+              <div class="flex items-center gap-2">
                 <button
-                  class="branch-picker px-2 py-1 border border-border rounded-md text-xs bg-white text-text-1 hover:bg-border-light hover:border-primary/30 transition-colors text-left flex-1 max-w-[130px] truncate"
+                  type="button"
+                  class="flex items-center justify-between px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-900 font-mono font-bold hover:border-blue-500 hover:bg-blue-50/20 transition-all text-left flex-1 max-w-[200px] shadow-2xs cursor-pointer group"
+                  :title="'当前分支打包命令: ' + store.getEffectiveBuildCommand(project.projectName, store.projectBranches[project.projectName] || project.currentBranch)"
                   @click="openBranchPicker(project)"
                 >
-                  {{ store.projectBranches[project.projectName] || project.currentBranch || '选择分支' }}
+                  <span class="truncate">
+                    {{ store.projectBranches[project.projectName] || project.currentBranch || '选择分支' }}
+                  </span>
                   <svg
-                    class="w-3 h-3 inline-block ml-1 opacity-50"
+                    class="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1.5 transition-colors"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -102,14 +142,26 @@
                     />
                   </svg>
                 </button>
+
+                <!-- Custom Command Flash Indicator -->
+                <span
+                  v-if="hasBranchCustomCommand(project.projectName, store.projectBranches[project.projectName] || project.currentBranch)"
+                  class="text-xs px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 font-mono font-bold whitespace-nowrap cursor-help shrink-0"
+                  :title="'此分支已配置专属打包命令: ' + store.getEffectiveBuildCommand(project.projectName, store.projectBranches[project.projectName] || project.currentBranch)"
+                >
+                  ⚡
+                </span>
+
+                <!-- Refresh Project Branch Button -->
                 <button
-                  class="p-1 rounded-md text-text-3 hover:text-primary hover:bg-border-light transition-colors flex-shrink-0"
-                  :class="{ 'animate-spin': refreshingProject === project.projectName }"
+                  type="button"
+                  class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors flex-shrink-0 cursor-pointer"
+                  :class="{ 'animate-spin text-blue-600': refreshingProject === project.projectName }"
                   title="刷新此项目分支"
                   @click="onRefreshOne(project.projectName)"
                 >
                   <svg
-                    class="w-3.5 h-3.5"
+                    class="w-4 h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -124,44 +176,24 @@
                 </button>
               </div>
             </td>
-            <td v-if="store.mode === 'svn'">
-              <div class="flex items-center gap-1.5">
-                <input
-                  class="px-2 py-1 border border-border rounded-md text-xs bg-white text-text-2 outline-none w-full max-w-[130px] focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-                  :value="store.projectSvnLeaves[project.projectName] || project.defaultSvnLeaf || ''"
-                  placeholder="svn leaf 路径"
-                  :title="'SVN 根仓库: ' + getProjectSvnRoot(project.projectName)"
-                  @input="onSvnLeafInput(project.projectName, ($event.target as HTMLInputElement).value)"
-                >
-                <span
-                  v-if="hasCustomSvnRoot(project.projectName)"
-                  class="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-primary border border-blue-200/80 font-mono whitespace-nowrap cursor-help"
-                  :title="'独立SVN仓库: ' + getProjectSvnRoot(project.projectName)"
-                >
-                  独立
-                </span>
-              </div>
-            </td>
-            <td v-if="store.mode === 'server'">
-              <input
-                class="px-2 py-1 border border-border rounded-md text-xs bg-white text-text-2 outline-none w-full max-w-[160px] focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-                :value="store.projectServerPaths[project.projectName] || project.serverUploadPath || defaultServerPath(project.projectName)"
-                placeholder="/home/data/web"
-                @input="onServerPathInput(project.projectName, ($event.target as HTMLInputElement).value)"
-              >
-            </td>
-            <td>
+
+            <!-- Status Column (Bold & Centered) -->
+            <td class="px-4 py-3.5 text-center">
               <span
                 v-if="store.projectStates[project.projectName]"
-                class="status-badge"
-                :class="store.projectStates[project.projectName].status"
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs"
+                :class="getStatusBadgeClass(store.projectStates[project.projectName].status)"
               >
+                <span class="w-2 h-2 rounded-full" :class="getStatusDotClass(store.projectStates[project.projectName].status)" />
                 {{ statusLabel(store.projectStates[project.projectName].status) }}
               </span>
               <span
                 v-else
-                class="status-badge pending"
-              >待执行</span>
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200/80 shadow-2xs"
+              >
+                <span class="w-2 h-2 rounded-full bg-slate-400" />
+                待执行
+              </span>
             </td>
           </tr>
         </tbody>
@@ -171,7 +203,7 @@
     <!-- Empty state -->
     <div
       v-if="store.projects.length === 0"
-      class="flex flex-col items-center justify-center py-12 text-text-3"
+      class="flex flex-col items-center justify-center py-12 text-slate-400"
     >
       <svg
         width="48"
@@ -179,7 +211,7 @@
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
-        class="opacity-35 mb-3"
+        class="opacity-30 mb-3"
       >
         <path
           stroke-linecap="round"
@@ -188,8 +220,8 @@
           d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
         />
       </svg>
-      <p class="text-sm">
-        暂无项目，请先配置工作目录
+      <p class="text-sm font-bold text-slate-600">
+        暂无项目，请先在右上角配置工作目录
       </p>
     </div>
 
@@ -233,25 +265,39 @@ function statusLabel(status: StepStatusType): string {
   return labels[status] || status
 }
 
-function defaultServerPath(projectName: string): string {
-  if (!store.config?.serverUploadPaths) return ''
-  return store.config.serverUploadPaths[projectName] || ''
+function getStatusBadgeClass(status: StepStatusType): string {
+  if (status === 'done') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  if (status === 'failed') return 'bg-red-50 text-red-700 border-red-200'
+  if (status === 'running') return 'bg-blue-50 text-blue-700 border-blue-200'
+  if (status === 'skipped') return 'bg-amber-50 text-amber-700 border-amber-200'
+  if (status === 'retrying') return 'bg-orange-50 text-orange-700 border-orange-200'
+  return 'bg-slate-100 text-slate-600 border-slate-200'
 }
 
-function getProjectSvnRoot(projectName: string): string {
-  if (store.config?.projectSvnRoots && store.config.projectSvnRoots[projectName]) {
-    return store.config.projectSvnRoots[projectName]
+function getStatusDotClass(status: StepStatusType): string {
+  if (status === 'done') return 'bg-emerald-500'
+  if (status === 'failed') return 'bg-red-500'
+  if (status === 'running') return 'bg-blue-500 animate-ping'
+  if (status === 'skipped') return 'bg-amber-500'
+  if (status === 'retrying') return 'bg-orange-500'
+  return 'bg-slate-400'
+}
+
+function hasBranchCustomCommand(projectName: string, branch: string): boolean {
+  if (!branch) return false
+  const branchCmds = store.config?.branchBuildCommands?.[projectName]
+  if (!branchCmds) return false
+  if (branchCmds[branch]) return true
+  for (const pat of Object.keys(branchCmds)) {
+    if (pat.endsWith('*') && branch.startsWith(pat.slice(0, -1))) {
+      return true
+    }
   }
-  return store.config?.svnRootUrl || ''
-}
-
-function hasCustomSvnRoot(projectName: string): boolean {
-  return !!(store.config?.projectSvnRoots && store.config.projectSvnRoots[projectName])
+  return false
 }
 
 async function openBranchPicker(project: ProjectInfo) {
   pickerProjectName.value = project.projectName
-  // If branch list is empty, fetch remote branches first so user can pick
   let branches = project.branches || []
   if (branches.length === 0) {
     try {
@@ -266,9 +312,6 @@ async function openBranchPicker(project: ProjectInfo) {
     }
   }
   pickerItems.value = branches
-  // Pass currentVal directly to show() — avoids Vue 3 reactivity timing issue
-  // where props.currentValue inside the child may still hold the old value
-  // when show() runs synchronously after the ref assignment above.
   const currentVal = store.projectBranches[project.projectName] || project.currentBranch || ''
   pickerCurrentValue.value = currentVal
   if (pickerRef.value) {
@@ -279,15 +322,11 @@ async function openBranchPicker(project: ProjectInfo) {
 function onBranchChoose(branch: string) {
   if (pickerProjectName.value) {
     store.projectBranches[pickerProjectName.value] = branch
+    const effectiveCmd = store.getEffectiveBuildCommand(pickerProjectName.value, branch)
+    if (effectiveCmd) {
+      store.projectBuildCommands[pickerProjectName.value] = effectiveCmd
+    }
   }
-}
-
-function onSvnLeafInput(projectName: string, value: string) {
-  store.projectSvnLeaves[projectName] = value
-}
-
-function onServerPathInput(projectName: string, value: string) {
-  store.projectServerPaths[projectName] = value
 }
 
 async function onRefreshAll() {

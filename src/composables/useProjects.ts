@@ -22,11 +22,7 @@ export async function refreshProjects(): Promise<ProjectInfo[]> {
     if (serverPath) {
       store.projectServerPaths[project.projectName] = serverPath
     }
-    const buildCmd =
-      store.config.buildCommands?.[project.projectName] ||
-      project.buildCommand ||
-      store.config.buildCommand ||
-      'deploy.sh'
+    const buildCmd = store.getEffectiveBuildCommand(project.projectName, project.currentBranch)
     if (buildCmd) {
       store.projectBuildCommands[project.projectName] = buildCmd
     }

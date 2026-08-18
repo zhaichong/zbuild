@@ -138,31 +138,42 @@
       <!-- Optional Error or Step Message -->
       <div
         v-if="message"
-        class="mt-1.5 text-[11px] p-2 rounded-md leading-relaxed break-all flex items-start gap-1.5"
-        :class="status === 'failed' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-slate-50 text-slate-600'"
+        class="mt-2 text-xs rounded-lg overflow-hidden transition-all shadow-xs"
+        :class="status === 'failed' ? 'bg-slate-900 border border-slate-700/80' : 'bg-slate-50 border border-slate-200 text-slate-700 p-2.5'"
       >
-        <svg
-          v-if="status === 'failed'"
-          class="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
-        <span>{{ message }}</span>
+        <template v-if="status === 'failed'">
+          <div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-950/80 border-b border-slate-800 text-[10.5px]">
+            <span class="flex items-center gap-1.5 font-bold text-red-400 font-mono">
+              <svg class="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>错误日志详情</span>
+            </span>
+            <button
+              type="button"
+              class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono cursor-pointer transition-colors"
+              title="复制错误信息"
+              @click.stop="onCopyMessage"
+            >
+              {{ copied ? '已复制' : '复制' }}
+            </button>
+          </div>
+          <div class="p-2.5 font-mono text-[11px] leading-relaxed text-red-200/90 whitespace-pre-wrap break-all max-h-48 overflow-y-auto select-text">
+            {{ message }}
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex items-start gap-1.5">
+            <span class="leading-relaxed">{{ message }}</span>
+          </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { StepStatusType } from '@/types'
 
 const props = withDefaults(
@@ -180,6 +191,18 @@ const props = withDefaults(
     isLast: false,
   }
 )
+
+const copied = ref(false)
+
+function onCopyMessage() {
+  if (props.message) {
+    navigator.clipboard.writeText(props.message)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  }
+}
 
 const nodeClass = computed(() => {
   switch (props.status) {

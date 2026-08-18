@@ -812,6 +812,96 @@ ipcMain.handle('server:test', async (_, p) => {
   const result = await runPython('server-test', p);
   return { success: result.success !== false, message: result.message || '', error: result.error || '' };
 });
+ipcMain.handle('order-deploy:list', async (_, p) => {
+  return await runPython('order-deploy-list', p, 60000);
+});
+ipcMain.handle('order-deploy:open-file', async (_, p) => {
+  const result = await runPython('order-deploy-open-file', p, 45000);
+  if (result && result.success && result.filePath) {
+    if (p && p.forceNative) {
+      const err = await shell.openPath(result.filePath);
+      if (err) {
+        return { success: false, error: '系统打开文件失败: ' + err, filePath: result.filePath };
+      }
+    }
+    return {
+      success: true,
+      filePath: result.filePath,
+      fileName: result.fileName,
+      isText: Boolean(result.isText),
+      content: result.content || '',
+      size: result.size || 0,
+    };
+  }
+  return { success: false, error: result?.error || '下载文件失败' };
+});
+ipcMain.handle('system:open-path', async (_, filePath) => {
+  if (!filePath) return { success: false, error: '路径为空' };
+  const err = await shell.openPath(filePath);
+  return { success: !err, error: err || '' };
+});
+ipcMain.handle('order-deploy:start', async (_, payload) => {
+  debugLog('order-deploy:start called, files count: ' + (payload.selectedFiles || []).length);
+  if (currentRun) throw new Error('\u5df2\u6709\u4efb\u52a1\u6b63\u5728\u6267\u884c\u3002');
+  const py = resolvePython(pyRoot);
+  miniStatus = {
+    state: 'running',
+    total: Array.isArray(payload.selectedFiles) ? payload.selectedFiles.length : 0,
+    completed: 0,
+    successCount: 0,
+    failureCount: 0,
+    petStyle: 'pixel',
+    currentProject: '',
+    currentStep: '\u6b63\u5728\u51c6\u5907\u6d4b\u8bd5\u8ba2\u5355\u90e8\u7f72...',
+    message: '\u6b63\u5728\u51c6\u5907\u90e8\u7f72\u4efb\u52a1'
+  };
+  debugLog('spawning python for order-deploy-run: ' + py.exe + ' ' + py.args.join(' ') + ' ' + runnerPath);
+  currentRun = spawn(py.exe, [...py.args, runnerPath, 'order-deploy-run'], {
+    cwd: pyRoot,
+    windowsHide: true,
+    env: buildEnv(),
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  let buffer = '';
+  currentRun.stdout.on('data', chunk => {
+    buffer += chunk.toString('utf8');
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    lines.forEach(line => {
+      if (!line.trim()) return;
+      try {
+        sendRunEvent(JSON.parse(line));
+      } catch {
+        sendRunEvent({ type: 'log', message: line, level: 'normal' });
+      }
+    });
+  });
+  currentRun.stderr.on('data', c => {
+    const msg = c.toString('utf8');
+    debugLog('order-deploy runner stderr: ' + msg);
+    sendRunEvent({ type: 'log', level: 'error', message: msg });
+  });
+  currentRun.on('error', e => {
+    debugLog('order-deploy runner spawn error: ' + e.message);
+    sendRunEvent({ type: 'error', message: e.message });
+    currentRun = null;
+  });
+  currentRun.on('close', code => {
+    debugLog('order-deploy runner process closed, exit code: ' + code);
+    if (runStopping) { runStopping = false; currentRun = null; return; }
+    if (buffer.trim()) {
+      try {
+        sendRunEvent(JSON.parse(buffer));
+      } catch {
+        sendRunEvent({ type: 'log', message: buffer, level: 'normal' });
+      }
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('run:exit', { code });
+    currentRun = null;
+  });
+  currentRun.stdin.end(JSON.stringify(payload));
+  return true;
+});
 
 // templates
 ipcMain.handle('templates:list', async () => {

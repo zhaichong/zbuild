@@ -20,9 +20,17 @@ export interface FormConfig {
   serverPassword: string
 }
 
+export interface SvnLocationItem {
+  id: string
+  name: string
+  url: string
+  isDefault?: boolean
+}
+
 export interface AppConfig {
   rootPath: string
   svnRootUrl: string
+  svnLocations?: SvnLocationItem[]
   projectSvnRoots?: Record<string, string>
   buildCommand?: string
   buildCommands?: Record<string, string>
@@ -170,3 +178,37 @@ export interface UpdateStatus {
   total?: number
   message?: string
 }
+
+export interface SvnTreeNode {
+  id: string
+  name: string
+  path: string
+  relativePath: string
+  kind: 'dir' | 'file'
+  size?: number
+  sizeFormatted?: string
+  children?: SvnTreeNode[]
+  checked?: boolean
+  isFrontendPackage?: boolean
+  matchedServerPath?: string
+  matchedProjectName?: string
+  fullUrl?: string
+}
+
+export interface OrderDeployPayload {
+  svnUrl: string
+  orderNo?: string
+  hospitalName?: string
+  svnUsername?: string
+  svnPassword?: string
+  serverAddress: string
+  serverUsername: string
+  serverPassword: string
+  selectedFiles: Array<{
+    name: string
+    relativePath: string
+    targetServerPath: string
+    matchedProjectName?: string
+  }>
+}
+

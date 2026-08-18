@@ -14,8 +14,12 @@ declare global {
       detectAffectedStaged: (payload: unknown) => Promise<{ affectedProjects: string[] }>
       svnList: (payload: unknown) => Promise<string[]>
       testServer: (payload: unknown) => Promise<{ success: boolean; message?: string; error?: string }>
+      orderDeployList?: (payload: unknown) => Promise<{ success: boolean; tree: SvnTreeNode[]; flatList: SvnTreeNode[]; error?: string }>
+      orderDeployOpenFile?: (payload: unknown) => Promise<{ success: boolean; filePath?: string; fileName?: string; isText?: boolean; content?: string; size?: number; error?: string }>
+      orderDeployStart?: (payload: unknown) => Promise<boolean>
       chooseDirectory: (currentPath?: string) => Promise<string>
       chooseExecutable: (currentPath?: string) => Promise<string>
+      openPath?: (filePath: string) => Promise<{ success: boolean; error?: string }>
       startRun: (payload: unknown) => Promise<boolean>
       stopRun: () => Promise<boolean>
       onRunEvent: (handler: (event: RunEvent) => void) => () => void
@@ -53,4 +57,5 @@ import type {
   ExecutionRecord,
   MiniStatus,
   UpdateStatus,
+  SvnTreeNode,
 } from './types'

@@ -24,7 +24,15 @@
       <MockQueryTool />
     </div>
 
-    <!-- App View 3: Special Order Build & Upload Tool -->
+    <!-- App View 3: Test Order Deploy Solution -->
+    <div
+      v-else-if="currentApp === 'order-deploy'"
+      class="flex-1 min-h-0 flex flex-col overflow-hidden"
+    >
+      <OrderDeployTool ref="orderDeployRef" />
+    </div>
+
+    <!-- App View 4: Special Order Build & Upload Tool -->
     <div
       v-else
       class="app-shell flex-1"
@@ -216,6 +224,7 @@ import { ipc } from '@/services/ipc'
 import HeaderBar from '@/components/HeaderBar.vue'
 import AppPortal from '@/components/AppPortal.vue'
 import MockQueryTool from '@/components/MockQueryTool.vue'
+import OrderDeployTool from '@/components/OrderDeployTool.vue'
 import CommandForm from '@/components/CommandForm.vue'
 import ProjectTable from '@/components/ProjectTable.vue'
 import PipelineView from '@/components/PipelineView.vue'
@@ -231,13 +240,15 @@ import { checkLocalChanges } from '@/composables/useProjects'
 import { saveConfig } from '@/composables/useConfig'
 import type { UploadMode, LocalChangeSummary, AppConfig } from '@/types'
 
-const currentApp = ref<'zbuild' | 'portal' | 'mock-query'>('portal')
+const currentApp = ref<'zbuild' | 'portal' | 'mock-query' | 'order-deploy'>('portal')
 
 function onSwitchApp(appId: string) {
   if (appId === 'portal') {
     currentApp.value = 'portal'
   } else if (appId === 'mock-query') {
     currentApp.value = 'mock-query'
+  } else if (appId === 'order-deploy') {
+    currentApp.value = 'order-deploy'
   } else {
     currentApp.value = 'zbuild'
   }
@@ -310,9 +321,17 @@ const hasErrorLogs = computed(() => {
   return store.logs.some((l) => l.level === 'error')
 })
 
+const orderDeployRef = ref<InstanceType<typeof OrderDeployTool> | null>(null)
+
 function onOpenSettings() {
-  if (settingsRef.value) {
-    settingsRef.value.visible = true
+  if (currentApp.value === 'order-deploy') {
+    if (orderDeployRef.value) {
+      orderDeployRef.value.openSettings()
+    }
+  } else {
+    if (settingsRef.value) {
+      settingsRef.value.visible = true
+    }
   }
 }
 

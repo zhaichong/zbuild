@@ -30,10 +30,14 @@ contextBridge.exposeInMainWorld('tool', {
   // SVN & server
   svnList: (payload) => ipcRenderer.invoke('svn:list', parsePayload(payload)),
   testServer: (payload) => ipcRenderer.invoke('server:test', parsePayload(payload)),
+  orderDeployList: (payload) => ipcRenderer.invoke('order-deploy:list', parsePayload(payload)),
+  orderDeployOpenFile: (payload) => ipcRenderer.invoke('order-deploy:open-file', parsePayload(payload)),
+  orderDeployStart: (payload) => ipcRenderer.invoke('order-deploy:start', parsePayload(payload)),
 
   // dialogs
   chooseDirectory: (currentPath) => ipcRenderer.invoke('dialog:directory', currentPath),
   chooseExecutable: (currentPath) => ipcRenderer.invoke('dialog:executable', currentPath),
+  openPath: (filePath) => ipcRenderer.invoke('system:open-path', filePath),
 
   // order directory
   createOrderDir: (payload) => ipcRenderer.invoke('order-dir:create', parsePayload(payload)),

@@ -77,6 +77,54 @@ export const ipc = {
   ): Promise<{ success: boolean; message?: string; error?: string }> =>
     window.tool.testServer(toPlainObject({ serverAddress, serverUsername, serverPassword })),
 
+  orderDeployList: (payload: {
+    svnUrl: string
+    svn?: string
+    svnUsername?: string
+    svnPassword?: string
+    serverUploadPaths?: Record<string, string>
+  }): Promise<{ success: boolean; tree: any[]; flatList: any[]; totalFiles?: number; totalDirs?: number; error?: string }> =>
+    window.tool.orderDeployList
+      ? window.tool.orderDeployList(toPlainObject(payload))
+      : Promise.resolve({ success: false, tree: [], flatList: [], error: 'IPC 接口不可用' }),
+
+  orderDeployOpenFile: (payload: {
+    fileUrl: string
+    svn?: string
+    svnUsername?: string
+    svnPassword?: string
+    forceNative?: boolean
+  }): Promise<{ success: boolean; filePath?: string; fileName?: string; isText?: boolean; content?: string; size?: number; error?: string }> =>
+    window.tool.orderDeployOpenFile
+      ? window.tool.orderDeployOpenFile(toPlainObject(payload))
+      : Promise.resolve({ success: false, error: 'IPC 接口不可用' }),
+
+  openPath: (filePath: string): Promise<{ success: boolean; error?: string }> =>
+    window.tool.openPath
+      ? window.tool.openPath(filePath)
+      : Promise.resolve({ success: false, error: 'IPC 接口不可用' }),
+
+  orderDeployStart: (payload: {
+    svnUrl: string
+    orderNo?: string
+    hospitalName?: string
+    svn?: string
+    svnUsername?: string
+    svnPassword?: string
+    serverAddress: string
+    serverUsername: string
+    serverPassword: string
+    selectedFiles: Array<{
+      name: string
+      relativePath: string
+      targetServerPath: string
+      matchedProjectName?: string
+    }>
+  }): Promise<boolean> =>
+    window.tool.orderDeployStart
+      ? window.tool.orderDeployStart(toPlainObject(payload))
+      : Promise.reject(new Error('IPC 接口不可用')),
+
   chooseDirectory: (currentPath?: string): Promise<string> =>
     window.tool.chooseDirectory(currentPath),
 

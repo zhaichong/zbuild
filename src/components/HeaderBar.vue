@@ -23,6 +23,7 @@
 
       <h1 class="text-xs sm:text-sm font-semibold tracking-wide flex items-center gap-2 shrink-0 whitespace-nowrap">
         <span v-if="activeApp === 'mock-query'">终端数据链路提取控制台</span>
+        <span v-else-if="activeApp === 'order-deploy'">测试订单部署解决方案</span>
         <span v-else-if="activeApp === 'portal'">开发者中心</span>
         <span v-else>智慧病房构建工具</span>
       </h1>
@@ -145,9 +146,9 @@
 
       <!-- Settings button -->
       <button
-        v-if="activeApp === 'zbuild'"
-        class="w-[34px] h-[34px] rounded-lg flex items-center justify-center transition-colors"
-        style="background: rgba(255,255,255,.12); color: #fff; border: none; cursor: pointer;"
+        v-if="activeApp !== 'portal'"
+        class="w-[34px] h-[34px] rounded-lg flex items-center justify-center transition-colors cursor-pointer"
+        style="background: rgba(255,255,255,.12); color: #fff; border: none;"
         title="设置"
         @click="emit('open-settings')"
       >

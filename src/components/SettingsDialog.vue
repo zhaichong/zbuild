@@ -402,6 +402,105 @@
                   >
                 </div>
 
+                <!-- 常用 SVN 目录源列表 (支持多源切换) -->
+                <div class="pt-2 border-t border-border/60 space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <label class="block text-xs font-semibold text-text-2">常用 SVN 目录源列表 (多源配置)</label>
+                      <p class="text-[11px] text-text-3">配置多个常用的 SVN 订单或版本目录位置，在订单部署时可快捷切换</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="px-2.5 py-1 text-xs text-primary bg-primary/10 hover:bg-primary/20 rounded-lg font-medium flex items-center gap-1 transition-colors"
+                      @click="showAddSvnLocModal = !showAddSvnLocModal"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      添加 SVN 目录源
+                    </button>
+                  </div>
+
+                  <!-- Inline Add SVN Location -->
+                  <div
+                    v-if="showAddSvnLocModal"
+                    class="flex flex-wrap items-center gap-2 bg-blue-50/80 p-3 rounded-lg border border-primary/30"
+                  >
+                    <input
+                      v-model="newSvnLocName"
+                      type="text"
+                      class="w-36 px-2.5 py-1.5 text-xs border border-border rounded-md bg-white text-text-1 focus:border-primary/50 outline-none"
+                      placeholder="源名称 (如 特殊订单)"
+                      @keyup.enter="confirmAddSvnLocation"
+                    >
+                    <input
+                      v-model="newSvnLocUrl"
+                      type="text"
+                      class="flex-1 min-w-[10rem] px-2.5 py-1.5 text-xs font-mono border border-border rounded-md bg-white text-text-1 focus:border-primary/50 outline-none"
+                      placeholder="https://10.1.1.120/svn/..."
+                      @keyup.enter="confirmAddSvnLocation"
+                    >
+                    <button
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-primary text-white rounded-md hover:opacity-90 transition-opacity cursor-pointer"
+                      @click="confirmAddSvnLocation"
+                    >
+                      添加
+                    </button>
+                    <button
+                      type="button"
+                      class="px-2.5 py-1.5 text-xs border border-border bg-white text-text-3 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+                      @click="showAddSvnLocModal = false"
+                    >
+                      取消
+                    </button>
+                  </div>
+
+                  <!-- SVN Locations List -->
+                  <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    <div
+                      v-for="(loc, idx) in configuredSvnLocations"
+                      :key="loc.id || idx"
+                      class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-border/60 shadow-2xs hover:border-primary/40 transition-colors"
+                    >
+                      <input
+                        v-model="loc.name"
+                        type="text"
+                        class="w-32 px-2 py-0.5 text-xs font-semibold border border-transparent hover:border-border focus:border-primary rounded bg-transparent outline-none"
+                        placeholder="源名称"
+                      >
+                      <input
+                        v-model="loc.url"
+                        type="text"
+                        class="flex-1 min-w-0 px-2 py-0.5 text-xs font-mono border border-transparent hover:border-border focus:border-primary rounded bg-slate-50/50 outline-none"
+                        placeholder="SVN URL"
+                      >
+                      <button
+                        type="button"
+                        class="px-2 py-0.5 text-[11px] rounded transition-colors"
+                        :class="store.config.svnRootUrl === loc.url ? 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600'"
+                        :title="store.config.svnRootUrl === loc.url ? '当前默认根目录' : '设为默认根目录'"
+                        @click="setDefaultSvnLocation(loc)"
+                      >
+                        {{ store.config.svnRootUrl === loc.url ? '默认' : '设为默认' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="p-1 text-text-3 hover:text-danger hover:bg-danger/10 rounded transition-colors shrink-0"
+                        title="删除此目录源"
+                        @click="removeSvnLocation(idx)"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div v-if="configuredSvnLocations.length === 0" class="text-center py-2 text-xs text-text-3">
+                      暂无自定义目录源，默认使用全局 SVN 根 URL
+                    </div>
+                  </div>
+                </div>
+
                 <!-- SVN 凭据 -->
                 <div class="grid grid-cols-2 gap-3 pt-2 border-t border-border/60">
                   <div>
@@ -814,6 +913,10 @@ const showAddProjectModal = ref(false)
 const newProjectName = ref('')
 const newProjectPath = ref('/home/data/web')
 
+const showAddSvnLocModal = ref(false)
+const newSvnLocName = ref('')
+const newSvnLocUrl = ref('')
+
 const showAddSvnRootModal = ref(false)
 const newSvnRootProjectName = ref('')
 const newSvnRootValue = ref('')
@@ -825,6 +928,14 @@ const newBuildCmdValue = ref('deploy.sh')
 const showAddArtifactPathModal = ref(false)
 const newArtifactProjectName = ref('')
 const newArtifactPathValue = ref('dist')
+
+const configuredSvnLocations = computed(() => {
+  if (!store.config) return []
+  if (!store.config.svnLocations) {
+    store.config.svnLocations = []
+  }
+  return store.config.svnLocations
+})
 
 const globalArtifactPathsInput = computed({
   get() {
@@ -895,6 +1006,20 @@ function initConfigDefaults() {
   }
   if (!store.config.projectSvnRoots) {
     store.config.projectSvnRoots = {}
+  }
+  if (!store.config.svnLocations || store.config.svnLocations.length === 0) {
+    if (store.config.svnRootUrl) {
+      store.config.svnLocations = [
+        {
+          id: 'default-loc',
+          name: '默认特殊订单库',
+          url: store.config.svnRootUrl,
+          isDefault: true,
+        },
+      ]
+    } else {
+      store.config.svnLocations = []
+    }
   }
   for (const [key, val] of Object.entries(DEFAULT_BUILD_COMMANDS)) {
     if (!(key in store.config.buildCommands)) {
@@ -973,6 +1098,53 @@ function removeProjectArtifactPath(name: string) {
 function removeProjectSvnRoot(name: string) {
   if (store.config?.projectSvnRoots) {
     delete store.config.projectSvnRoots[name]
+  }
+}
+
+function confirmAddSvnLocation() {
+  const name = newSvnLocName.value.trim()
+  const url = newSvnLocUrl.value.trim()
+  if (!name) {
+    store.showToast('请输入目录源名称', 'warning')
+    return
+  }
+  if (!url) {
+    store.showToast('请输入 SVN 目录 URL', 'warning')
+    return
+  }
+  if (store.config) {
+    if (!store.config.svnLocations) store.config.svnLocations = []
+    store.config.svnLocations.push({
+      id: 'loc-' + Date.now(),
+      name,
+      url,
+      isDefault: store.config.svnLocations.length === 0,
+    })
+    if (store.config.svnLocations.length === 1 && !store.config.svnRootUrl) {
+      store.config.svnRootUrl = url
+    }
+    newSvnLocName.value = ''
+    newSvnLocUrl.value = ''
+    showAddSvnLocModal.value = false
+    store.showToast('已添加 SVN 目录源', 'success')
+  }
+}
+
+function removeSvnLocation(idx: number) {
+  if (store.config?.svnLocations) {
+    store.config.svnLocations.splice(idx, 1)
+  }
+}
+
+function setDefaultSvnLocation(loc: { name: string; url: string }) {
+  if (store.config) {
+    store.config.svnRootUrl = loc.url
+    if (store.config.svnLocations) {
+      store.config.svnLocations.forEach((item) => {
+        item.isDefault = item.url === loc.url
+      })
+    }
+    store.showToast(`已将「${loc.name}」设为默认 SVN 根目录`, 'success')
   }
 }
 

@@ -136,8 +136,8 @@ export const useAppStore = defineStore('app', () => {
       }
     }
     return (
-      projectBuildCommands.value[projectName] ||
       config.value?.buildCommands?.[projectName] ||
+      projectBuildCommands.value[projectName] ||
       config.value?.buildCommand ||
       'deploy.sh'
     )

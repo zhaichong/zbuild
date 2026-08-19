@@ -91,12 +91,8 @@ def detect_project_build_command(project_path: "Path | str") -> Optional[List[st
                 data = json.load(f)
             scripts = data.get("scripts", {})
             if isinstance(scripts, dict) and scripts:
-                # Detect preferred package manager
+                # Use npm as package manager
                 pm = "npm"
-                if (project / "pnpm-lock.yaml").is_file():
-                    pm = "pnpm"
-                elif (project / "yarn.lock").is_file():
-                    pm = "yarn"
 
                 # Check prioritized script names
                 priority_scripts = ["build:prod", "build", "build:production", "release", "package", "dist"]

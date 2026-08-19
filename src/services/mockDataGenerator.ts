@@ -127,6 +127,9 @@ const OPERATION_TEMPLATES = [
 export interface MockDataOptions {
   orgId: string
   deptId: string
+  deptKey?: string
+  deptName?: string
+  useDeptKey?: boolean
   createPatient: boolean
   patientCount: number
   createBoard: boolean
@@ -174,6 +177,9 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
   const {
     orgId,
     deptId,
+    deptKey = '',
+    deptName = '',
+    useDeptKey = false,
     createPatient,
     patientCount,
     createBoard,
@@ -193,6 +199,10 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
     useIgnore = true,
   } = options
 
+  // 根据配置决定写入数据库字段的科室标识（默认使用部门 deptId）
+  const effectiveDeptId = (useDeptKey && deptKey ? deptKey : deptId).trim()
+  const effectiveDeptName = (deptName || '护理单元').trim()
+
   const insertCmd = useIgnore ? 'INSERT IGNORE INTO' : 'INSERT INTO'
   const sqlLines: string[] = []
   const rawStatements: string[] = []
@@ -200,7 +210,10 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
   sqlLines.push(`-- ===================================================`)
   sqlLines.push(`-- 智能造数据 SQL 脚本`)
   sqlLines.push(`-- 目标机构 (org_id): ${orgId}`)
-  sqlLines.push(`-- 目标护理单元 (dept_id): ${deptId}`)
+  sqlLines.push(`-- 目标护理单元名称: ${effectiveDeptName}`)
+  sqlLines.push(`-- 目标护理单元写入标识 (dept_id): ${effectiveDeptId} (${useDeptKey && deptKey ? '使用科室Key' : '使用部门deptId'})`)
+  sqlLines.push(`-- 部门 deptId: ${deptId}`)
+  if (deptKey) sqlLines.push(`-- 业务 Key: ${deptKey}`)
   sqlLines.push(`-- 生成时间: ${new Date().toLocaleString()}`)
   sqlLines.push(`-- 增量防护: 启用 (自增床号/单号/主键UUID)`)
   sqlLines.push(`-- 遇重跳过: ${useIgnore ? '开启 (INSERT IGNORE)' : '关闭'}`)
@@ -219,17 +232,19 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
   if (createPatient && patientCount > 0) {
     sqlLines.push(`-- 1. 患者数据 (bn_patient_in) 共 ${patientCount} 条 --`)
 
-    const baseInpNo = 2524400 + Math.floor(Math.random() * 1000)
+    // 基于时间戳动态生成基础ID，确保不同科室/多次生成互不撞重
+    const timestampSeed = Date.now().toString().slice(-6)
+    const baseInpNo = 2000000 + Math.floor(Math.random() * 7000000)
     const nowStr = '2025-09-01 09:00:00'
 
     for (let i = 0; i < patientCount; i++) {
       const tpl = PATIENT_TEMPLATES[i % PATIENT_TEMPLATES.length]
 
       const recordId = generateUUID()
-      const patientId = `${325800 + i}`
+      const patientId = `${timestampSeed}${String(i).padStart(3, '0')}`
       generatedPatientIdsList.push(patientId)
       const inpNo = `${baseInpNo + i}`
-      const bedName = `${String(i + 1).padStart(2, '0')}`
+      const bedName = `${i + 1}`
 
       const sql = `${insertCmd} \`YHDB\`.\`bn_patient_in\`(` +
         `\`patient_id\`, \`id\`, \`person_id_no\`, \`dept_id\`, \`bed_name\`, ` +
@@ -239,7 +254,7 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
         `\`diet\`, \`allergy\`, \`operation_time\`, \`in_dept_time\`, \`wristband\`, ` +
         `\`if_settlement\`, \`patient_in_qrcode\`` +
         `) VALUES (` +
-        `${escapeSqlVal(patientId)}, ${escapeSqlVal(recordId)}, NULL, ${escapeSqlVal(deptId)}, ${escapeSqlVal(bedName)}, ` +
+        `${escapeSqlVal(patientId)}, ${escapeSqlVal(recordId)}, NULL, ${escapeSqlVal(effectiveDeptId)}, ${escapeSqlVal(bedName)}, ` +
         `1, ${escapeSqlVal(tpl.sex)}, ${escapeSqlVal(inpNo)}, ${escapeSqlVal(tpl.doctorName)}, NULL, ` +
         `'1970-01-01 00:00:00', ${escapeSqlVal(nowStr)}, ${escapeSqlVal(tpl.nurseLevel)}, ${escapeSqlVal(orgId)}, ${escapeSqlVal(nowStr)}, ` +
         `'his', ${escapeSqlVal(tpl.patientName)}, ${escapeSqlVal(tpl.illnessStatus)}, ${escapeSqlVal(tpl.insuranceType)}, ${escapeSqlVal(tpl.diagnose)}, ` +
@@ -274,13 +289,16 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
     const createTime = '2024-07-26 13:11:13'
     const updateTime = '2025-10-20 09:41:53'
 
+    const randomMac = `30:1f:9a:${Array.from({ length: 3 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join(':')}`
+    const randomAppId = generateUUID().replace(/-/g, '').slice(0, 16)
+
     const boSwitchSql = `${insertCmd} \`YHDB\`.\`bo_switch\` (` +
       `\`switch_id\`, \`dept_id\`, \`dev_id\`, \`is_switch\`, \`switch_seconds\`, ` +
       `\`bed_mode\`, \`touch_mode\`, \`bed_switch_seconds\`, \`template_id\`, \`template_name\`, ` +
       `\`allow_pwd\`, \`effective_times\`, \`page_ids\`, \`if_shift\`, \`shift_duration\`, ` +
       `\`if_restart\`, \`restart_duration\`, \`closeScreenTime\`, \`isCloseScreen\`, \`suspend\` ` +
       `) VALUES (` +
-      `${escapeSqlVal(switchId)}, ${escapeSqlVal(deptId)}, ${escapeSqlVal(devId)}, 1, 600, ` +
+      `${escapeSqlVal(switchId)}, ${escapeSqlVal(effectiveDeptId)}, ${escapeSqlVal(devId)}, 1, 600, ` +
       `NULL, ${boardTouchMode}, 30, ${escapeSqlVal(templateId)}, 'zc', b'0', NULL, ` +
       `'[]', 0, NULL, 0, '23:00', '{"endTime": "05:00", "beginTime": "23:00"}', 0, 0);`
 
@@ -292,10 +310,10 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
       `\`versions\`, \`positions\`, \`onOffRule\`, \`orgId\`, \`isEnable\`, ` +
       `\`remark\`, \`createTime\`, \`createUser\`, \`updateTime\`, \`updateUser\` ` +
       `) VALUES (` +
-      `${escapeSqlVal(devId)}, '192.168.224.183', '30:1f:9a:73:70:15', NULL, 1, ` +
-      `0, '1', 'ff13170b59f46b8c', NULL, 2, ` +
+      `${escapeSqlVal(devId)}, '192.168.224.183', ${escapeSqlVal(randomMac)}, NULL, 1, ` +
+      `0, '1', ${escapeSqlVal(randomAppId)}, NULL, 2, ` +
       `NULL, NULL, 0, '1', 'bnNursingTV', ` +
-      `${escapeSqlVal(deptId)}, 't972', 1, '{"onLineStatus": 0}', '{"rotate": "0", "volume": "94", "brighter": "0", "resolution": "10801920"}', ` +
+      `${escapeSqlVal(effectiveDeptId)}, 't972', 1, '{"onLineStatus": 0}', '{"rotate": "0", "volume": "94", "brighter": "0", "resolution": "10801920"}', ` +
       `'{"appVersion": "3.1.400007-20231205", "authVersion": "", "callVersion": "", "upbsVersion": "3.1.400001-20230602", "systemVersion": "9", "hardwareVersion": "amlogic"}', ` +
       `'{"bedId": null, "roomId": null, "positionStr": null}', NULL, ${escapeSqlVal(orgId)}, 1, ` +
       `NULL, ${escapeSqlVal(createTime)}, NULL, ${escapeSqlVal(updateTime)}, ${escapeSqlVal(devId)});`
@@ -324,8 +342,8 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
         `\`dept_name\`, \`settlement_status\`, \`org_id\`` +
         `) VALUES (` +
         `${escapeSqlVal(advId)}, ${escapeSqlVal(pid)}, '2023050803', ${advTpl.amount}, ` +
-        `${escapeSqlVal(advTpl.mode)}, '2023050803', ${escapeSqlVal(advTpl.operator)}, '2025-09-01 10:00:00', ${escapeSqlVal(deptId)}, ` +
-        `'护理单元', ${escapeSqlVal(advTpl.status)}, ${escapeSqlVal(orgId)});`
+        `${escapeSqlVal(advTpl.mode)}, '2023050803', ${escapeSqlVal(advTpl.operator)}, '2025-09-01 10:00:00', ${escapeSqlVal(effectiveDeptId)}, ` +
+        `${escapeSqlVal(effectiveDeptName)}, ${escapeSqlVal(advTpl.status)}, ${escapeSqlVal(orgId)});`
 
       // (b) 费用明细 hc_cost_centre
       const costTpl = COST_CENTRE_TEMPLATES[i % COST_CENTRE_TEMPLATES.length]
@@ -337,7 +355,7 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
         `) VALUES (` +
         `${escapeSqlVal(costCentreId)}, ${escapeSqlVal(pid)}, ${escapeSqlVal(costTpl.mode)}, ${escapeSqlVal(costTpl.name)}, ` +
         `NULL, ${costTpl.price}, ${costTpl.count}, NULL, ` +
-        `${costTpl.total}, '2025-09-01 10:30:00', ${escapeSqlVal(deptId)}, ${escapeSqlVal(orgId)});`
+        `${costTpl.total}, '2025-09-01 10:30:00', ${escapeSqlVal(effectiveDeptId)}, ${escapeSqlVal(orgId)});`
 
       // (c) 费用汇总 hc_cost_summary
       const sumTpl = COST_SUMMARY_TEMPLATES[i % COST_SUMMARY_TEMPLATES.length]
@@ -347,7 +365,7 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
         `\`cost_amount\`, \`settlement_status\`, \`dept_id\`, \`org_id\`` +
         `) VALUES (` +
         `${escapeSqlVal(costSumId)}, ${escapeSqlVal(pid)}, ${escapeSqlVal(sumTpl.code)}, ${escapeSqlVal(sumTpl.mode)}, ` +
-        `${sumTpl.amount}, ${escapeSqlVal(sumTpl.status)}, ${escapeSqlVal(deptId)}, ${escapeSqlVal(orgId)});`
+        `${sumTpl.amount}, ${escapeSqlVal(sumTpl.status)}, ${escapeSqlVal(effectiveDeptId)}, ${escapeSqlVal(orgId)});`
 
       sqlLines.push(sqlAdv)
       sqlLines.push(sqlCost)
@@ -369,14 +387,14 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
       `) VALUES (` +
       `${escapeSqlVal(setlId)}, ${escapeSqlVal(firstPid)}, ${setTpl.advance}, ${setTpl.total}, ` +
       `${setTpl.balance}, ${setTpl.own}, ${setTpl.returnAmt}, ${setTpl.supp}, ` +
-      `${escapeSqlVal(setTpl.status)}, '2025-09-01 11:00:00', ${escapeSqlVal(deptId)}, ${escapeSqlVal(orgId)});`
+      `${escapeSqlVal(setTpl.status)}, '2025-09-01 11:00:00', ${escapeSqlVal(effectiveDeptId)}, ${escapeSqlVal(orgId)});`
 
     sqlLines.push(sqlSetl)
     rawStatements.push(sqlSetl)
     sqlLines.push('')
   }
 
-  // 4. 生成检查检验数据
+  // 4. 检查检验数据
   if (createExamine && examineCount > 0) {
     sqlLines.push(`-- 4. 检查检验数据 共 ${examineCount} 条 --`)
 
@@ -451,14 +469,14 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
       const advTpl = DOCTOR_ADVICE_TEMPLATES[i % DOCTOR_ADVICE_TEMPLATES.length]
 
       const recordId = `2026${generateNumericId(9)}`
-      const doctorAdviceId = `${51577500 + i}`
+      const doctorAdviceId = `${Date.now().toString().slice(-6)}${String(i).padStart(3, '0')}`
 
       const sqlAdvice = `${insertCmd} \`YHDB\`.\`nr_simple_doctor_advice_info\`(` +
         `\`id\`, \`doctor_advice_id\`, \`patient_id\`, \`org_id\`, \`dept_id\`, ` +
         `\`field1\`, \`field2\`, \`field3\`, \`field4\`, \`field5\`, \`field6\`, \`field7\`, \`field8\`, \`field9\`, \`field10\`, ` +
         `\`execute_status\`, \`remark\`, \`ext_json\`, \`status\`, \`creator\`, \`create_time\`, \`modify\`, \`update_time\`` +
         `) VALUES (` +
-        `${escapeSqlVal(recordId)}, ${escapeSqlVal(doctorAdviceId)}, ${escapeSqlVal(pid)}, ${escapeSqlVal(orgId)}, ${escapeSqlVal(deptId)}, ` +
+        `${escapeSqlVal(recordId)}, ${escapeSqlVal(doctorAdviceId)}, ${escapeSqlVal(pid)}, ${escapeSqlVal(orgId)}, ${escapeSqlVal(effectiveDeptId)}, ` +
         `${escapeSqlVal(advTpl.field1)}, NULL, ${escapeSqlVal(advTpl.field3)}, ${escapeSqlVal(advTpl.field4)}, ${escapeSqlVal(advTpl.field5)}, ${escapeSqlVal(advTpl.field6)}, ${escapeSqlVal(advTpl.field7)}, ${escapeSqlVal(advTpl.field8)}, ${escapeSqlVal(advTpl.field9)}, '2025-09-01 09:00:00', ` +
         `0, NULL, NULL, 0, ${escapeSqlVal(advTpl.creator)}, '2025-09-01 09:00:00', NULL, NULL);`
 
@@ -490,7 +508,7 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
         `${escapeSqlVal(opTpl.project)}, NULL, NULL, NULL, ` +
         `NULL, NULL, NULL, NULL, ` +
         `NULL, NULL, NULL, ${escapeSqlVal(opTpl.status)}, ` +
-        `${escapeSqlVal(deptId)}, ${escapeSqlVal(orgId)}, NULL);`
+        `${escapeSqlVal(effectiveDeptId)}, ${escapeSqlVal(orgId)}, NULL);`
 
       sqlLines.push(sqlOp)
       rawStatements.push(sqlOp)
@@ -502,8 +520,9 @@ export function generateMockDataSQL(options: MockDataOptions): MockDataResult {
   const sqlText = sqlLines.join('\n')
   const summaryText = `===== 造数生成成功摘要 =====
 目标机构 (orgId): ${orgId}
-目标护理单元 (deptId): ${deptId}
-患者数据生成: ${generatedPatients} 条 (床号已做 01, 02... 增量去重)
+目标护理单元名称: ${effectiveDeptName}
+目标护理单元写入字段 (dept_id): ${effectiveDeptId} (${useDeptKey && deptKey ? '科室Key模式' : '部门deptId模式'})
+患者数据生成: ${generatedPatients} 条 (床号: 1, 2, 3...)
 看板数据生成: ${generatedBoards > 0 ? `已生成 (bo_switch & td_device | touch_mode=${boardTouchMode}: ${boardTouchMode === 1 ? '触屏' : '非触屏'})` : '未勾选'}
 费用相关生成: ${generatedFees > 0 ? `已生成 (${generatedFees} 组)` : '未勾选'}
 检查检验生成: ${generatedExamines > 0 ? `已生成 (${generatedExamines} 组)` : '未勾选'}

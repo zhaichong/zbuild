@@ -520,6 +520,7 @@ function pyConfigToFrontend(py) {
   return {
     rootPath: py.root_path || '',
     svnRootUrl: py.svn_root || '',
+    svnLocations: py.svn_locations || py.svnLocations || [],
     buildCommand: py.build_command || 'deploy.sh',
     buildCommands: py.build_commands || {},
     artifactPaths: py.artifact_paths || ['dist'],
@@ -570,6 +571,7 @@ function frontendConfigToPy(fe) {
     mode: fe.uploadToServer ? 'server' : (fe.uploadAfterBuild === false ? 'local' : 'svn'),
     root_path: fe.rootPath || '',
     svn_root: fe.svnRootUrl || '',
+    svn_locations: fe.svnLocations || [],
     local_output: fe.localOutputDir || '',
     order_dir_path: fe.orderDirPath || '',
     create_order_dir: !!form.createOrderDir,

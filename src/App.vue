@@ -599,6 +599,14 @@ function onStashContinue() {
 const defaultConfig: AppConfig = {
   rootPath: '',
   svnRootUrl: 'https://10.1.1.120/svn/智慧病房特殊订单',
+  svnLocations: [
+    {
+      id: 'loc-default',
+      name: '默认特殊订单库',
+      url: 'https://10.1.1.120/svn/智慧病房特殊订单',
+      isDefault: true,
+    },
+  ],
   buildCommand: 'deploy.sh',
   buildCommands: {},
   artifactPaths: ['dist', 'release', 'build', 'output', 'target'],
@@ -652,6 +660,16 @@ onMounted(async () => {
       store.config = JSON.parse(JSON.stringify(defaultConfig))
     }
     const cfg = store.config!
+    if (!cfg.svnLocations || cfg.svnLocations.length === 0) {
+      cfg.svnLocations = [
+        {
+          id: 'loc-default',
+          name: '默认特殊订单库',
+          url: cfg.svnRootUrl || 'https://10.1.1.120/svn/智慧病房特殊订单',
+          isDefault: true,
+        },
+      ]
+    }
     if (!cfg.tools) {
       cfg.tools = { git: '', bash: '', svn: '', node: '', npm: '' }
     }

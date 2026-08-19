@@ -63,13 +63,13 @@ class TestBuildCmdValidation(unittest.TestCase):
             argv = validate_build_command(project, "deploy.sh")
             self.assertEqual(argv, ["npm", "run", "build:prod"])
 
-    def test_auto_detects_pnpm_lock(self):
+    def test_auto_detects_pnpm_lock_uses_npm(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             project = Path(temp_dir)
             (project / "package.json").write_text('{"scripts": {"build": "vue-tsc && vite build"}}', encoding="utf-8")
             (project / "pnpm-lock.yaml").write_text("lockfileVersion: 5.4", encoding="utf-8")
             argv = validate_build_command(project, "deploy.sh")
-            self.assertEqual(argv, ["pnpm", "run", "build"])
+            self.assertEqual(argv, ["npm", "run", "build"])
 
 
 if __name__ == "__main__":

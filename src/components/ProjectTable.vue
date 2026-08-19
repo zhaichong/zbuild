@@ -63,16 +63,13 @@
                 @change="allSelected ? store.deselectAll() : store.selectAll()"
               >
             </th>
-            <th class="px-4 py-3 font-bold text-slate-800 min-w-[200px]">
+            <th class="px-4 py-3 font-bold text-slate-800 min-w-[220px]">
               项目名称
             </th>
-            <th class="px-4 py-3 font-bold text-slate-800 min-w-[180px]">
-              当前分支
+            <th class="px-4 py-3 font-bold text-slate-800 min-w-[240px]">
+              目标分支
             </th>
-            <th class="px-4 py-3 font-bold text-slate-800 min-w-[220px]">
-              切换分支
-            </th>
-            <th class="px-4 py-3 font-bold text-slate-800 w-32 text-center">
+            <th class="px-4 py-3 font-bold text-slate-800 w-36 text-center">
               执行状态
             </th>
           </tr>
@@ -106,22 +103,12 @@
               </div>
             </td>
 
-            <!-- Current Branch (Bold & Clear) -->
-            <td class="px-4 py-3.5 font-mono">
-              <span
-                class="px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-200/80 text-xs font-bold truncate inline-block max-w-[200px]"
-                :title="store.projectBranches[project.projectName] || project.currentBranch"
-              >
-                {{ store.projectBranches[project.projectName] || project.currentBranch || '—' }}
-              </span>
-            </td>
-
-            <!-- Switch Branch Picker (Bold & Larger) -->
+            <!-- Target Branch Picker -->
             <td class="px-4 py-3.5">
               <div class="flex items-center gap-2">
                 <button
                   type="button"
-                  class="flex items-center justify-between px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-900 font-mono font-bold hover:border-blue-500 hover:bg-blue-50/20 transition-all text-left flex-1 max-w-[200px] shadow-2xs cursor-pointer group"
+                  class="flex items-center justify-between px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-900 font-mono font-bold hover:border-blue-500 hover:bg-blue-50/20 transition-all text-left flex-1 max-w-[280px] shadow-2xs cursor-pointer group"
                   :title="'当前分支打包命令: ' + store.getEffectiveBuildCommand(project.projectName, store.projectBranches[project.projectName] || project.currentBranch)"
                   @click="openBranchPicker(project)"
                 >
@@ -322,10 +309,6 @@ async function openBranchPicker(project: ProjectInfo) {
 function onBranchChoose(branch: string) {
   if (pickerProjectName.value) {
     store.projectBranches[pickerProjectName.value] = branch
-    const effectiveCmd = store.getEffectiveBuildCommand(pickerProjectName.value, branch)
-    if (effectiveCmd) {
-      store.projectBuildCommands[pickerProjectName.value] = effectiveCmd
-    }
   }
 }
 

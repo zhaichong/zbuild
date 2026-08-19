@@ -112,7 +112,7 @@
                     @change="(e) => onCascadeChange(idx, (e.target as HTMLSelectElement).value)"
                   >
                     <option v-for="dept in level.options" :key="dept.deptId" :value="dept.deptId" class="py-2 text-[13px]">
-                      {{ dept.deptName || dept.deptId }} (Key: {{ dept.deptKey || dept.deptId }})
+                      {{ dept.deptName || dept.deptId }} (ID: {{ dept.deptId }})
                     </option>
                   </select>
                 </div>
@@ -123,7 +123,7 @@
                 <input
                   v-model="deptSearchQuery"
                   type="text"
-                  placeholder="输入科室/病区名称或 Key 快速搜索..."
+                  placeholder="输入科室/病区名称或 ID 快速搜索..."
                   class="w-full px-3 py-2 bg-white border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-xs outline-none transition-all shadow-2xs"
                 >
                 <select
@@ -138,7 +138,7 @@
                     :value="dept.deptId"
                     class="py-2 text-[13px]"
                   >
-                    {{ dept.fullPathName || dept.deptName }} (Key: {{ dept.deptKey || dept.deptId }})
+                    {{ dept.fullPathName || dept.deptName }} (ID: {{ dept.deptId }})
                   </option>
                 </select>
               </div>
@@ -610,6 +610,7 @@ const testingDbConn = ref(false)
 const executingDb = ref(false)
 
 // Mock Data Options
+const useDeptKey = ref(false)
 const createPatient = ref(true)
 const patientCount = ref(10)
 const createBoard = ref(true)
@@ -945,6 +946,9 @@ async function onDirectExecuteDb() {
     const resMock = generateMockDataSQL({
       orgId: selectedOrgId.value,
       deptId: selectedDeptId.value,
+      deptKey: selectedDeptInfo.value?.deptKey,
+      deptName: selectedDeptInfo.value?.deptName,
+      useDeptKey: useDeptKey.value,
       createPatient: createPatient.value,
       patientCount: patientCount.value || 10,
       createBoard: createBoard.value,
@@ -1002,6 +1006,9 @@ function onGenerateMockData() {
     const res = generateMockDataSQL({
       orgId: selectedOrgId.value,
       deptId: selectedDeptId.value,
+      deptKey: selectedDeptInfo.value?.deptKey,
+      deptName: selectedDeptInfo.value?.deptName,
+      useDeptKey: useDeptKey.value,
       createPatient: createPatient.value,
       patientCount: patientCount.value || 10,
       createBoard: createBoard.value,

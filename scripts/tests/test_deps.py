@@ -54,14 +54,6 @@ class TestDependencyManagement(unittest.TestCase):
             cmd = dependency_install_command(self.project_dir)
             self.assertEqual(cmd, ["npm", "install"])
 
-        with patch("git.deps.package_manager_executable", return_value="pnpm"):
-            cmd = dependency_install_command(self.project_dir)
-            self.assertEqual(cmd, ["pnpm", "install", "--frozen-lockfile"])
-
-        with patch("git.deps.package_manager_executable", return_value="yarn"):
-            cmd = dependency_install_command(self.project_dir)
-            self.assertEqual(cmd, ["yarn", "install", "--frozen-lockfile"])
-
     @patch("git.deps.run_process_stream")
     def test_ensure_dependencies_skips_when_fingerprint_matches(self, mock_run):
         """Should skip install when node_modules and fingerprint match."""

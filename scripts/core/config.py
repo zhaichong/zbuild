@@ -105,6 +105,7 @@ def default_config() -> Dict[str, Any]:
         "artifact_paths": ["dist", "release", "build", "output", "target"],
         "project_artifact_paths": {},
         "project_svn_roots": {},
+        "svn_locations": [],
         "server_upload_paths": dict(DEFAULT_SERVER_UPLOAD_PATHS),
     }
 
@@ -128,6 +129,13 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Ensure mode is valid
     if config["mode"] not in ("svn", "server", "local"):
         config["mode"] = "svn"
+
+    # Normalize svn_locations list
+    raw_svn_locs = config.get("svn_locations")
+    if isinstance(raw_svn_locs, list):
+        config["svn_locations"] = raw_svn_locs
+    else:
+        config["svn_locations"] = []
 
     # Normalize order_dir_path
     raw_order_dir = raw.get("order_dir_path")

@@ -458,27 +458,8 @@ def path_with_bundled_node(existing_path: Optional[str] = None) -> str:
 def package_manager_executable(project_dir: Path) -> str:
     """Determine the package manager executable for a project.
 
-    Checks for pnpm-lock.yaml, yarn.lock, then defaults to npm.
+    Always uses npm.
     """
-    if (project_dir / "pnpm-lock.yaml").is_file():
-        pnpm = bundled_npm()  # fallback
-        for name in ("pnpm", "pnpm.cmd"):
-            found = shutil.which(name)
-            if found:
-                return found
-        # Check bundled
-        root = runtime_root()
-        if os.name == "nt":
-            candidate = root / "node" / "pnpm.cmd"
-        else:
-            candidate = root / "node" / "bin" / "pnpm"
-        if candidate.is_file():
-            return str(candidate)
-        return "pnpm"
-
-    if (project_dir / "yarn.lock").is_file():
-        return "yarn"
-
     npm = bundled_npm()
     return npm or "npm"
 

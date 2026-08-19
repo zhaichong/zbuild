@@ -32,8 +32,7 @@ def dependency_fingerprint(project_path: Union[Path, str]) -> str:
     project = Path(project_path)
     parts: List[str] = []
 
-    for name in ("package.json", "package-lock.json", "pnpm-lock.yaml",
-                 "yarn.lock", ".npmrc"):
+    for name in ("package.json", "package-lock.json", ".npmrc"):
         f = project / name
         if f.is_file():
             h = hashlib.sha256()
@@ -47,13 +46,7 @@ def dependency_install_command(project_path: Union[Path, str]) -> List[str]:
     """Return the command to install dependencies for the project."""
     project = Path(project_path)
     pm = package_manager_executable(project)
-
-    if "pnpm" in pm:
-        return [pm, "install", "--frozen-lockfile"]
-    elif "yarn" in pm:
-        return [pm, "install", "--frozen-lockfile"]
-    else:
-        return [pm, "install"]
+    return [pm, "install"]
 
 
 def _node_env() -> Dict[str, str]:

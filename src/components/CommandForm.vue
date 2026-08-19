@@ -52,6 +52,54 @@
         </div>
       </div>
 
+      <!-- SVN 目录源 (多源快捷切换) -->
+      <div
+        v-if="svnLocationOptions.length > 0"
+        class="flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-xl border border-slate-200/80"
+      >
+        <div class="flex items-center gap-2 flex-wrap min-w-0">
+          <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
+            <span class="w-2 h-2 rounded-full bg-blue-600" />
+            SVN 目录源:
+          </span>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button
+              v-for="loc in svnLocationOptions"
+              :key="loc.id || loc.url"
+              type="button"
+              class="px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 shadow-2xs"
+              :class="isCurrentSvn(loc.url)
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300'"
+              :title="loc.url"
+              @click="onSelectSvnLocation(loc)"
+            >
+              <span>{{ loc.name }}</span>
+              <svg
+                v-if="isCurrentSvn(loc.url)"
+                class="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2.5"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div
+          class="text-[11px] text-slate-400 font-mono truncate max-w-[320px] hidden md:block"
+          :title="store.config.svnRootUrl"
+        >
+          {{ store.config.svnRootUrl }}
+        </div>
+      </div>
+
       <!-- Row 1: Hospital Name & Order No -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <!-- 医院名称 -->
@@ -292,11 +340,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import { saveConfig } from '@/composables/useConfig'
 import PickerDialog from '@/components/PickerDialog.vue'
+import type { SvnLocationItem } from '@/types'
 
 const store = useAppStore()
 const svnLoading = ref(false)
@@ -305,6 +354,41 @@ const pickerItems = ref<string[]>([])
 const pickerCurrentValue = ref('')
 const pickerTitle = ref('')
 const pickerKind = ref<'hospital' | 'order'>('hospital')
+
+const svnLocationOptions = computed<SvnLocationItem[]>(() => {
+  const locs = store.config?.svnLocations || []
+  if (locs.length > 0) return locs
+  if (store.config?.svnRootUrl) {
+    return [
+      {
+        id: 'loc-default',
+        name: '默认特殊订单库',
+        url: store.config.svnRootUrl,
+        isDefault: true,
+      },
+    ]
+  }
+  return []
+})
+
+function isCurrentSvn(url: string): boolean {
+  const current = (store.config?.svnRootUrl || '').trim().replace(/\/$/, '')
+  const target = (url || '').trim().replace(/\/$/, '')
+  return current === target
+}
+
+function onSelectSvnLocation(loc: SvnLocationItem) {
+  if (!store.config) return
+  if (store.config.svnRootUrl === loc.url) return
+  store.config.svnRootUrl = loc.url
+  if (store.config.svnLocations) {
+    store.config.svnLocations.forEach((item) => {
+      item.isDefault = item.url === loc.url
+    })
+  }
+  saveConfig(store.config).catch((e) => console.warn('Auto save config failed:', e))
+  store.showToast(`已切换至 SVN 目录源: ${loc.name}`, 'info')
+}
 
 const testing = ref(false)
 const testResult = ref<'success' | 'error' | ''>('')

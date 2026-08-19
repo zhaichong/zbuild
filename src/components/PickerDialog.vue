@@ -65,13 +65,32 @@
       </div>
 
       <!-- List -->
-      <div class="flex-1 min-h-0 overflow-auto px-3 py-2">
+      <div class="flex-1 min-h-0 overflow-auto px-3 py-2 space-y-1">
+        <!-- Custom Input Action Row when user types a non-exact query -->
         <div
-          v-if="filteredItems.length === 0"
+          v-if="searchQuery.trim() && !exactMatchInItems"
+          class="px-3 py-2 text-sm rounded-xl cursor-pointer transition-all bg-blue-50 hover:bg-blue-100/80 border border-blue-200 text-blue-700 font-medium flex items-center justify-between shadow-2xs"
+          @click="confirmItem(searchQuery.trim())"
+        >
+          <span class="truncate">➕ 使用输入: <strong>{{ searchQuery.trim() }}</strong></span>
+          <span class="text-xs text-blue-500 shrink-0 ml-2 font-mono">按回车确认</span>
+        </div>
+
+        <div
+          v-if="filteredItems.length === 0 && !searchQuery.trim()"
+          class="text-xs text-text-3 text-center py-8 space-y-1"
+        >
+          <div class="font-medium text-slate-500">暂无列表选项</div>
+          <div class="text-[11px] text-slate-400">可在上方搜索框直接输入自定义内容并确认</div>
+        </div>
+
+        <div
+          v-else-if="filteredItems.length === 0 && searchQuery.trim() && exactMatchInItems"
           class="text-xs text-text-3 text-center py-8"
         >
           无匹配项
         </div>
+
         <div
           v-for="item in filteredItems"
           :key="item"
@@ -126,16 +145,22 @@ const filteredItems = computed(() => {
   return (props.items || []).filter((item) => item.toLowerCase().includes(q))
 })
 
+const exactMatchInItems = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return (props.items || []).some((item) => item.toLowerCase() === q)
+})
+
 // 计算有效的当前选中项（支持搜索框手动高亮、匹配第一项或直接输入）
 const effectiveSelectedValue = computed(() => {
+  const q = searchQuery.value.trim()
   if (selectedValue.value && filteredItems.value.includes(selectedValue.value)) {
     return selectedValue.value
   }
   if (filteredItems.value.length > 0) {
     return filteredItems.value[0]
   }
-  if (searchQuery.value.trim()) {
-    return searchQuery.value.trim()
+  if (q) {
+    return q
   }
   return selectedValue.value || ''
 })
@@ -158,16 +183,18 @@ function selectItem(item: string) {
 }
 
 function confirmItem(item: string) {
-  selectedValue.value = item
-  emit('choose', item)
+  const val = (item || '').trim()
+  if (!val) return
+  selectedValue.value = val
+  emit('choose', val)
   visible.value = false
 }
 
 function handleOk() {
-  const val = effectiveSelectedValue.value
+  const q = searchQuery.value.trim()
+  const val = (q && !filteredItems.value.includes(selectedValue.value)) ? q : (effectiveSelectedValue.value || q)
   if (val) {
-    emit('choose', val)
-    visible.value = false
+    confirmItem(val)
   }
 }
 

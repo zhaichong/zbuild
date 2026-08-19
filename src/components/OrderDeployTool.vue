@@ -572,7 +572,9 @@ function loadPluginConfig() {
       serverPassword.value = parsed.serverPassword || ''
       packageUploadPaths.value = parsed.packageUploadPaths || {}
       return
-    } catch (_) {}
+    } catch {
+      // fallback to initial defaults
+    }
   }
   // Default values
   currentSvnUrl.value = 'https://10.1.1.120/svn/智慧病房特殊订单'

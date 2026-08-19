@@ -60,40 +60,15 @@ export interface ExtractionResult {
 }
 
 async function requestApi<T>(url: string, method = 'GET', body: unknown = null): Promise<T> {
-  // 优先使用 Electron IPC 绕过跨域 (CORS) 限制
-  if (typeof window !== 'undefined' && (window as unknown as { tool?: { mockQueryRequest?: unknown } }).tool?.mockQueryRequest) {
-    try {
-      const data = await ipc.mockQueryRequest(url, method, body)
-      return data as T
-    } catch (e: unknown) {
-      throw new Error(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  // 网页端降级使用原生 fetch
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  const options: RequestInit = {
-    method,
-    headers,
-  }
-  if (body) {
-    options.body = typeof body === 'string' ? body : JSON.stringify(body)
-  }
-
-  const res = await fetch(url, options)
-  const text = await res.text()
-
-  if (!res.ok) {
-    throw new Error(`远程服务器返回错误 ${res.status}: ${text.substring(0, 200)}`)
-  }
-
+  // 统一通过 ipc.mockQueryRequest 请求（Electron走原生IPC，Web模式走服务端代理，彻底解决浏览器跨域CORS限制）
   try {
-    const json = JSON.parse(text)
-    return (json.data !== undefined ? json.data : json) as T
-  } catch {
-    return text as unknown as T
+    const data = await ipc.mockQueryRequest(url, method, body)
+    if (data && typeof data === 'object' && 'data' in (data as Record<string, unknown>)) {
+      return (data as Record<string, unknown>).data as T
+    }
+    return data as T
+  } catch (e: unknown) {
+    throw new Error(e instanceof Error ? e.message : String(e))
   }
 }
 

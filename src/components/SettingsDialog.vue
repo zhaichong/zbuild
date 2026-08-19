@@ -1254,10 +1254,7 @@ const newArtifactPathValue = ref('dist')
 
 const configuredSvnLocations = computed(() => {
   if (!store.config) return []
-  if (!store.config.svnLocations) {
-    store.config.svnLocations = []
-  }
-  return store.config.svnLocations
+  return store.config.svnLocations || []
 })
 
 const globalArtifactPathsInput = computed({

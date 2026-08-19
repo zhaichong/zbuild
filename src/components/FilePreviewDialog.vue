@@ -46,9 +46,23 @@
               <span>{{ copyStatusText }}</span>
             </button>
 
+            <!-- Download button -->
+            <button
+              v-if="content"
+              type="button"
+              class="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title="下载文件到本地"
+              @click="downloadFile"
+            >
+              <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>下载</span>
+            </button>
+
             <!-- Open with system default app -->
             <button
-              v-if="filePath"
+              v-if="filePath && ipc.isElectron()"
               type="button"
               class="px-3 py-1.5 text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
               title="使用系统默认程序 (如 Navicat / VSCode / 记事本等) 打开"
@@ -208,6 +222,24 @@ async function copyContent() {
     }, 2000)
   } catch (err: unknown) {
     store.showToast('复制失败: ' + String(err), 'error')
+  }
+}
+
+async function downloadFile() {
+  if (!content.value) return
+  try {
+    const blob = new Blob([content.value], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName.value || 'download.txt'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    store.showToast('已开始下载文件', 'success')
+  } catch (err: unknown) {
+    store.showToast('下载失败: ' + String(err), 'error')
   }
 }
 

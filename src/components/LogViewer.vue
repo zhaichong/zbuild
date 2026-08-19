@@ -377,7 +377,7 @@ function formatTime(ts: string): string {
 }
 
 function isBannerLog(msg: string): boolean {
-  return /^[=\-]{3,}.+[=\-]{3,}$/.test(msg.trim())
+  return /^[=-]{3,}.+[=-]{3,}$/.test(msg.trim())
 }
 
 function escapeHtml(str: string): string {

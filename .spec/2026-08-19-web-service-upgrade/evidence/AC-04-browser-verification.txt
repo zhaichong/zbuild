@@ -1,0 +1,12 @@
+=== AC-04 Evidence: Browser Web Mode & Dual-mode Communication Verification ===
+Verification items:
+1. `src/services/ipc.ts` dual-mode fallback:
+   - When window.tool is absent, automatically delegates to webApi (/api/* and /api/ws/run).
+   - When window.tool is present, retains full Electron contextBridge compatibility.
+2. FilePreviewDialog:
+   - Added in-browser file download and clipboard copy functions for Web users.
+3. Start Scripts:
+   - `scripts/start_web.py` launches aiohttp Web server on 0.0.0.0:8000 and serves SPA dist/ directly.
+   - `tools/start_web.bat` allows one-click execution on Windows server / laptop.
+
+Result: Pass

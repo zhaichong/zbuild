@@ -332,7 +332,9 @@ function loadFromStorage() {
       localConfig.serverPassword = parsed.serverPassword || ''
       localConfig.packageUploadPaths = parsed.packageUploadPaths || { ...DEFAULT_PACKAGE_UPLOAD_PATHS }
       return
-    } catch (_) {}
+    } catch {
+      // fallback to initial defaults
+    }
   }
 
   // Initial defaults

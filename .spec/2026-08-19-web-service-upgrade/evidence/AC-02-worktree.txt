@@ -1,0 +1,1 @@
+PASS — `test_workspace_manager.py` creates a temporary remote/base repository and prepares two tasks for the same branch. Distinct detached worktrees and identical SHAs are verified; the base repository branch/status remains unchanged. No production repository was used.

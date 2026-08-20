@@ -31,6 +31,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 try:
     from aiohttp import web
     from server.app import create_app
+    from tools.bundled import bundled_git, bundled_node, bundled_svn
 except ModuleNotFoundError as exc:
     raise SystemExit(
         f"缺少 Python 运行依赖 {exc.name!r}；请先执行: py -m pip install -e ."
@@ -61,6 +62,21 @@ def find_available_port(start_port: int = 8000) -> int:
     return start_port
 
 
+def resolve_runtime_tools() -> list[str]:
+    """Prefer packaged Git/SVN/Node so the Web bundle needs no system tools."""
+    missing: list[str] = []
+    for name, resolver in (("git", bundled_git), ("node", bundled_node), ("svn", bundled_svn)):
+        executable = resolver()
+        if executable:
+            executable_dir = str(Path(executable).parent)
+            path_parts = os.environ.get("PATH", "").split(os.pathsep)
+            if executable_dir not in path_parts:
+                os.environ["PATH"] = executable_dir + os.pathsep + os.environ.get("PATH", "")
+        elif not shutil.which(name):
+            missing.append(name)
+    return missing
+
+
 def main():
     parser = argparse.ArgumentParser(description="zbuild Web Service Launcher")
     parser.add_argument("--host", default="0.0.0.0", help="Host IP to bind (default: 0.0.0.0)")
@@ -68,10 +84,11 @@ def main():
     parser.add_argument("--open", action="store_true", help="Automatically open browser on start")
     args = parser.parse_args()
 
-    missing = [name for name in ("git", "node") if not shutil.which(name)]
-    if missing:
-        parser.error("缺少必需运行时: " + ", ".join(missing))
-    if not shutil.which("svn"):
+    missing = resolve_runtime_tools()
+    required_missing = [name for name in missing if name in {"git", "node"}]
+    if required_missing:
+        parser.error("缺少必需运行时: " + ", ".join(required_missing))
+    if "svn" in missing:
         print("[WARN] 未检测到 SVN；本地构建可用，但 SVN 上传任务会失败。")
 
     port = args.port or find_available_port(8000)

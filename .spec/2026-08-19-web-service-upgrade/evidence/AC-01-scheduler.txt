@@ -1,0 +1,1 @@
+PASS — `test_task_manager.py` submits four blocking tasks, observes only the first two start, releases one and verifies task three starts next. It covers queued cancellation, running cancellation precedence and restart FIFO state. Included in the 118-test Python run on 2026-08-19.

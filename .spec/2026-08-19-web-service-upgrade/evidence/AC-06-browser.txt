@@ -1,0 +1,1 @@
+PASS — Chrome loaded the production build with no console errors/warnings and displayed the team queue. Two isolated browser contexts submitted fake-runner tasks (both 202/running); cancelling browser-a left browser-b running, then browser-b was cancelled independently. TypeScript, ESLint (0 errors), Vite build and 13 Electron Node tests passed.

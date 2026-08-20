@@ -1,0 +1,1 @@
+PASS — `test_server_api.py` verifies per-task event replay after `seq` and WebSocket task envelopes; `test_task_manager.py` verifies task ownership is independent of a socket. `webApi.ts` replays REST events before reconnecting and deduplicates by per-task sequence.

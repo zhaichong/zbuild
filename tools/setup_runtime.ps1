@@ -76,9 +76,10 @@ if ($pthFiles) {
 # ── 4. 安装 pip + 依赖包 ──────────────────────────────────────────────────────
 Write-Host "[4/4] Installing pip and required packages ..." -ForegroundColor Yellow
 
-# 检查 pip 是否已安装
-$hasPip = & $PY_EXE -m pip --version 2>&1
-if ($LASTEXITCODE -ne 0) {
+# 检查 pip 是否已安装。PowerShell 在 ErrorActionPreference=Stop 时会把
+# ``python -m pip`` 的首次失败当作脚本异常，因此直接检查安装目录。
+$hasPip = Test-Path "$RUNTIME_DIR\Lib\site-packages\pip"
+if (-not $hasPip) {
     $getPipPath = Join-Path $env:TEMP "get-pip.py"
     Write-Host "      Downloading get-pip.py ..." -ForegroundColor DarkGray
     Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
@@ -86,9 +87,9 @@ if ($LASTEXITCODE -ne 0) {
     Remove-Item $getPipPath -Force -ErrorAction SilentlyContinue
 }
 
-# 安装依赖：openpyxl (Excel生成), paramiko (SSH上传)
-Write-Host "      Installing packages: openpyxl paramiko ..." -ForegroundColor DarkGray
-& $PY_EXE -m pip install openpyxl paramiko --no-warn-script-location 2>&1 | Write-Host
+# 安装运行时依赖。aiohttp 是 Web 服务启动所必需的，不能只存在于开发机。
+Write-Host "      Installing packages: aiohttp openpyxl paramiko pymysql ..." -ForegroundColor DarkGray
+& $PY_EXE -m pip install aiohttp openpyxl paramiko pymysql --no-warn-script-location 2>&1 | Write-Host
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "WARNING: Some packages may not have installed correctly." -ForegroundColor DarkYellow

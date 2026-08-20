@@ -1,0 +1,1 @@
+PASS — Python discovery ran 118 tests successfully. Task create/detail/events, internal-path and secret redaction, 404, origin rejection and binary artifact bytes are exercised. `pyproject.toml` declares aiohttp and pymysql; quick commands have a 60-second timeout and false results map to non-200 responses.

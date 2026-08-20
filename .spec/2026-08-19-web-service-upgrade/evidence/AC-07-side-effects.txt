@@ -1,0 +1,1 @@
+PASS — All scheduler/browser acceptance used fake runners, temporary SQLite directories and temporary Git repositories. No real SVN, SSH, deployment or database-write command was executed. Restart recovery marks active tasks interrupted and does not replay them.

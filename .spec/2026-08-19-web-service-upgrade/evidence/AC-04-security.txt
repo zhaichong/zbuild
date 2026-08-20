@@ -1,0 +1,1 @@
+PASS — `test_web_security.py`, `test_task_store.py` and `test_server_api.py` cover exact origins, private-only SSRF targets, metadata/loopback/public/mixed-DNS rejection, DPAPI-shaped ciphertext storage, revision conflicts, recursive event/error redaction, path-scoped downloads and unified errors.

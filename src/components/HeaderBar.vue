@@ -24,6 +24,7 @@
       <h1 class="text-xs sm:text-sm font-semibold tracking-wide flex items-center gap-2 shrink-0 whitespace-nowrap">
         <span v-if="activeApp === 'mock-query'">终端数据链路提取控制台</span>
         <span v-else-if="activeApp === 'order-deploy'">测试订单部署解决方案</span>
+        <span v-else-if="activeApp === 'order-build-upload'">订单打包上传 SVN</span>
         <span v-else-if="activeApp === 'portal'">开发者中心</span>
         <span v-else>智慧病房构建工具</span>
       </h1>

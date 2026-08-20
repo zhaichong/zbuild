@@ -32,6 +32,13 @@
       <OrderDeployTool ref="orderDeployRef" />
     </div>
 
+    <div
+      v-else-if="currentApp === 'order-build-upload'"
+      class="flex-1 min-h-0 flex flex-col overflow-hidden"
+    >
+      <OrderBuildUploadTool />
+    </div>
+
     <!-- App View 4: Special Order Build & Upload Tool -->
     <div
       v-else
@@ -250,6 +257,7 @@ import HeaderBar from '@/components/HeaderBar.vue'
 import AppPortal from '@/components/AppPortal.vue'
 import MockQueryTool from '@/components/MockQueryTool.vue'
 import OrderDeployTool from '@/components/OrderDeployTool.vue'
+import OrderBuildUploadTool from '@/components/OrderBuildUploadTool.vue'
 import CommandForm from '@/components/CommandForm.vue'
 import ProjectTable from '@/components/ProjectTable.vue'
 import PipelineView from '@/components/PipelineView.vue'
@@ -265,7 +273,7 @@ import { checkLocalChanges } from '@/composables/useProjects'
 import { saveConfig } from '@/composables/useConfig'
 import type { UploadMode, LocalChangeSummary, AppConfig } from '@/types'
 
-const currentApp = ref<'zbuild' | 'portal' | 'mock-query' | 'order-deploy'>('portal')
+const currentApp = ref<'zbuild' | 'portal' | 'mock-query' | 'order-deploy' | 'order-build-upload'>('portal')
 
 function onSwitchApp(appId: string) {
   if (appId === 'portal') {
@@ -274,6 +282,8 @@ function onSwitchApp(appId: string) {
     currentApp.value = 'mock-query'
   } else if (appId === 'order-deploy') {
     currentApp.value = 'order-deploy'
+  } else if (appId === 'order-build-upload') {
+    currentApp.value = 'order-build-upload'
   } else {
     currentApp.value = 'zbuild'
   }

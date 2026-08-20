@@ -622,6 +622,17 @@ const defaultApps: PortalApp[] = [
     statusLabel: '核心内置',
   },
   {
+    id: 'order-build-upload',
+    name: '订单打包上传 SVN',
+    description: '选择医院和订单，为每个本地项目确认对应分支，按队列完成打包并上传至 SVN。',
+    icon: '📦',
+    iconType: 'build',
+    category: '核心构建',
+    tags: ['项目分支配对', '构建队列', 'SVN 上传'],
+    status: 'active',
+    statusLabel: '核心内置',
+  },
+  {
     id: 'mock-query',
     name: '终端数据链路提取控制台',
     description: '跨接口终端设备链路数据代理提取，自动抓取机构、护理单元与患者数据，支持数据库全类型增量造数。',
@@ -735,6 +746,8 @@ async function onLaunchApp(app: PortalApp) {
     emit('launch-app', 'zbuild')
   } else if (app.id === 'order-deploy') {
     emit('launch-app', 'order-deploy')
+  } else if (app.id === 'order-build-upload') {
+    emit('launch-app', 'order-build-upload')
   } else if (app.id === 'mock-query') {
     emit('launch-app', 'mock-query')
   } else if (app.id.startsWith('custom-')) {

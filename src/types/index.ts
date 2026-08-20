@@ -1,5 +1,45 @@
 export type UploadMode = 'svn' | 'server' | 'local'
 
+export type TaskStatus = 'queued' | 'preparing' | 'running' | 'success' | 'failed' | 'cancelled' | 'interrupted'
+
+export interface ArtifactSummary {
+  artifactId: string
+  name: string
+  mimeType?: string
+  sizeBytes: number
+  createdAt: string
+}
+
+export interface TaskSummary {
+  taskId: string
+  requestId: string
+  type: 'run' | 'order-deploy-run'
+  submitter: string
+  status: TaskStatus
+  queueSeq: number
+  queuePosition?: number
+  projects: Array<{ name: string; branch: string }>
+  createdAt: string
+  startedAt?: string
+  finishedAt?: string
+  error?: string
+}
+
+export interface TaskDetail extends TaskSummary {
+  lastSeq: number
+  artifacts: ArtifactSummary[]
+  commits: Array<{ name: string; branch: string; sha: string }>
+  result?: Record<string, unknown>
+}
+
+export interface TaskEvent {
+  taskId: string
+  seq: number
+  type: string
+  timestamp: string
+  payload: Record<string, unknown>
+}
+
 export interface ToolPaths {
   git: string
   bash: string
@@ -30,6 +70,7 @@ export interface SvnLocationItem {
 export interface AppConfig {
   rootPath: string
   svnRootUrl: string
+  svnUploadDirectory: string
   svnLocations?: SvnLocationItem[]
   projectSvnRoots?: Record<string, string>
   buildCommand?: string

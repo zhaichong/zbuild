@@ -8,15 +8,14 @@ import type {
   TaskTemplate,
   ExecutionRecord,
   RunEvent,
+  TaskDetail,
+  TaskEvent,
+  TaskSummary,
   UpdateStatus,
 } from '@/types'
 
 function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return 'http://127.0.0.1:8000'
-  // When running on vite dev server (5173), target default python server port 8000
-  if (window.location.port === '5173') {
-    return `http://${window.location.hostname}:8000`
-  }
   return window.location.origin
 }
 
@@ -24,7 +23,7 @@ function getWsUrl(): string {
   const base = getApiBaseUrl()
   const url = new URL(base)
   const proto = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${url.host}/api/ws/run`
+  return `${proto}//${url.host}/api/ws/tasks`
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -36,12 +35,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const resp = await fetch(url, { ...options, headers })
   if (!resp.ok) {
     const errorText = await resp.text()
+    let message = `HTTP ${resp.status}: ${errorText}`
     try {
       const errJson = JSON.parse(errorText)
-      throw new Error(errJson.error || errJson.message || `HTTP ${resp.status}`)
-    } catch {
-      throw new Error(`HTTP ${resp.status}: ${errorText}`)
-    }
+      const apiError = errJson.error
+      message = apiError?.message || errJson.message || `HTTP ${resp.status}`
+    } catch { /* keep the text fallback */ }
+    throw new Error(message)
   }
   return resp.json()
 }
@@ -49,8 +49,34 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // WebSocket connection management
 let wsInstance: WebSocket | null = null
 let wsConnectingPromise: Promise<WebSocket> | null = null
+let currentTaskId = ''
+let lastTaskSeq = 0
+let reconnectAttempts = 0
+let reconnectTimer: number | null = null
 const runEventListeners = new Set<(event: RunEvent) => void>()
 const runExitListeners = new Set<(event: { code: number }) => void>()
+
+function dispatchTaskEvent(event: TaskEvent): void {
+  if (event.taskId !== currentTaskId || event.seq <= lastTaskSeq) return
+  lastTaskSeq = event.seq
+  if (event.type === 'status') {
+    const status = String(event.payload.status || '')
+    if (['success', 'failed', 'cancelled', 'interrupted'].includes(status)) {
+      runExitListeners.forEach((listener) => listener({ code: status === 'success' ? 0 : 1 }))
+      currentTaskId = ''
+      wsInstance?.close()
+    }
+    return
+  }
+  const payload = event.payload as unknown as RunEvent
+  runEventListeners.forEach((listener) => listener(payload))
+}
+
+async function replayEvents(): Promise<void> {
+  if (!currentTaskId) return
+  const events = await request<TaskEvent[]>(`/api/tasks/${currentTaskId}/events?after=${lastTaskSeq}`)
+  events.forEach(dispatchTaskEvent)
+}
 
 function getWebSocket(): Promise<WebSocket> {
   if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
@@ -66,24 +92,14 @@ function getWebSocket(): Promise<WebSocket> {
       ws.onopen = () => {
         wsInstance = ws
         wsConnectingPromise = null
+        reconnectAttempts = 0
+        ws.send(JSON.stringify({ action: 'subscribe', taskId: currentTaskId, after: lastTaskSeq }))
         resolve(ws)
       }
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data)
-          if (msg.type === 'event' && msg.payload) {
-            runEventListeners.forEach((listener) => listener(msg.payload))
-          } else if (msg.type === 'exit' && msg.payload) {
-            runExitListeners.forEach((listener) => listener(msg.payload))
-          } else if (msg.type === 'queue_status') {
-            runEventListeners.forEach((listener) =>
-              listener({
-                type: 'log',
-                level: 'warning',
-                message: msg.message || '任务排队中...',
-              } as RunEvent),
-            )
-          }
+          if (msg.type === 'task_event' && msg.payload) dispatchTaskEvent(msg.payload)
         } catch {
           // ignore non-json
         }
@@ -93,8 +109,16 @@ function getWebSocket(): Promise<WebSocket> {
         reject(err)
       }
       ws.onclose = () => {
+        if (wsInstance !== ws) return
         wsInstance = null
         wsConnectingPromise = null
+        if (currentTaskId && reconnectTimer === null) {
+          const delay = Math.min(1000 * 2 ** reconnectAttempts++, 10000)
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null
+            replayEvents().then(() => getWebSocket()).catch(() => {})
+          }, delay)
+        }
       }
     } catch (err) {
       wsConnectingPromise = null
@@ -105,16 +129,77 @@ function getWebSocket(): Promise<WebSocket> {
   return wsConnectingPromise
 }
 
+let configRevision = '0'
+
+function getSubmitter(): string {
+  const key = 'zbuild.submitter'
+  const current = window.localStorage.getItem(key)?.trim()
+  if (current) return current
+  const entered = window.prompt('请输入您的姓名，用于任务记录：', '')?.trim() || '内网用户'
+  window.localStorage.setItem(key, entered)
+  return entered
+}
+
+function createRequestId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+async function createTask(
+  type: 'run' | 'order-deploy-run', payload: Record<string, unknown>,
+): Promise<TaskSummary> {
+  const task = await request<TaskSummary>('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify({
+      requestId: createRequestId(), type, submitter: getSubmitter(), payload,
+    }),
+  })
+  currentTaskId = task.taskId
+  lastTaskSeq = 0
+  if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  wsInstance?.close()
+  wsInstance = null
+  await replayEvents()
+  if (currentTaskId) await getWebSocket()
+  return task
+}
+
 export const webApi = {
   isWeb: true,
 
-  getConfig: (): Promise<AppConfig> => request<AppConfig>('/api/config'),
+  getConfig: async (): Promise<AppConfig> => {
+    const response = await request<{
+      config: AppConfig
+      revision: string
+      secretStatus: { svnPassword: boolean; serverPassword: boolean }
+    }>('/api/config')
+    configRevision = response.revision
+    if (response.secretStatus.svnPassword) response.config.form.svnPassword = '[configured]'
+    if (response.secretStatus.serverPassword) response.config.form.serverPassword = '[configured]'
+    return response.config
+  },
 
-  saveConfig: (config: AppConfig): Promise<AppConfig> =>
-    request<AppConfig>('/api/config', {
-      method: 'POST',
-      body: JSON.stringify(config),
-    }),
+  saveConfig: async (config: AppConfig): Promise<AppConfig> => {
+    const response = await request<{
+      config: AppConfig
+      revision: string
+      secretStatus: { svnPassword: boolean; serverPassword: boolean }
+    }>(
+      '/api/config', {
+        method: 'PUT',
+        body: JSON.stringify({ config, revision: configRevision }),
+      },
+    )
+    configRevision = response.revision
+    if (response.secretStatus.svnPassword) response.config.form.svnPassword = '[configured]'
+    if (response.secretStatus.serverPassword) response.config.form.serverPassword = '[configured]'
+    return response.config
+  },
 
   detectTools: (config: Partial<AppConfig>): Promise<ToolDetectionResult> =>
     request<ToolDetectionResult>('/api/tools/detect', {
@@ -254,14 +339,7 @@ export const webApi = {
       matchedProjectName?: string
     }>
   }): Promise<boolean> => {
-    const ws = await getWebSocket()
-    ws.send(
-      JSON.stringify({
-        action: 'start',
-        command: 'order-deploy-run',
-        payload,
-      }),
-    )
+    await createTask('order-deploy-run', payload)
     return true
   },
 
@@ -284,28 +362,20 @@ export const webApi = {
     }),
 
   startRun: async (payload: Record<string, unknown>): Promise<boolean> => {
-    const ws = await getWebSocket()
-    ws.send(
-      JSON.stringify({
-        action: 'start',
-        command: 'run',
-        payload,
-      }),
-    )
+    await createTask('run', payload)
     return true
   },
 
   stopRun: async (): Promise<boolean> => {
-    if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
-      wsInstance.send(JSON.stringify({ action: 'stop' }))
-      return true
-    }
-    return false
+    if (!currentTaskId) return false
+    await request<TaskSummary>(`/api/tasks/${currentTaskId}/cancel`, {
+      method: 'POST', body: JSON.stringify({ submitter: getSubmitter() }),
+    })
+    return true
   },
 
   onRunEvent: (handler: (event: RunEvent) => void): (() => void) => {
     runEventListeners.add(handler)
-    getWebSocket().catch(() => {})
     return () => {
       runEventListeners.delete(handler)
     }
@@ -313,11 +383,23 @@ export const webApi = {
 
   onRunExit: (handler: (event: { code: number }) => void): (() => void) => {
     runExitListeners.add(handler)
-    getWebSocket().catch(() => {})
     return () => {
       runExitListeners.delete(handler)
     }
   },
+
+  listTasks: (): Promise<TaskSummary[]> => request<TaskSummary[]>('/api/tasks'),
+
+  getTask: (taskId: string): Promise<TaskDetail> =>
+    request<TaskDetail>(`/api/tasks/${taskId}`),
+
+  cancelTask: (taskId: string): Promise<TaskSummary> =>
+    request<TaskSummary>(`/api/tasks/${taskId}/cancel`, {
+      method: 'POST', body: JSON.stringify({ submitter: getSubmitter() }),
+    }),
+
+  getArtifactUrl: (taskId: string, artifactId: string): string =>
+    `${getApiBaseUrl()}/api/tasks/${taskId}/artifacts/${artifactId}`,
 
   listTemplates: (): Promise<TaskTemplate[]> => request<TaskTemplate[]>('/api/templates'),
 

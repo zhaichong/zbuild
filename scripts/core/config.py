@@ -105,6 +105,7 @@ def default_config() -> Dict[str, Any]:
         "artifact_paths": ["dist", "release", "build", "output", "target"],
         "project_artifact_paths": {},
         "project_svn_roots": {},
+        "svn_upload_directory": "前端",
         "svn_locations": [],
         "server_upload_paths": dict(DEFAULT_SERVER_UPLOAD_PATHS),
     }
@@ -152,6 +153,9 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         config["project_svn_roots"] = {
             k: str(v).strip() for k, v in proj_svn_roots.items() if str(v).strip()
         }
+
+    raw_upload_directory = raw.get("svn_upload_directory", config.get("svn_upload_directory"))
+    config["svn_upload_directory"] = str(raw_upload_directory or "").strip()
 
     # Normalize build_command (global fallback)
     raw_build_cmd = raw.get("build_command")

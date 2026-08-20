@@ -582,6 +582,17 @@
                   >
                 </div>
 
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1.5">统一上传子目录</label>
+                  <input
+                    v-model="store.config.svnUploadDirectory"
+                    type="text"
+                    class="w-full form-input text-xs"
+                    placeholder="前端"
+                  >
+                  <p class="mt-1.5 text-[11px] text-slate-400">所有项目的包都会上传到“医院 / 订单号 / 此目录”下；默认是“前端”。留空时兼容原来的按项目目录上传方式。</p>
+                </div>
+
                 <!-- 常用 SVN 目录源列表 (支持多源切换) -->
                 <div class="pt-3 border-t border-slate-100 space-y-3">
                   <div class="flex items-center justify-between">
@@ -682,6 +693,12 @@
                 </div>
 
                 <!-- SVN 凭据 -->
+                <div
+                  v-if="!ipc.isElectron()"
+                  class="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700"
+                >
+                  此浏览器独立保存 SVN 账号和密码；密码不会回传到页面。工作目录、SVN 目录源和构建命令由服务端统一维护。
+                </div>
                 <div class="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100">
                   <div>
                     <label class="block text-xs font-semibold text-slate-700 mb-1.5">SVN 账号</label>

@@ -16,7 +16,10 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from uploaders.base import UploadResult, as_log_fn
 from uploaders.server import ServerUploader
-from uploaders.svn import SvnUploader, join_svn_url, upload_artifact, _is_same_project_artifact
+from core.errors import UploadError
+from uploaders.svn import (
+    SvnUploader, _is_same_project_artifact, join_svn_url, list_svn_contents, upload_artifact,
+)
 
 
 class _FakeStream:
@@ -158,6 +161,29 @@ class TestServerUploader(unittest.TestCase):
 
 
 class TestSvnUploader(unittest.TestCase):
+    def test_list_reports_svn_authentication_failure(self):
+        response = types.SimpleNamespace(returncode=1, stdout="", stderr="Authentication failed")
+        with patch("uploaders.svn.run_process", return_value=response):
+            with self.assertRaisesRegex(UploadError, "Authentication failed"):
+                list_svn_contents("https://svn.example/root", "svn", "user", "password")
+
+    def test_list_encodes_chinese_url_path_for_svn_client(self):
+        response = types.SimpleNamespace(
+            returncode=0,
+            stdout='<lists><list><entry kind="dir" revision="1"><name>医院 A</name></entry></list></lists>',
+            stderr="",
+        )
+        with patch("uploaders.svn.run_process", return_value=response) as run_process:
+            entries = list_svn_contents(
+                "https://svn.example/svn/智慧病房特殊订单", "svn", "user", "password"
+            )
+
+        self.assertEqual(entries[0]["name"], "医院 A")
+        self.assertIn(
+            "https://svn.example/svn/%E6%99%BA%E6%85%A7%E7%97%85%E6%88%BF%E7%89%B9%E6%AE%8A%E8%AE%A2%E5%8D%95",
+            run_process.call_args.args[0],
+        )
+
     def test_rejects_parent_path_segments(self):
         with self.assertRaises(ValueError):
             join_svn_url('https://svn.example/root', '..', 'project')
@@ -236,6 +262,29 @@ class TestSvnUploader(unittest.TestCase):
             ensure_path.assert_called_once()
             svn_url = upload_artifact.call_args.args[1]
             self.assertIn("%E5%8C%BB%E9%99%A2%20A/ORDER-1/web/project.tar.gz", svn_url)
+
+    def test_upload_uses_configured_unified_svn_directory_for_every_project(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact = Path(temp_dir) / "project.tar.gz"
+            artifact.write_bytes(b"artifact")
+            config = {
+                "svn_root": "https://svn.example/root",
+                "svn_upload_directory": "统一发布包",
+                "svn_credentials": {"username": "user", "password": "secret"},
+                "hospital_name": "医院 A",
+                "order_no": "ORDER-1",
+                "projects": [{"name": "project", "branch": "release", "svn_leaf": "legacy-project-leaf"}],
+            }
+            expected = UploadResult(True, "https://svn.example/target", "uploaded")
+
+            with patch("uploaders.svn.ensure_svn_path"), patch(
+                "uploaders.svn.upload_artifact", return_value=expected
+            ) as upload_artifact:
+                SvnUploader().upload(artifact, config, logging.getLogger(__name__), "project")
+
+            svn_url = upload_artifact.call_args.args[1]
+            self.assertIn("ORDER-1/%E7%BB%9F%E4%B8%80%E5%8F%91%E5%B8%83%E5%8C%85/project.tar.gz", svn_url)
+            self.assertNotIn("legacy-project-leaf", svn_url)
 
     def test_upload_uses_project_specific_svn_root(self):
         with tempfile.TemporaryDirectory() as temp_dir:

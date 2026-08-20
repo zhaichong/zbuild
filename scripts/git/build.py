@@ -115,6 +115,7 @@ def build_project(
     *,
     bash_exe: str = "bash",
     build_command: str = "deploy.sh",
+    target_branch: str = "",
     artifact_paths: Union[List[str], Optional[str]] = None,
     on_line: Optional[callable] = None,
 ) -> Tuple[subprocess.CompletedProcess, Optional[Path]]:
@@ -139,6 +140,12 @@ def build_project(
     elif len(run_cmd) == 1 and str(run_cmd[0]).lower().endswith((".sh", ".bash")):
         script_token = run_cmd[0]
 
+    # Legacy deploy scripts use their first positional argument for the
+    # release label. Worktrees are detached by design, so asking Git inside
+    # the script would otherwise yield "(HEAD detached at ...)".
+    if script_token and target_branch:
+        run_cmd.append(target_branch)
+
     if script_token:
         script_path = Path(script_token)
         if not script_path.is_absolute():
@@ -157,7 +164,7 @@ def build_project(
     pre_snapshot = artifact_snapshot(project, candidate_paths=artifact_paths)
     build_start = time.time()
 
-    logger.info("Running build command '%s' in %s", cmd_str, project)
+    logger.info("Running build command '%s' in %s", " ".join(run_cmd), project)
 
     # Use the same Node 14 shims and isolated npm prefix as dependency install.
     # deploy.sh runs under Bash and otherwise resolves Volta/system Node first.

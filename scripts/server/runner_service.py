@@ -15,6 +15,13 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 RUNNER_ENTRY = SCRIPTS_DIR / "electron_runner.py"
 
 MAX_CONCURRENT_RUNS = 2
+QUICK_COMMAND_TIMEOUT = 60
+
+
+def _process_options() -> Dict[str, Any]:
+    if os.name == "nt":
+        return {"creationflags": getattr(__import__("subprocess"), "CREATE_NEW_PROCESS_GROUP", 0)}
+    return {"start_new_session": True}
 
 
 class TaskRunnerService:
@@ -36,9 +43,16 @@ class TaskRunnerService:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(SCRIPTS_DIR.parent),
+            **_process_options(),
         )
         input_data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        stdout, stderr = await process.communicate(input=input_data)
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(input=input_data), timeout=QUICK_COMMAND_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            await self._terminate_process_tree(process)
+            return {"success": False, "error": "Command timed out"}
 
         stdout_text = stdout.decode("utf-8", errors="replace")
         stderr_text = stderr.decode("utf-8", errors="replace")
@@ -92,6 +106,7 @@ class TaskRunnerService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(SCRIPTS_DIR.parent),
+                **_process_options(),
             )
             self.active_processes[task_id] = proc
 
@@ -147,10 +162,7 @@ class TaskRunnerService:
         proc = self.active_processes.get(task_id)
         if proc and proc.returncode is None:
             try:
-                proc.terminate()
-                await asyncio.sleep(0.5)
-                if proc.returncode is None:
-                    proc.kill()
+                await self._terminate_process_tree(proc)
                 return True
             except ProcessLookupError:
                 return True
@@ -158,6 +170,27 @@ class TaskRunnerService:
                 logger.warning("Failed to kill process for task %s: %s", task_id, e)
                 return False
         return False
+
+    async def _terminate_process_tree(self, proc: asyncio.subprocess.Process) -> None:
+        if proc.returncode is not None:
+            return
+        if os.name == "nt":
+            killer = await asyncio.create_subprocess_exec(
+                "taskkill", "/PID", str(proc.pid), "/T", "/F",
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            )
+            await killer.wait()
+        else:
+            import signal
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
 
 
 runner_service = TaskRunnerService()

@@ -19,6 +19,22 @@ from workflow.steps import StepContext, StepResult
 
 
 class TestBuildFailure(unittest.TestCase):
+    def test_build_passes_target_branch_to_shell_script(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir)
+            (project / "deploy.sh").write_text("exit 0", encoding="utf-8")
+            artifact = project / "dist" / "app.tar.gz"
+            artifact.parent.mkdir()
+            artifact.write_bytes(b"artifact")
+            completed = subprocess.CompletedProcess(["bash", "deploy.sh"], 0, "", "")
+
+            with patch("git.build.run_process_stream", return_value=completed) as run, patch(
+                "git.build.latest_changed_artifact", return_value=artifact
+            ):
+                build_project(project, target_branch="release-hospital")
+
+            self.assertEqual(run.call_args.args[0], ["bash", "deploy.sh", "release-hospital"])
+
     def test_build_uses_isolated_node14_environment(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             project = Path(temp_dir)

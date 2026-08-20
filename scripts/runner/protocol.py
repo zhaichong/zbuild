@@ -22,7 +22,8 @@ def read_stdin_json() -> Dict[str, Any]:
     Returns an empty dict if stdin is closed or the payload is not valid JSON.
     """
     try:
-        raw = sys.stdin.read()
+        stream = getattr(sys.stdin, "buffer", None)
+        raw = stream.read().decode("utf-8-sig") if stream is not None else sys.stdin.read()
         if not raw.strip():
             return {}
         return json.loads(raw.strip())

@@ -33,6 +33,7 @@
               v-model="store.config.form.createOrderDir"
               type="checkbox"
               class="w-4 h-4 accent-primary rounded cursor-pointer shrink-0"
+              @change="scheduleAutoSave"
             >
             <span>自动创建提测目录</span>
             <span
@@ -111,6 +112,7 @@
               type="text"
               class="form-input flex-1 min-w-0"
               placeholder="输入或选择医院名称"
+              @input="scheduleAutoSave"
             >
             <button
               class="px-3 rounded-lg border border-border bg-white text-text-3 hover:text-primary hover:border-primary/40 transition-colors flex items-center shrink-0 cursor-pointer shadow-2xs"
@@ -144,6 +146,7 @@
               type="text"
               class="form-input flex-1 min-w-0"
               placeholder="输入或选择订单号"
+              @input="scheduleAutoSave"
             >
             <button
               class="px-3 rounded-lg border border-border bg-white text-text-3 hover:text-primary hover:border-primary/40 transition-colors flex items-center shrink-0 cursor-pointer shadow-2xs"
@@ -183,6 +186,7 @@
           rows="3"
           class="form-input w-full font-sans text-xs resize-y leading-relaxed p-2.5"
           placeholder="例如:&#10;1、增加新首页&#10;2、修复已知问题"
+          @input="scheduleAutoSave"
         />
       </div>
 
@@ -227,6 +231,7 @@
             type="text"
             class="form-input w-full font-mono text-xs text-slate-800"
             placeholder="例如 192.168.78.63"
+            @input="scheduleAutoSave"
           >
         </div>
 
@@ -238,6 +243,7 @@
             type="text"
             class="form-input w-full text-xs text-slate-800"
             placeholder="用户名"
+            @input="scheduleAutoSave"
           >
         </div>
 
@@ -249,6 +255,7 @@
             type="password"
             class="form-input w-full text-xs text-slate-800"
             placeholder="密码"
+            @input="scheduleAutoSave"
           >
         </div>
 
@@ -340,7 +347,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import { saveConfig } from '@/composables/useConfig'
@@ -395,25 +402,28 @@ const testResult = ref<'success' | 'error' | ''>('')
 const testMessage = ref('')
 
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+let autoSaveInFlight = false
 
-// 自动保存用户输入的表单配置
-watch(
-  () => store.config?.form,
-  () => {
-    if (!store.config) return
-    if (autoSaveTimer) clearTimeout(autoSaveTimer)
-    autoSaveTimer = setTimeout(async () => {
-      if (store.config) {
-        try {
-          await saveConfig(store.config)
-        } catch (e) {
-          console.warn('Auto-save config failed:', e)
-        }
-      }
-    }, 500)
-  },
-  { deep: true }
-)
+// Only actual user input schedules a save. Watching the whole reactive config
+// caused a loop because saveConfig replaces store.config with the API response.
+function scheduleAutoSave() {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(async () => {
+    if (!store.config || autoSaveInFlight) return
+    autoSaveInFlight = true
+    try {
+      await saveConfig(store.config)
+    } catch (e) {
+      console.warn('Auto-save config failed:', e)
+    } finally {
+      autoSaveInFlight = false
+    }
+  }, 1200)
+}
+
+onBeforeUnmount(() => {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+})
 
 async function onTestServer() {
   if (!store.config) return

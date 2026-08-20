@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+.venv/
+.zbuild-data/
 
 # Build output
 dist/

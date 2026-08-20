@@ -1,7 +1,0 @@
-=== AC-02 Evidence: WebSocket Runner & Core Commands Suite ===
-Command: py -m unittest discover -s scripts/tests -v
-
-Ran 97 tests in 11.208s
-OK (All 97 Python tests passed, including pipeline, runner commands, affected, templates, svn, and server API)
-WebSocket endpoint /api/ws/run provides streaming logs, step-start, step-end, result, and exit events with max concurrency=2 queue.
-Result: Pass

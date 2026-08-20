@@ -138,6 +138,18 @@
               </span>
             </button>
 
+            <button
+              v-if="!ipc.isElectron()"
+              type="button"
+              class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              :class="activeSideTab === 'tasks'
+                ? 'bg-white text-blue-700 shadow-xs border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-300/50'"
+              @click="activeSideTab = 'tasks'"
+            >
+              团队队列
+            </button>
+
             <!-- Width Toggle Button -->
             <button
               type="button"
@@ -167,6 +179,14 @@
           class="flex-1 min-h-0 flex flex-col overflow-hidden"
         >
           <LogViewer />
+        </div>
+
+        <div
+          v-if="!ipc.isElectron()"
+          v-show="activeSideTab === 'tasks'"
+          class="flex-1 min-h-0 flex flex-col overflow-hidden"
+        >
+          <TaskQueuePanel />
         </div>
       </div>
     </div>
@@ -262,6 +282,7 @@ import CommandForm from '@/components/CommandForm.vue'
 import ProjectTable from '@/components/ProjectTable.vue'
 import PipelineView from '@/components/PipelineView.vue'
 import LogViewer from '@/components/LogViewer.vue'
+import TaskQueuePanel from '@/components/TaskQueuePanel.vue'
 import ActionBar from '@/components/ActionBar.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 import StashDialog from '@/components/StashDialog.vue'
@@ -307,7 +328,7 @@ interface RunPayload {
 }
 
 const store = useAppStore()
-const activeSideTab = ref<'pipeline' | 'logs'>('pipeline')
+const activeSideTab = ref<'pipeline' | 'logs' | 'tasks'>('pipeline')
 const settingsRef = ref<InstanceType<typeof SettingsDialog> | null>(null)
 const confirmRef = ref<InstanceType<typeof ConfirmDialog> | null>(null)
 const stashRef = ref<InstanceType<typeof StashDialog> | null>(null)
@@ -609,6 +630,7 @@ function onStashContinue() {
 const defaultConfig: AppConfig = {
   rootPath: '',
   svnRootUrl: 'https://10.1.1.120/svn/智慧病房特殊订单',
+  svnUploadDirectory: '前端',
   svnLocations: [
     {
       id: 'loc-default',

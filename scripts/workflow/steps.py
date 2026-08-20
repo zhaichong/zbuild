@@ -105,11 +105,13 @@ def get_steps(mode: str) -> List[StepDefinition]:
         step_copy_local,
     )
 
+    skip_git_mutation = lambda ctx: bool(ctx.config.get("isolated_workspace"))
+
     if mode == "server":
         return [
             StepDefinition(name="检查 Git/Bash 工具", fn=step_check_tools, max_retries=0),
-            StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1),
-            StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0),
+            StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1, skip_if=skip_git_mutation),
+            StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0, skip_if=skip_git_mutation),
             StepDefinition(name="检查并安装项目依赖", fn=step_install_deps, max_retries=1),
             StepDefinition(name="执行项目打包", fn=step_build, max_retries=1),
             StepDefinition(name="选择最新 dist/*.tar.gz", fn=step_select_artifact, max_retries=0),
@@ -118,8 +120,8 @@ def get_steps(mode: str) -> List[StepDefinition]:
     elif mode == "local":
         return [
             StepDefinition(name="检查 Git/Bash/SVN 工具", fn=step_check_tools, max_retries=0),
-            StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1),
-            StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0),
+            StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1, skip_if=skip_git_mutation),
+            StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0, skip_if=skip_git_mutation),
             StepDefinition(name="检查并安装项目依赖", fn=step_install_deps, max_retries=1),
             StepDefinition(name="执行项目打包", fn=step_build, max_retries=1),
             StepDefinition(name="选择最新 dist/*.tar.gz", fn=step_select_artifact, max_retries=0),
@@ -131,8 +133,8 @@ def get_steps(mode: str) -> List[StepDefinition]:
         # Default: svn mode
         return [
             StepDefinition(name="检查 Git/Bash/SVN 工具", fn=step_check_tools, max_retries=0),
-            StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1),
-            StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0),
+            StepDefinition(name="切换 Git 分支", fn=step_switch_branch, max_retries=1, skip_if=skip_git_mutation),
+            StepDefinition(name="拉取当前分支最新代码", fn=step_pull_latest, max_retries=2, retry_delay=3.0, skip_if=skip_git_mutation),
             StepDefinition(name="检查并安装项目依赖", fn=step_install_deps, max_retries=1),
             StepDefinition(name="执行项目打包", fn=step_build, max_retries=1),
             StepDefinition(name="选择最新 dist/*.tar.gz", fn=step_select_artifact, max_retries=0),

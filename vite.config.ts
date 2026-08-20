@@ -18,6 +18,15 @@ export default defineConfig({
       },
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.ZBUILD_API_TARGET || 'http://127.0.0.1:8000',
+        changeOrigin: false,
+        ws: true,
+      },
+    },
+  },
   css: {
     postcss: './postcss.config.js',
   },

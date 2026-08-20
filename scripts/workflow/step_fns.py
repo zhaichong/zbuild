@@ -204,6 +204,7 @@ def step_build(ctx: StepContext) -> StepResult:
             ctx.project_path,
             bash_exe=bash_path,
             build_command=build_cmd,
+            target_branch=ctx.branch,
             artifact_paths=artifact_paths,
             on_line=lambda line: emit("log", {"level": "info", "message": line, "project": ctx.project_name}),
         )

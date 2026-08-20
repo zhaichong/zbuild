@@ -133,6 +133,7 @@ def list_svn_contents(
     Returns a list of dicts with 'name', 'kind' (file/dir), and 'rev'.
     """
     exe = svn_exe or "svn"
+    svn_url = join_svn_url(svn_url)
     auth = svn_args(username, password)
     
     # 1. 尝试使用 --xml 获取结构化目录列表
@@ -172,11 +173,14 @@ def list_svn_contents(
                     })
             return entries
 
-        logging.warning("SVN list returned exit code %d. stderr: %s", r.returncode, r.stderr)
-        return []
+        detail = (r_plain.stderr or r_plain.stdout or r.stderr or r.stdout).strip()
+        logging.warning("SVN list returned exit code %d. stderr: %s", r.returncode, detail)
+        raise UploadError(detail or f"svn list failed with exit code {r.returncode}")
     except Exception as exc:
+        if isinstance(exc, UploadError):
+            raise
         logging.error("SVN list execution error: %s", exc)
-        return []
+        raise UploadError(f"SVN list execution error: {exc}") from exc
 
 
 def ensure_svn_path(
@@ -484,7 +488,9 @@ class SvnUploader(BaseUploader):
             if log_fn:
                 log_fn("警告：SVN 凭据未配置，上传可能会失败")
 
-        # Determine the SVN root and leaf name from the matching project config
+        # All packages for an order normally share one directory ("前端" by
+        # default).  A project-specific leaf is retained only for legacy
+        # configurations that have not enabled the unified directory setting.
         svn_leaf = ""
         proj_branch = ""
         proj_svn_root = config.get("project_svn_roots", {}).get(project_name)
@@ -500,6 +506,9 @@ class SvnUploader(BaseUploader):
             svn_leaf = project_name
         if not svn_leaf:
             svn_leaf = artifact.stem.replace(".tar", "")
+        unified_directory = str(config.get("svn_upload_directory") or "").strip()
+        if unified_directory:
+            svn_leaf = unified_directory
 
         # Build SVN URL with hospital/order hierarchy:
         # svn_root/hospital_name/order_no/svn_leaf/artifact

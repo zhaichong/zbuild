@@ -5,6 +5,7 @@ import argparse
 import logging
 import os
 import socket
+import shutil
 import sys
 import webbrowser
 from pathlib import Path
@@ -23,11 +24,17 @@ if hasattr(sys.stderr, "reconfigure"):
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPTS_DIR.parent
+os.environ.setdefault("ZBUILD_DATA_DIR", str(PROJECT_ROOT / ".zbuild-data"))
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from aiohttp import web
-from server.app import create_app
+try:
+    from aiohttp import web
+    from server.app import create_app
+except ModuleNotFoundError as exc:
+    raise SystemExit(
+        f"缺少 Python 运行依赖 {exc.name!r}；请先执行: py -m pip install -e ."
+    ) from exc
 
 
 def get_local_ip() -> str:
@@ -61,6 +68,12 @@ def main():
     parser.add_argument("--open", action="store_true", help="Automatically open browser on start")
     args = parser.parse_args()
 
+    missing = [name for name in ("git", "node") if not shutil.which(name)]
+    if missing:
+        parser.error("缺少必需运行时: " + ", ".join(missing))
+    if not shutil.which("svn"):
+        print("[WARN] 未检测到 SVN；本地构建可用，但 SVN 上传任务会失败。")
+
     port = args.port or find_available_port(8000)
     local_ip = get_local_ip()
     local_url = f"http://127.0.0.1:{port}"
@@ -79,7 +92,10 @@ def main():
         except Exception:
             pass
 
-    app = create_app()
+    try:
+        app = create_app()
+    except (OSError, RuntimeError) as exc:
+        raise SystemExit(f"[ERROR] Web 服务安全配置初始化失败: {exc}") from exc
     web.run_app(app, host=args.host, port=port, print=None)
 
 

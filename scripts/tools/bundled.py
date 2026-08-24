@@ -118,11 +118,13 @@ def find_node14_dir() -> Optional[Path]:
     2. Volta Node 14 image directory (e.g. AppData/Local/Volta/tools/image/node/14.*)
     3. NVM Node 14 directory (e.g. AppData/Roaming/nvm/v14.* or NVM_HOME/v14.*)
     """
+    candidates = []
+
     # 1. Bundled runtime
     root = runtime_root()
     cand = root / "node"
     if (cand / "node.exe").is_file() or (cand / "bin" / "node").is_file() or (cand / "node").is_file():
-        return cand
+        candidates.append(cand)
 
     # 2. Volta image directory
     if os.name == "nt":
@@ -133,7 +135,7 @@ def find_node14_dir() -> Optional[Path]:
         v14_dirs = [d for d in volta_node_dir.iterdir() if d.is_dir() and d.name.startswith("14.")]
         if v14_dirs:
             v14_dirs.sort(key=lambda d: [int(p) if p.isdigit() else 0 for p in d.name.split(".")], reverse=True)
-            return v14_dirs[0]
+            candidates.extend(v14_dirs)
 
     # 3. NVM directory
     if os.name == "nt":
@@ -144,9 +146,23 @@ def find_node14_dir() -> Optional[Path]:
         v14_dirs = [d for d in nvm_dir.iterdir() if d.is_dir() and (d.name.startswith("v14.") or d.name.startswith("14."))]
         if v14_dirs:
             v14_dirs.sort(key=lambda d: [int(p) if p.isdigit() else 0 for p in d.name.lstrip("v").split(".")], reverse=True)
-            return v14_dirs[0]
+            candidates.extend(v14_dirs)
 
-    return None
+    if not candidates:
+        return None
+
+    # First pass: find candidate that has both node AND npm-cli.js
+    for c in candidates:
+        has_cli = (
+            (c / "node_modules" / "npm" / "bin" / "npm-cli.js").is_file()
+            or (c / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js").is_file()
+        )
+        if has_cli:
+            return c
+
+    # Fallback to first candidate if none had npm-cli.js
+    return candidates[0]
+
 
 
 def bundled_node() -> Optional[str]:

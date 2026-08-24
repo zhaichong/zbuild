@@ -32,6 +32,7 @@ try:
     from aiohttp import web
     from server.app import create_app
     from tools.bundled import bundled_git, bundled_node, bundled_svn
+    from tools.detect import find_tool
 except ModuleNotFoundError as exc:
     raise SystemExit(
         f"缺少 Python 运行依赖 {exc.name!r}；请先执行: py -m pip install -e ."
@@ -63,16 +64,22 @@ def find_available_port(start_port: int = 8000) -> int:
 
 
 def resolve_runtime_tools() -> list[str]:
-    """Prefer packaged Git/SVN/Node so the Web bundle needs no system tools."""
+    """Prefer packaged Git/SVN/Node so the Web bundle needs no system tools.
+
+    Falls back to the project's own detection (``find_tool``) when no bundled
+    copy exists — e.g. a system-wide SlikSvn install that is not on PATH.
+    Found tool directories are prepended to PATH so child processes
+    (deploy.sh etc.) can invoke the tools by bare name.
+    """
     missing: list[str] = []
     for name, resolver in (("git", bundled_git), ("node", bundled_node), ("svn", bundled_svn)):
-        executable = resolver()
+        executable = resolver() or find_tool(name)
         if executable:
             executable_dir = str(Path(executable).parent)
             path_parts = os.environ.get("PATH", "").split(os.pathsep)
             if executable_dir not in path_parts:
                 os.environ["PATH"] = executable_dir + os.pathsep + os.environ.get("PATH", "")
-        elif not shutil.which(name):
+        else:
             missing.append(name)
     return missing
 

@@ -177,10 +177,12 @@ export const webApi = {
       config: AppConfig
       revision: string
       secretStatus: { svnPassword: boolean; serverPassword: boolean }
+      systemConfigEditable: boolean
     }>('/api/config')
     configRevision = response.revision
     if (response.secretStatus.svnPassword) response.config.form.svnPassword = '[configured]'
     if (response.secretStatus.serverPassword) response.config.form.serverPassword = '[configured]'
+    response.config.systemConfigEditable = response.systemConfigEditable
     return response.config
   },
 
@@ -189,6 +191,7 @@ export const webApi = {
       config: AppConfig
       revision: string
       secretStatus: { svnPassword: boolean; serverPassword: boolean }
+      systemConfigEditable: boolean
     }>(
       '/api/config', {
         method: 'PUT',
@@ -198,6 +201,7 @@ export const webApi = {
     configRevision = response.revision
     if (response.secretStatus.svnPassword) response.config.form.svnPassword = '[configured]'
     if (response.secretStatus.serverPassword) response.config.form.serverPassword = '[configured]'
+    response.config.systemConfigEditable = response.systemConfigEditable
     return response.config
   },
 

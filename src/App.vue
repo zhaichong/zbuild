@@ -424,10 +424,15 @@ function onOpenSettings() {
   }
 }
 
-function onSetMode(mode: UploadMode) {
+async function onSetMode(mode: UploadMode) {
   if (!store.config) return
   store.config.uploadAfterBuild = mode === 'svn'
   store.config.uploadToServer = mode === 'server'
+  try {
+    await saveConfig(store.config)
+  } catch (e) {
+    console.warn('Auto save config mode failed:', e)
+  }
 }
 
 function buildPayload(onlyFailed = false): RunPayload {

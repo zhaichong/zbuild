@@ -20,7 +20,7 @@ from core.errors import UploadError
 from runner.protocol import emit, emit_log
 from tools.exec import run_process
 from uploaders.server import _mkdir_p_sftp, _run_ssh, _shell_quote, build_extract_command
-from uploaders.svn import svn_args
+from uploaders.svn import join_svn_url, svn_args
 
 
 def _format_bytes(size: Optional[int]) -> str:
@@ -75,7 +75,10 @@ def list_svn_order_tree(
     auth = svn_args(username, password)
     upload_paths = server_upload_paths or {}
 
-    clean_url = svn_url.rstrip("/")
+    try:
+        clean_url = join_svn_url(svn_url)
+    except Exception:
+        clean_url = svn_url.rstrip("/")
 
     # 1. 尝试使用 svn list -R --xml 获取递归完整信息
     try:
@@ -84,40 +87,43 @@ def list_svn_order_tree(
 
         if r.returncode == 0 and r.stdout.strip():
             import xml.etree.ElementTree as ET
-            root = ET.fromstring(r.stdout)
-            for entry_elem in root.findall(".//entry"):
-                name_elem = entry_elem.find("name")
-                kind = entry_elem.get("kind", "file")
-                size_elem = entry_elem.find("size")
-                size = int(size_elem.text) if (size_elem is not None and size_elem.text and size_elem.text.isdigit()) else None
+            try:
+                root = ET.fromstring(r.stdout)
+                for entry_elem in root.findall(".//entry"):
+                    name_elem = entry_elem.find("name")
+                    kind = entry_elem.get("kind", "file")
+                    size_elem = entry_elem.find("size")
+                    size = int(size_elem.text) if (size_elem is not None and size_elem.text and size_elem.text.isdigit()) else None
 
-                if name_elem is not None and name_elem.text:
-                    rel_path = name_elem.text.replace("\\", "/").strip("/")
-                    item_name = PurePosixPath(rel_path).name
-                    guessed_proj = _guess_project_name(item_name)
-                    is_frontend = bool(
-                        kind == "file" and (
-                            rel_path.endswith(".tar.gz") or
-                            rel_path.endswith(".tgz") or
-                            rel_path.endswith(".zip") or
-                            "frontend" in rel_path.lower() or
-                            "web" in rel_path.lower()
+                    if name_elem is not None and name_elem.text:
+                        rel_path = name_elem.text.replace("\\", "/").strip("/")
+                        item_name = PurePosixPath(rel_path).name
+                        guessed_proj = _guess_project_name(item_name)
+                        is_frontend = bool(
+                            kind == "file" and (
+                                rel_path.endswith(".tar.gz") or
+                                rel_path.endswith(".tgz") or
+                                rel_path.endswith(".zip") or
+                                "frontend" in rel_path.lower() or
+                                "web" in rel_path.lower()
+                            )
                         )
-                    )
-                    matched_path = upload_paths.get(guessed_proj or "", "/home/data/web") if is_frontend else ""
+                        matched_path = upload_paths.get(guessed_proj or "", "/home/data/web") if is_frontend else ""
 
-                    entries.append({
-                        "id": rel_path,
-                        "name": item_name,
-                        "relativePath": rel_path,
-                        "path": f"{clean_url}/{rel_path}",
-                        "kind": kind,
-                        "size": size,
-                        "sizeFormatted": _format_bytes(size),
-                        "isFrontendPackage": is_frontend,
-                        "matchedProjectName": guessed_proj or "",
-                        "matchedServerPath": matched_path,
-                    })
+                        entries.append({
+                            "id": rel_path,
+                            "name": item_name,
+                            "relativePath": rel_path,
+                            "path": f"{clean_url}/{rel_path}",
+                            "kind": kind,
+                            "size": size,
+                            "sizeFormatted": _format_bytes(size),
+                            "isFrontendPackage": is_frontend,
+                            "matchedProjectName": guessed_proj or "",
+                            "matchedServerPath": matched_path,
+                        })
+            except Exception as parse_err:
+                logging.warning("Failed to parse SVN XML output: %s", parse_err)
 
         # 2. 如果 --xml 解析失败或为空，回退到普通的 svn list -R
         if not entries:
@@ -154,6 +160,14 @@ def list_svn_order_tree(
                         "matchedProjectName": guessed_proj or "",
                         "matchedServerPath": matched_path,
                     })
+            elif r.returncode != 0 and r_plain.returncode != 0:
+                err_msg = (r_plain.stderr or r.stderr or "").strip()
+                return {
+                    "success": False,
+                    "error": err_msg or f"SVN list 命令执行失败 (退出码: {r_plain.returncode})",
+                    "tree": [],
+                    "flatList": [],
+                }
 
         # 3. 将扁平列表转换为层级树（Tree View）
         tree = _build_tree_hierarchy(entries)
@@ -270,7 +284,10 @@ def deploy_order_packages(payload: Dict[str, Any]) -> Dict[str, Any]:
             emit({"type": "step-start", "step": "下载 SVN 包", "project": file_name})
 
             # Step 1: SVN Export
-            file_svn_url = f"{svn_url}/{urllib.parse.quote(rel_path.strip('/'), safe='/')}"
+            try:
+                file_svn_url = join_svn_url(svn_url, rel_path)
+            except Exception:
+                file_svn_url = f"{svn_url}/{urllib.parse.quote(rel_path.strip('/'), safe='/')}"
             local_file_path = os.path.join(temp_dir, file_name)
 
             auth = svn_args(username, password)
@@ -395,7 +412,12 @@ def export_svn_file_for_preview(
         preview_dir.mkdir(parents=True, exist_ok=True)
         target_path = preview_dir / file_name
 
-        cmd = [svn_exe, "export", file_url, str(target_path), "--force"]
+        try:
+            export_target_url = join_svn_url(file_url)
+        except Exception:
+            export_target_url = file_url
+
+        cmd = [svn_exe, "export", export_target_url, str(target_path), "--force"]
         cmd.extend(svn_args(username=username, password=password))
 
         res = run_process(cmd, timeout=30)

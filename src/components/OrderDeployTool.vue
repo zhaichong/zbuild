@@ -648,8 +648,8 @@ async function onTestServer() {
 
 async function pickHospital() {
   const root = currentSvnUrl.value || store.config?.svnRootUrl || ''
-  const svnUser = store.config?.form.svnUsername || ''
-  const svnPass = store.config?.form.svnPassword || ''
+  const svnUser = svnUsername.value || store.config?.form.svnUsername || ''
+  const svnPass = svnPassword.value || store.config?.form.svnPassword || ''
   if (!root) {
     store.showToast('请先选择或配置 SVN 根路径', 'warning')
     return
@@ -673,8 +673,8 @@ async function pickHospital() {
 
 async function pickOrder() {
   const root = currentSvnUrl.value || store.config?.svnRootUrl || ''
-  const svnUser = store.config?.form.svnUsername || ''
-  const svnPass = store.config?.form.svnPassword || ''
+  const svnUser = svnUsername.value || store.config?.form.svnUsername || ''
+  const svnPass = svnPassword.value || store.config?.form.svnPassword || ''
   if (!root) return
 
   let fetchUrl = root.replace(/\/$/, '')
@@ -743,7 +743,11 @@ async function loadTree() {
 
       // Smart auto select frontend packages
       smartSelectFrontend()
-      store.showToast(`成功读取 ${flatList.value.length} 个目录与文件项`, 'success')
+      if (flatList.value.length === 0) {
+        store.showToast('该路径下未读取到文件，请检查医院名称与订单号是否准确', 'info')
+      } else {
+        store.showToast(`成功读取 ${flatList.value.length} 个目录与文件项`, 'success')
+      }
     } else {
       store.showToast('读取 SVN 文件树失败: ' + (res.error || '未知错误'), 'error')
     }

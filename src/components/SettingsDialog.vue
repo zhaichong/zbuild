@@ -697,7 +697,13 @@
                   v-if="!ipc.isElectron()"
                   class="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700"
                 >
-                  此浏览器独立保存 SVN 账号和密码；密码不会回传到页面。工作目录、SVN 目录源和构建命令由服务端统一维护。
+                  此浏览器独立保存 SVN 账号和密码；密码不会回传到页面。
+                  <template v-if="store.config?.systemConfigEditable">
+                    当前在本机操作，工作目录、SVN 目录源、构建命令等系统设置会一并保存。
+                  </template>
+                  <template v-else>
+                    工作目录、SVN 目录源和构建命令由服务端统一维护，本页面不保存这些项。
+                  </template>
                 </div>
                 <div class="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100">
                   <div>

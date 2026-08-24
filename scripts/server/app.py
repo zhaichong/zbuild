@@ -30,6 +30,7 @@ from server.task_manager import TaskManager
 from server.task_store import TaskStore
 from server.task_routes import register_task_routes
 from server.workspace import WorkspaceManager
+from core.constants import DEFAULT_SVN_ROOT
 
 
 logging.basicConfig(
@@ -40,7 +41,7 @@ logger = logging.getLogger("zbuild-server")
 
 PROFILE_COOKIE = "zbuild_profile"
 PROFILE_CONFIG_KEYS = (
-    "selected_projects", "project_branches", "hospital_name", "order_no",
+    "mode", "server", "selected_projects", "project_branches", "hospital_name", "order_no",
     "order_notes", "create_order_dir", "svn_credentials", "svn_upload_directory",
     "artifact_paths", "project_artifact_paths",
 )
@@ -60,7 +61,31 @@ def _personal_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "username": credentials.get("username", ""),
             "password": credentials.get("password", ""),
         }
+    server = result.get("server")
+    if isinstance(server, dict):
+        result["server"] = {
+            "host": server.get("host", ""),
+            "username": server.get("username", ""),
+            "password": server.get("password", ""),
+            "port": server.get("port", 22),
+        }
     return result
+
+
+def _system_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Server-wide settings only; personal/profile keys stay per-browser."""
+    return {key: value for key, value in config.items() if key not in PROFILE_CONFIG_KEYS}
+
+
+def _is_loopback(request: web.Request) -> bool:
+    """True when the request comes from the machine hosting this server.
+
+    Only the local operator (browser opened on the server host via
+    127.0.0.1 / localhost / ::1) may edit server-wide system settings.
+    LAN colleagues keep a read-only view of those settings.
+    """
+    remote = (request.remote or "").strip()
+    return remote in {"127.0.0.1", "::1", "localhost"}
 
 
 def _execution_config(system_config: Dict[str, Any], profile_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -69,6 +94,7 @@ def _execution_config(system_config: Dict[str, Any], profile_config: Dict[str, A
     # Credentials in the old shared config must never silently become another
     # browser's identity after profiles are enabled.
     value.pop("svn_credentials", None)
+    value.pop("server", None)
     for key in PROFILE_CONFIG_KEYS:
         if key in profile_config:
             value[key] = profile_config[key]
@@ -87,13 +113,14 @@ def _config_view(system_public: Dict[str, Any], profile_public: Dict[str, Any]) 
     value.update(profile_public.get("config") or {})
     status = dict(system_public.get("secretStatus") or {})
     status["svnPassword"] = bool((profile_public.get("secretStatus") or {}).get("svnPassword"))
+    status["serverPassword"] = bool((profile_public.get("secretStatus") or {}).get("serverPassword"))
     return {"config": value, "revision": profile_public.get("revision", "0"), "secretStatus": status}
 
 
 def _assert_allowed_svn_url(url: object, execution_config: Dict[str, Any]) -> None:
     """Only permit SVN endpoints administered in the server configuration."""
     candidate = unquote(str(url or "")).rstrip("/")
-    roots = [execution_config.get("svn_root", "")]
+    roots = [execution_config.get("svn_root", ""), DEFAULT_SVN_ROOT]
     roots.extend(
         item.get("url", "") for item in execution_config.get("svn_locations", [])
         if isinstance(item, dict)
@@ -140,7 +167,7 @@ def py_config_to_frontend(py: Dict[str, Any]) -> Dict[str, Any]:
             "node": tools.get("node", ""),
             "npm": tools.get("npm", ""),
         },
-        "uploadAfterBuild": False if py.get("mode") == "local" else (py.get("auto_install_deps") is not False),
+        "uploadAfterBuild": py.get("mode") == "svn",
         "uploadToServer": py.get("mode") == "server",
         "localOutputDir": py.get("local_output", ""),
         "serverUploadPaths": py.get("server_upload_paths") or {},
@@ -306,6 +333,7 @@ async def handle_config_get(request: web.Request) -> web.Response:
         request.app["profile_store"].get_public(request["profile_id"]),
     )
     value["config"] = py_config_to_frontend(value["config"])
+    value["systemConfigEditable"] = _is_loopback(request)
     return web.json_response(value)
 
 
@@ -321,10 +349,10 @@ async def handle_config_save(request: web.Request) -> web.Response:
          "form.serverPassword": "server.password"}.get(item, item)
         for item in clear_secrets
     ]
+    py_config = frontend_config_to_py(fe_config)
     try:
         result = request.app["profile_store"].save(
-            request["profile_id"], _personal_config(frontend_config_to_py(fe_config)),
-            revision,
+            request["profile_id"], _personal_config(py_config), revision,
         )
     except Exception:
         request.app["task_store"].record_audit(
@@ -332,12 +360,32 @@ async def handle_config_save(request: web.Request) -> web.Response:
             remote_ip=request.remote or "",
         )
         raise
+
+    # Only the local operator may persist server-wide system settings; LAN
+    # browsers keep those fields read-only (their values are still accepted
+    # here but ignored unless the request comes from loopback).
+    if _is_loopback(request):
+        try:
+            config_service = request.app["config_service"]
+            request.app["config_service"].save(
+                _system_config(py_config),
+                config_service.get_public()["revision"],
+                clear_secrets,
+            )
+        except Exception:
+            request.app["task_store"].record_audit(
+                "config.save", "failed", submitter=str(body.get("submitter") or ""),
+                remote_ip=request.remote or "",
+            )
+            raise
+
     request.app["task_store"].record_audit(
         "config.save", "success", submitter=str(body.get("submitter") or ""),
         remote_ip=request.remote or "",
     )
     result = _config_view(request.app["config_service"].get_public(), result)
     result["config"] = py_config_to_frontend(result["config"])
+    result["systemConfigEditable"] = _is_loopback(request)
     return web.json_response(result)
 
 
@@ -458,18 +506,57 @@ async def handle_svn_list(request: web.Request) -> web.Response:
 
 async def handle_server_test(request: web.Request) -> web.Response:
     payload = await request.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be an object")
+
+    execution_config = request.app["execution_config"](request)
+    server = execution_config.get("server") or {}
+    for pass_field in ("serverPassword", "password"):
+        if payload.get(pass_field) in (None, "", "[configured]"):
+            payload[pass_field] = server.get("password", "")
+    if not payload.get("serverAddress") and not payload.get("host"):
+        payload["serverAddress"] = server.get("host", "")
+    if not payload.get("serverUsername") and not payload.get("username"):
+        payload["serverUsername"] = server.get("username", "")
+
     res = await _execute_command("server-test", payload)
     return web.json_response(res)
 
 
 async def handle_order_deploy_list(request: web.Request) -> web.Response:
     payload = await request.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be an object")
+
+    execution_config = request.app["execution_config"](request)
+    _assert_allowed_svn_url(payload.get("svnUrl") or payload.get("url"), execution_config)
+    payload["svn"] = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
+    stored_credentials = execution_config.get(
+        "svn_credentials", {}
+    )
+    for field, stored_field in (("svnUsername", "username"), ("svnPassword", "password"), ("username", "username"), ("password", "password")):
+        if payload.get(field) in (None, "", "[configured]"):
+            payload[field] = stored_credentials.get(stored_field, "")
+
     res = await _execute_command("order-deploy-list", payload)
     return web.json_response(res)
 
 
 async def handle_order_deploy_open_file(request: web.Request) -> web.Response:
     payload = await request.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be an object")
+
+    execution_config = request.app["execution_config"](request)
+    _assert_allowed_svn_url(payload.get("fileUrl") or payload.get("url"), execution_config)
+    payload["svn"] = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
+    stored_credentials = execution_config.get(
+        "svn_credentials", {}
+    )
+    for field, stored_field in (("svnUsername", "username"), ("svnPassword", "password"), ("username", "username"), ("password", "password")):
+        if payload.get(field) in (None, "", "[configured]"):
+            payload[field] = stored_credentials.get(stored_field, "")
+
     res = await _execute_command("order-deploy-open-file", payload)
     return web.json_response(res)
 

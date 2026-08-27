@@ -45,16 +45,51 @@ def read_current_branch(project_path: Union[Path, str]) -> str:
     return ""
 
 
+def _normalize_branch_name(raw_branch: str) -> Optional[str]:
+    """Strip git remote prefixes (origin/, remotes/origin/, remotes/upstream/, etc.)
+    properly while preserving multi-segment branch names like 'feature/v1/login'.
+    """
+    if not isinstance(raw_branch, str):
+        return None
+    b = raw_branch.strip()
+    if not b or b == "HEAD" or b.endswith("/HEAD"):
+        return None
+
+    # Strip 'remotes/' if present
+    if b.startswith("remotes/"):
+        b = b[len("remotes/"):]
+
+    # Strip known or generic remote prefix (e.g. 'origin/foo' -> 'foo')
+    if "/" in b:
+        first_segment, rest = b.split("/", 1)
+        if first_segment in {"origin", "upstream", "remote", "remotes"} or not rest.startswith("heads/"):
+            b = rest
+
+    # Strip 'heads/' if left over from ref name formatting
+    if b.startswith("heads/"):
+        b = b[len("heads/"):]
+
+    b = b.strip()
+    return b if b else None
+
+
 def read_branches(project_path: Union[Path, str]) -> List[str]:
-    """Return all local branch names."""
+    """Return all local and cached remote tracking branch names without remote prefix."""
     try:
         r = run_process(
-            safe_git(project_path) + ["branch", "--list", "--format=%(refname:short)"],
+            safe_git(project_path) + ["branch", "-a", "--list", "--format=%(refname:short)"],
         )
         if r.returncode == 0:
-            return [b.strip() for b in r.stdout.strip().split("\n") if b.strip()]
-    except Exception:
-        pass
+            seen = set()
+            branches = []
+            for b in r.stdout.strip().split("\n"):
+                normalized = _normalize_branch_name(b)
+                if normalized and normalized not in seen:
+                    seen.add(normalized)
+                    branches.append(normalized)
+            return branches
+    except Exception as exc:
+        logger.debug("Failed to read branches for %s: %s", project_path, exc)
     return []
 
 
@@ -75,17 +110,16 @@ def fetch_remote_branches(project_path: Union[Path, str]) -> List[str]:
             safe_git(project_path) + ["branch", "-r", "--list", "--format=%(refname:short)"],
         )
         if r.returncode == 0:
+            seen = set()
             branches = []
             for line in r.stdout.strip().split("\n"):
-                line = line.strip()
-                if line and not line.endswith("/HEAD"):
-                    # Remove "origin/" prefix
-                    if "/" in line:
-                        line = line.split("/", 1)[1]
-                    branches.append(line)
+                normalized = _normalize_branch_name(line)
+                if normalized and normalized not in seen:
+                    seen.add(normalized)
+                    branches.append(normalized)
             return branches
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to fetch remote branches for %s: %s", project_path, exc)
     return []
 
 

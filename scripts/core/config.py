@@ -99,6 +99,7 @@ def default_config() -> Dict[str, Any]:
         "auto_install_deps": True,
         "skip_svn_commit": False,
         "node_required_version": "14.21.3",
+        "use_build_cache": True,
         "build_command": DEFAULT_BUILD_COMMAND,
         "build_commands": dict(DEFAULT_BUILD_COMMANDS),
         "branch_build_commands": {},

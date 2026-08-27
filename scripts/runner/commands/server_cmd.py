@@ -14,6 +14,20 @@ def cmd_server_test(payload: Dict[str, Any]) -> Dict[str, Any]:
     username = payload.get("serverUsername", "")
     password = payload.get("serverPassword", "")
 
+    # If password is empty or sanitized placeholder "[configured]", resolve from saved config
+    if password in (None, "", "[configured]"):
+        try:
+            from core.config import load_config
+            cfg = load_config()
+            saved_server = cfg.get("server") or {}
+            password = saved_server.get("password", "")
+            if not host:
+                host = saved_server.get("host", "")
+            if not username:
+                username = saved_server.get("username", "")
+        except Exception:
+            pass
+
     if not host or not username:
         return {"success": False, "error": "Missing 'serverAddress' or 'serverUsername'"}
 

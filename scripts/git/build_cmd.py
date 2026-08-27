@@ -260,15 +260,50 @@ def resolve_branch_build_command(
     branch: str = "",
 ) -> str:
     """Resolve build command for a specific project and branch from configuration."""
-    branch_cmds = config.get("branch_build_commands", {}).get(project_name, {})
+    if not isinstance(config, dict):
+        return "deploy.sh"
+
+    import fnmatch
+
+    # Find project-specific branch build commands (case-insensitive fallback)
+    branch_cmds_map = config.get("branch_build_commands", {})
+    branch_cmds = None
+    if isinstance(branch_cmds_map, dict):
+        if project_name in branch_cmds_map and isinstance(branch_cmds_map[project_name], dict):
+            branch_cmds = branch_cmds_map[project_name]
+        else:
+            for p_key, p_val in branch_cmds_map.items():
+                if isinstance(p_key, str) and p_key.lower() == str(project_name).lower() and isinstance(p_val, dict):
+                    branch_cmds = p_val
+                    break
+
     if branch and isinstance(branch_cmds, dict):
-        if branch in branch_cmds:
+        # 1. Exact match
+        if branch in branch_cmds and branch_cmds[branch]:
             return str(branch_cmds[branch]).strip()
+        # 2. Case-insensitive exact match
         for pattern, cmd in branch_cmds.items():
-            if pattern.endswith("*") and branch.startswith(pattern[:-1]):
+            if str(pattern).lower() == str(branch).lower() and cmd:
                 return str(cmd).strip()
+        # 3. Wildcard / fnmatch pattern match (e.g. feat/*, *-prod, release*)
+        for pattern, cmd in branch_cmds.items():
+            if cmd and (fnmatch.fnmatch(str(branch).lower(), str(pattern).lower()) or (str(pattern).endswith("*") and str(branch).startswith(str(pattern)[:-1]))):
+                return str(cmd).strip()
+
+    # Fallback to project-level build command
     proj_cmds = config.get("build_commands", {})
-    if isinstance(proj_cmds, dict) and project_name in proj_cmds:
-        return str(proj_cmds[project_name]).strip()
-    return str(config.get("build_command") or "deploy.sh").strip()
+    if isinstance(proj_cmds, dict):
+        if project_name in proj_cmds and proj_cmds[project_name]:
+            return str(proj_cmds[project_name]).strip()
+        for p_key, cmd in proj_cmds.items():
+            if isinstance(p_key, str) and p_key.lower() == str(project_name).lower() and cmd:
+                return str(cmd).strip()
+
+    # Fallback to global build command
+    global_cmd = config.get("build_command") or config.get("buildCommand")
+    if global_cmd and str(global_cmd).strip():
+        return str(global_cmd).strip()
+
+    return "deploy.sh"
+
 

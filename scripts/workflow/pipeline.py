@@ -238,13 +238,12 @@ class Pipeline:
             started_at=time.time(),
         )
 
+        from git.build_cmd import resolve_branch_build_command
+
         build_command = (
             project_config.get("build_command")
             or project_config.get("buildCommand")
-            or self.config.get("build_commands", {}).get(name)
-            or self.config.get("build_command")
-            or self.config.get("buildCommand")
-            or "deploy.sh"
+            or resolve_branch_build_command(self.config, name, branch)
         )
 
         ctx = StepContext(

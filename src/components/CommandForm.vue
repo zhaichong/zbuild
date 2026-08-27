@@ -53,53 +53,8 @@
         </div>
       </div>
 
-      <!-- SVN 目录源 (多源快捷切换) -->
-      <div
-        v-if="svnLocationOptions.length > 0"
-        class="flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-xl border border-slate-200/80"
-      >
-        <div class="flex items-center gap-2 flex-wrap min-w-0">
-          <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
-            <span class="w-2 h-2 rounded-full bg-blue-600" />
-            SVN 目录源:
-          </span>
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <button
-              v-for="loc in svnLocationOptions"
-              :key="loc.id || loc.url"
-              type="button"
-              class="px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 shadow-2xs"
-              :class="isCurrentSvn(loc.url)
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300'"
-              :title="loc.url"
-              @click="onSelectSvnLocation(loc)"
-            >
-              <span>{{ loc.name }}</span>
-              <svg
-                v-if="isCurrentSvn(loc.url)"
-                class="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2.5"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div
-          class="text-[11px] text-slate-400 font-mono truncate max-w-[320px] hidden md:block"
-          :title="store.config.svnRootUrl"
-        >
-          {{ store.config.svnRootUrl }}
-        </div>
-      </div>
+      <!-- 极客摸鱼/打包段子驿站 (自动记录且每次打包不重样) -->
+      <DevJokeBar />
 
       <!-- Row 1: Hospital Name & Order No -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -352,6 +307,7 @@ import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import { saveConfig } from '@/composables/useConfig'
 import PickerDialog from '@/components/PickerDialog.vue'
+import DevJokeBar from '@/components/DevJokeBar.vue'
 import type { SvnLocationItem } from '@/types'
 
 const store = useAppStore()

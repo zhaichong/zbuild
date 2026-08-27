@@ -77,7 +77,10 @@ class ProfileStore:
         return {
             "config": public,
             "revision": revision,
-            "secretStatus": {"svnPassword": bool(secrets.get("svn_credentials", {}).get("password"))},
+            "secretStatus": {
+                "svnPassword": bool(secrets.get("svn_credentials", {}).get("password")),
+                "serverPassword": bool(secrets.get("server", {}).get("password")),
+            },
         }
 
     def get_execution_config(self, profile_id: str) -> Dict[str, Any]:
@@ -93,11 +96,41 @@ class ProfileStore:
             if revision != current_revision:
                 raise ProfileConflict("Personal configuration changed in this browser")
             public, secrets = split_secrets(config)
+            incoming_user = (config.get("svn_credentials") or {}).get("username", "")
+            incoming_user = incoming_user.strip() if isinstance(incoming_user, str) else ""
             incoming_password = (config.get("svn_credentials") or {}).get("password")
             old_password = (current_secrets.get("svn_credentials") or {}).get("password")
-            if incoming_password in (None, "", SECRET_MARKER) and old_password:
+
+            if not incoming_user:
+                public.pop("svn_credentials", None)
+                secrets.pop("svn_credentials", None)
+            elif incoming_password in (None, SECRET_MARKER) and old_password:
                 public.setdefault("svn_credentials", {})["password"] = SECRET_MARKER
                 secrets.setdefault("svn_credentials", {})["password"] = old_password
+            elif incoming_password == "":
+                if "svn_credentials" in public:
+                    public["svn_credentials"]["password"] = ""
+                if "svn_credentials" in secrets:
+                    secrets["svn_credentials"]["password"] = ""
+
+            incoming_server_user = (config.get("server") or {}).get("username", "")
+            incoming_server_user = incoming_server_user.strip() if isinstance(incoming_server_user, str) else ""
+            incoming_server_host = (config.get("server") or {}).get("host", "")
+            incoming_server_host = incoming_server_host.strip() if isinstance(incoming_server_host, str) else ""
+            incoming_server_pass = (config.get("server") or {}).get("password")
+            old_server_pass = (current_secrets.get("server") or {}).get("password")
+
+            if not incoming_server_user and not incoming_server_host:
+                public.pop("server", None)
+                secrets.pop("server", None)
+            elif incoming_server_pass in (None, SECRET_MARKER) and old_server_pass:
+                public.setdefault("server", {})["password"] = SECRET_MARKER
+                secrets.setdefault("server", {})["password"] = old_server_pass
+            elif incoming_server_pass == "":
+                if "server" in public:
+                    public["server"]["password"] = ""
+                if "server" in secrets:
+                    secrets["server"]["password"] = ""
             ciphertext = encrypt_secret_json(self.codec, secrets)
             self._db.execute(
                 """INSERT INTO profiles(profile_id, config_json, secret_ciphertext, updated_at)

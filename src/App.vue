@@ -154,11 +154,11 @@
             <button
               type="button"
               class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-300/50 transition-colors cursor-pointer shrink-0"
-              :title="sideWidth > 520 ? '还原标准宽度 (460px)' : '展开宽屏视图 (680px)'"
+              :title="sideWidth > 650 ? '还原标准宽度 (600px)' : '展开宽屏视图 (880px)'"
               @click="toggleSideWidth"
             >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path v-if="sideWidth > 520" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                <path v-if="sideWidth > 650" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                 <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
               </svg>
             </button>
@@ -337,7 +337,7 @@ const pendingPayload = ref<RunPayload | null>(null)
 const pendingDirtyNames = ref<Set<string>>(new Set())
 
 // Resizable Side Panel
-const sideWidth = ref(460)
+const sideWidth = ref(600)
 const isResizing = ref(false)
 
 function onStartResize(e: MouseEvent) {
@@ -347,7 +347,7 @@ function onStartResize(e: MouseEvent) {
 
   const onMouseMove = (moveEvent: MouseEvent) => {
     const delta = startX - moveEvent.clientX
-    const newWidth = Math.min(Math.max(startWidth + delta, 360), 850)
+    const newWidth = Math.min(Math.max(startWidth + delta, 400), 1200)
     sideWidth.value = newWidth
   }
 
@@ -362,10 +362,10 @@ function onStartResize(e: MouseEvent) {
 }
 
 function toggleSideWidth() {
-  if (sideWidth.value > 520) {
-    sideWidth.value = 460
+  if (sideWidth.value > 650) {
+    sideWidth.value = 600
   } else {
-    sideWidth.value = 680
+    sideWidth.value = 880
   }
 }
 

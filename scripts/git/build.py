@@ -170,6 +170,10 @@ def build_project(
     # deploy.sh runs under Bash and otherwise resolves Volta/system Node first.
     from git.deps import _node_env
     env = _node_env()
+    if target_branch:
+        env["BRANCH_NAME"] = str(target_branch)
+        env["BUILD_BRANCH"] = str(target_branch)
+        env["GIT_BRANCH"] = str(target_branch)
 
     try:
         result = run_process_stream(

@@ -178,7 +178,7 @@ def step_build(ctx: StepContext) -> StepResult:
         or ctx.config.get("artifact_paths")
         or ["dist"]
     )
-    use_cache = ctx.config.get("use_build_cache", False)
+    use_cache = ctx.config.get("use_build_cache", True)
 
     input_hash = ""
     cache = None
@@ -190,10 +190,10 @@ def step_build(ctx: StepContext) -> StepResult:
         cached_artifact = cache.get_cached_artifact(input_hash)
         if cached_artifact:
             ctx.artifact_path = cached_artifact
-            emit_log(f"缓存命中，跳过构建: {cached_artifact.name}", project=ctx.project_name)
+            emit_log(f"⚡ 构建产物缓存命中 (Commit/配置未变)，0秒跳过Webpack编译: {cached_artifact.name}", project=ctx.project_name)
             return StepResult(
                 success=True,
-                message=f"缓存命中，跳过构建: {cached_artifact.name}",
+                message=f"⚡ 缓存命中，跳过编译: {cached_artifact.name}",
                 context_updates={"artifact_path": str(cached_artifact)},
             )
 
@@ -209,8 +209,11 @@ def step_build(ctx: StepContext) -> StepResult:
             on_line=lambda line: emit("log", {"level": "info", "message": line, "project": ctx.project_name}),
         )
         if artifact:
-            if use_cache and cache and input_hash:
-                cache.store_artifact(input_hash, artifact)
+            if use_cache and cache and input_hash and artifact.is_file():
+                try:
+                    cache.store_artifact(input_hash, artifact)
+                except Exception as exc:
+                    logger.debug("Failed to store artifact in cache: %s", exc)
             ctx.artifact_path = artifact
             emit_log(f"构建完成，生成产物: {artifact.name}", project=ctx.project_name)
             return StepResult(

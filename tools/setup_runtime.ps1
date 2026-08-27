@@ -96,45 +96,10 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "         Try running manually: $PY_EXE -m pip install openpyxl paramiko" -ForegroundColor DarkYellow
 }
 
-# ── 5. 准备 Node 14 + npm 运行时 ──────────────────────────────────────────────
-Write-Host ""
-Write-Host "[5/5] Checking Node.js 14 runtime ..." -ForegroundColor Yellow
-$NODE_DIR = "$ROOT\runtime\node"
-$NODE_EXE = "$NODE_DIR\node.exe"
-$NPM_CLI  = "$NODE_DIR\node_modules\npm\bin\npm-cli.js"
-
-if ((Test-Path $NODE_EXE) -and (Test-Path $NPM_CLI)) {
-    Write-Host "      Node 14 runtime is complete at $NODE_DIR" -ForegroundColor DarkGray
-} else {
-    $NODE_VERSION = "14.21.3"
-    $NODE_ZIP = "$env:TEMP\node-v$NODE_VERSION-win-x64.zip"
-    $NODE_EXTRACT = "$env:TEMP\node-v$NODE_VERSION"
-    $NODE_URL = "https://npmmirror.com/mirrors/node/v$NODE_VERSION/node-v$NODE_VERSION-win-x64.zip"
-
-    Write-Host "      Downloading Node $NODE_VERSION ..." -ForegroundColor DarkGray
-    try {
-        Invoke-WebRequest -Uri $NODE_URL -OutFile $NODE_ZIP -UseBasicParsing
-    } catch {
-        Write-Host "      Fallback to official nodejs.org..." -ForegroundColor DarkGray
-        Invoke-WebRequest -Uri "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-win-x64.zip" -OutFile $NODE_ZIP -UseBasicParsing
-    }
-
-    Write-Host "      Extracting Node 14 ..." -ForegroundColor DarkGray
-    Remove-Item $NODE_EXTRACT -Recurse -Force -ErrorAction SilentlyContinue
-    Expand-Archive -Path $NODE_ZIP -DestinationPath $NODE_EXTRACT -Force
-    New-Item -ItemType Directory -Force -Path $NODE_DIR | Out-Null
-    Copy-Item "$NODE_EXTRACT\node-v$NODE_VERSION-win-x64\*" $NODE_DIR -Recurse -Force
-    Remove-Item $NODE_EXTRACT -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $NODE_ZIP -Force -ErrorAction SilentlyContinue
-    Write-Host "      Node 14 runtime ready at: $NODE_DIR" -ForegroundColor Green
-}
-
 Write-Host ""
 Write-Host "=== Setup Complete ===" -ForegroundColor Green
-Write-Host "Python runtime: $RUNTIME_DIR"
-Write-Host "Node runtime  : $NODE_DIR"
+Write-Host "Python runtime is ready at: $RUNTIME_DIR"
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  npm run dist    -- build and package the installer"
 Write-Host ""
-

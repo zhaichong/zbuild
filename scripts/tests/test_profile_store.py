@@ -48,12 +48,16 @@ class TestProfileStore(unittest.TestCase):
     def test_configured_marker_keeps_existing_password(self):
         first = self.store.save("a" * 32, {
             "svn_credentials": {"username": "alice", "password": "secret"},
+            "server": {"host": "192.168.1.100", "username": "admin", "password": "server-secret"},
         }, "0")
+        self.assertTrue(first["secretStatus"]["serverPassword"])
         self.store.save("a" * 32, {
             "svn_credentials": {"username": "alice-2", "password": "[configured]"},
+            "server": {"host": "192.168.1.100", "username": "admin", "password": "[configured]"},
         }, first["revision"])
         current = self.store.get_execution_config("a" * 32)
         self.assertEqual(current["svn_credentials"], {"username": "alice-2", "password": "secret"})
+        self.assertEqual(current["server"]["password"], "server-secret")
 
     def test_save_rejects_stale_revision(self):
         self.store.save("a" * 32, {}, "0")

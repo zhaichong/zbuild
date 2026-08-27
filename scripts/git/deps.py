@@ -21,18 +21,25 @@ logger = logging.getLogger(__name__)
 
 
 FINGERPRINT_FILE = ".zbuild_deps_fingerprint"
+INSTALL_LOCK_FILE = ".zbuild_installing.lock"
 
 
 def dependency_fingerprint(project_path: Union[Path, str]) -> str:
     """Compute a fingerprint of the dependency specification.
 
-    Combines hashes of package.json, package-lock.json (or equivalent),
-    and any .npmrc to detect when dependencies need reinstalling.
+    Combines hashes of package.json, package-lock.json, pnpm-lock.yaml,
+    yarn.lock, and any .npmrc to detect when dependencies need reinstalling.
     """
     project = Path(project_path)
     parts: List[str] = []
 
-    for name in ("package.json", "package-lock.json", ".npmrc"):
+    for name in (
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        ".npmrc",
+    ):
         f = project / name
         if f.is_file():
             h = hashlib.sha256()
@@ -42,10 +49,29 @@ def dependency_fingerprint(project_path: Union[Path, str]) -> str:
     return "|".join(parts) if parts else ""
 
 
+def compute_deps_slot_key(project_path: Union[Path, str]) -> str:
+    """Compute a deterministic short slot key for dependency isolation cache.
+
+    Returns a 16-character hex hash representing the exact dependency manifest
+    state, or 'default' if no dependency manifests exist.
+    """
+    fp = dependency_fingerprint(project_path)
+    if not fp:
+        return "default"
+    return hashlib.sha256(fp.encode("utf-8")).hexdigest()[:16]
+
+
 def dependency_install_command(project_path: Union[Path, str]) -> List[str]:
     """Return the command to install dependencies for the project."""
     project = Path(project_path)
     pm = package_manager_executable(project)
+    # Prefer offline cache for npm/pnpm/yarn to avoid redownloading known tarballs
+    if pm == "npm" or pm.endswith("npm") or pm.endswith("npm.cmd"):
+        return [pm, "install", "--prefer-offline", "--no-audit", "--no-fund", "--progress=false"]
+    if pm == "pnpm" or pm.endswith("pnpm") or pm.endswith("pnpm.cmd"):
+        return [pm, "install", "--prefer-offline"]
+    if pm == "yarn" or pm.endswith("yarn") or pm.endswith("yarn.cmd"):
+        return [pm, "install", "--prefer-offline"]
     return [pm, "install"]
 
 
@@ -90,12 +116,40 @@ def _node_env() -> Dict[str, str]:
     env.pop("NPM_CONFIG_PREFIX", None)
     env["NPM_CONFIG_PREFIX"] = prefix
 
+    # Unified local npm cache directory across all isolated workspaces
+    from core.constants import DATA_DIR
+    npm_cache_dir = DATA_DIR / "npm_cache"
+    npm_cache_dir.mkdir(parents=True, exist_ok=True)
+    env["npm_config_cache"] = str(npm_cache_dir)
+    env["NPM_CONFIG_CACHE"] = str(npm_cache_dir)
+
     # Strip --openssl-legacy-provider from NODE_OPTIONS.
     # This flag is only valid for Node >= 17 (OpenSSL 3) and causes Node 14 to
     # abort immediately with "not allowed in NODE_OPTIONS".
     _raw_opts = env.get("NODE_OPTIONS", "")
-    _cleaned = " ".join(f for f in _raw_opts.split() if f != "--openssl-legacy-provider")
-    env["NODE_OPTIONS"] = _cleaned
+    _opts_parts = [f for f in _raw_opts.split() if f != "--openssl-legacy-provider"]
+    if not any(opt.startswith("--max-old-space-size") for opt in _opts_parts):
+        _opts_parts.append("--max-old-space-size=8192")
+    env["NODE_OPTIONS"] = " ".join(_opts_parts).strip()
+
+    # Full-power performance flags: expand threadpool & disable unnecessary CLI overheads
+    env["UV_THREADPOOL_SIZE"] = "16"
+    env["CI"] = "true"
+    env["JOBS"] = "max"
+    env["npm_config_progress"] = "false"
+    env["npm_config_audit"] = "false"
+    env["npm_config_fund"] = "false"
+    env["npm_config_update_notifier"] = "false"
+
+    # Mirror speeds up binary and dependency downloads for Vue CLI, node-sass, image-min plugins
+    env["npm_config_registry"] = "https://registry.npmmirror.com"
+    env["NPM_CONFIG_REGISTRY"] = "https://registry.npmmirror.com"
+    env["SASS_BINARY_SITE"] = "https://npmmirror.com/mirrors/node-sass"
+    env["OPTIPNG_BIN_DOWNLOAD_BASE_URL"] = "https://npmmirror.com/mirrors/optipng-bin"
+    env["PNGQUANT_BIN_DOWNLOAD_BASE_URL"] = "https://npmmirror.com/mirrors/pngquant-bin"
+    env["GIFSICLE_BIN_DOWNLOAD_BASE_URL"] = "https://npmmirror.com/mirrors/gifsicle"
+    env["CWEBP_BIN_DOWNLOAD_BASE_URL"] = "https://npmmirror.com/mirrors/cwebp-bin"
+    env["ELECTRON_MIRROR"] = "https://npmmirror.com/mirrors/electron/"
 
     return env
 
@@ -138,6 +192,8 @@ def ensure_dependencies(
                 cached_fp = fp_file.read_text(encoding="utf-8").strip()
                 if cached_fp == current_fp:
                     logger.info("Dependencies are up to date (fingerprint match), skipping install for %s", project)
+                    if on_line:
+                        on_line("⚡ 依赖未发生变动 (指纹匹配)，跳过依赖安装")
                     return True
             except Exception as exc:
                 logger.warning("Failed to read dependency fingerprint for %s: %s", project, exc)

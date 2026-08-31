@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -11,6 +12,56 @@ import subprocess
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+def _create_dir_link(target: Path, source: Path) -> None:
+    """Create a directory junction on Windows or symlink on POSIX from target -> source."""
+    target = Path(target)
+    source = Path(source)
+    if target.exists() or target.is_symlink():
+        return
+    source.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        try:
+            import _winapi
+            _winapi.CreateJunction(str(source), str(target))
+            return
+        except Exception:
+            pass
+        try:
+            subprocess.run(
+                ["cmd.exe", "/c", "mklink", "/J", str(target), str(source)],
+                check=True,
+                capture_output=True,
+            )
+            return
+        except Exception:
+            pass
+    try:
+        os.symlink(str(source), str(target), target_is_directory=True)
+    except Exception:
+        pass
+
+
+def _remove_dir_link(path: Path) -> None:
+    """Safely remove a symlink or junction directory without deleting target contents."""
+    path = Path(path)
+    if not path.exists() and not path.is_symlink():
+        return
+    try:
+        if path.is_symlink():
+            path.unlink()
+            return
+    except Exception:
+        pass
+    if os.name == "nt":
+        try:
+            os.rmdir(str(path))
+            return
+        except Exception:
+            pass
 
 
 def _safe_segment(value: str) -> str:
@@ -34,8 +85,10 @@ class WorkspaceManager:
         self.data_dir = Path(data_dir).resolve()
         self.workspace_root = self.data_dir / "workspaces"
         self.artifact_root = self.data_dir / "artifacts"
+        self.deps_cache_root = self.data_dir / "deps_cache"
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.artifact_root.mkdir(parents=True, exist_ok=True)
+        self.deps_cache_root.mkdir(parents=True, exist_ok=True)
         self.projects = {str(name): Path(path).resolve() for name, path in projects.items()}
         self.git = git_executable or os.environ.get("GIT_EXECUTABLE") or "git"
         self._repo_locks: Dict[Path, asyncio.Lock] = {}
@@ -92,11 +145,84 @@ class WorkspaceManager:
                     sha = await asyncio.to_thread(
                         self._prepare_one, base_repo, branch, worktree
                     )
+                # Link persistent node_modules cache for frontend/JS projects with multi-version fingerprint slot
+                from git.deps import compute_deps_slot_key
+                slot_key = compute_deps_slot_key(worktree)
+                deps_project_root = self.deps_cache_root / _safe_segment(name)
+                deps_slot_dir = deps_project_root / slot_key
+                deps_cache_dir = deps_slot_dir / "node_modules"
+                deps_slot_dir.mkdir(parents=True, exist_ok=True)
+
+                # Update slot access timestamp for LRU cache pruning
+                try:
+                    (deps_slot_dir / ".last_accessed").write_text(str(int(asyncio.get_event_loop().time())), encoding="utf-8")
+                except Exception:
+                    pass
+
+                _create_dir_link(worktree / "node_modules", deps_cache_dir)
+
+                # Synchronize project manifest and loader configs to deps_slot_dir
+                # so that loaders (postcss-loader, babel-loader) resolving realpath in
+                # node_modules can correctly discover the project's configs during compilation
+                for cfg_name in (
+                    "package.json",
+                    "package-lock.json",
+                    "postcss.config.js",
+                    ".postcssrc",
+                    ".postcssrc.js",
+                    ".postcssrc.json",
+                    "babel.config.js",
+                    ".babelrc",
+                    ".browserslistrc",
+                ):
+                    src_file = worktree / cfg_name
+                    if src_file.is_file():
+                        try:
+                            shutil.copy2(src_file, deps_slot_dir / cfg_name)
+                        except Exception:
+                            pass
+                # Fallback postcss.config.js if none exists so postcss-load-config won't fail
+                if not (deps_slot_dir / "postcss.config.js").exists() and not (deps_slot_dir / ".postcssrc").exists() and not (deps_slot_dir / ".postcssrc.js").exists():
+                    try:
+                        (deps_slot_dir / "postcss.config.js").write_text(
+                            "module.exports = { plugins: [require('autoprefixer')()] };\n",
+                            encoding="utf-8",
+                        )
+                    except Exception:
+                        pass
+
                 project["path"] = str(worktree)
                 metadata.append({
                     "name": name, "branch": branch, "sha": sha,
                     "baseRepo": str(base_repo), "worktree": str(worktree),
                 })
+
+            # Auto-mount sibling registered projects as directory junctions/symlinks
+            # so relative micro-frontend references (e.g. ../yarward-nova-ai) resolve seamlessly.
+            # Scan both explicitly passed task_projects and the parent directory of base repos (e.g. D:\build).
+            potential_siblings: Dict[str, Path] = dict(task_projects)
+            for item in metadata:
+                base_repo_dir = Path(item.get("baseRepo", "")).parent
+                if base_repo_dir.is_dir():
+                    try:
+                        for child in base_repo_dir.iterdir():
+                            if child.is_dir() and child.name not in potential_siblings and not child.name.startswith("."):
+                                potential_siblings[child.name] = child
+                    except Exception:
+                        pass
+
+            for sibling_name, sibling_path in potential_siblings.items():
+                sibling_link = task_root / _safe_segment(sibling_name)
+                if not sibling_link.exists() and sibling_path.exists():
+                    # If the sibling is a Git repository, automatically sync/pull the latest code
+                    # before mounting to ensure micro-frontend builds get the freshest commits.
+                    if (sibling_path / ".git").exists() and prepared.get("auto_pull", True):
+                        self._sync_sibling_repo(sibling_path, target_branch=projects[0].get("branch", "") if projects else "")
+                    try:
+                        _create_dir_link(sibling_link, sibling_path)
+                    except Exception:
+                        pass
+
             (task_root / "workspace.json").write_text(
                 json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
             )
@@ -110,6 +236,47 @@ class WorkspaceManager:
             {"name": item["name"], "branch": item["branch"], "sha": item["sha"]}
             for item in metadata
         ]
+
+    def _sync_sibling_repo(self, repo_path: Path, target_branch: str = "") -> None:
+        """Fetch and pull the freshest commits for a sibling micro-frontend repo.
+
+        Tries matching the target branch (e.g. 3.5.0) if present on remote,
+        otherwise updates the repo's current branch to latest remote HEAD.
+        """
+        try:
+            # 1. Fetch remote updates
+            self._run_git("fetch", "--prune", "origin", cwd=repo_path)
+
+            # 2. Determine which branch to checkout/pull
+            branch_to_use = ""
+            if target_branch:
+                # Check if target branch exists on origin
+                try:
+                    self._run_git("rev-parse", "--verify", f"origin/{target_branch}", cwd=repo_path)
+                    branch_to_use = target_branch
+                except Exception:
+                    branch_to_use = ""
+
+            if branch_to_use:
+                # Checkout and align to target branch
+                try:
+                    self._run_git("checkout", branch_to_use, cwd=repo_path)
+                    self._run_git("pull", "--ff-only", "origin", branch_to_use, cwd=repo_path)
+                    logger.info("Aligned sibling repo %s to target branch %s", repo_path.name, branch_to_use)
+                    return
+                except Exception as exc:
+                    logger.warning("Failed to switch sibling repo %s to branch %s: %s", repo_path.name, branch_to_use, exc)
+
+            # Fallback: update current active branch of the sibling repo
+            try:
+                cur_branch = self._run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=repo_path).strip()
+                if cur_branch and cur_branch != "HEAD":
+                    self._run_git("pull", "--ff-only", "origin", cur_branch, cwd=repo_path)
+                    logger.info("Pulled latest commits for sibling repo %s on branch %s", repo_path.name, cur_branch)
+            except Exception as exc:
+                logger.warning("Failed to pull sibling repo %s: %s", repo_path.name, exc)
+        except Exception as exc:
+            logger.warning("Failed to fetch sibling repo %s: %s", repo_path.name, exc)
 
     def _prepare_one(self, base_repo: Path, branch: str, worktree: Path) -> str:
         if not (base_repo / ".git").exists():
@@ -173,6 +340,8 @@ class WorkspaceManager:
         for item in reversed(metadata):
             base_repo = Path(item.get("baseRepo", ""))
             worktree = Path(item.get("worktree", ""))
+            # Safely detach node_modules junction/symlink before deleting worktree
+            _remove_dir_link(worktree / "node_modules")
             if base_repo in self.projects.values() and worktree.exists():
                 try:
                     await asyncio.to_thread(
@@ -182,4 +351,69 @@ class WorkspaceManager:
                 except Exception:
                     pass
         if task_root.exists():
+            # Ensure any dangling directory links inside task_root are unlinked
+            try:
+                for sub in task_root.iterdir():
+                    if sub.is_dir():
+                        _remove_dir_link(sub / "node_modules")
+            except Exception:
+                pass
             await asyncio.to_thread(shutil.rmtree, task_root, True)
+
+    async def prune_deps_cache(
+        self, max_slots_per_project: int = 5, max_age_seconds: int = 15 * 86400
+    ) -> int:
+        """Prune stale dependency cache slots using an LRU policy.
+
+        Keeps at most ``max_slots_per_project`` slots per project, removing slots
+        that haven't been accessed for ``max_age_seconds``.
+
+        Returns the number of pruned slots.
+        """
+        pruned_count = 0
+        if not self.deps_cache_root.is_dir():
+            return pruned_count
+
+        now = int(asyncio.get_event_loop().time())
+
+        for project_dir in self.deps_cache_root.iterdir():
+            if not project_dir.is_dir() or project_dir.name.startswith("."):
+                continue
+
+            slots: List[Tuple[Path, float]] = []
+            for slot_dir in project_dir.iterdir():
+                if not slot_dir.is_dir():
+                    continue
+                # Determine slot access time from .last_accessed or folder mtime
+                access_time = 0.0
+                last_accessed_file = slot_dir / ".last_accessed"
+                if last_accessed_file.is_file():
+                    try:
+                        access_time = float(last_accessed_file.read_text(encoding="utf-8").strip())
+                    except Exception:
+                        access_time = slot_dir.stat().st_mtime
+                else:
+                    access_time = slot_dir.stat().st_mtime
+
+                slots.append((slot_dir, access_time))
+
+            # Sort by last accessed ascending (oldest first)
+            slots.sort(key=lambda item: item[1])
+
+            # Slots exceeding the count quota or age quota get removed
+            to_remove: List[Path] = []
+            while len(slots) - len(to_remove) > max_slots_per_project:
+                to_remove.append(slots[len(to_remove)][0])
+
+            for slot_dir, access_time in slots:
+                if slot_dir not in to_remove and (now - access_time) > max_age_seconds:
+                    to_remove.append(slot_dir)
+
+            for target in to_remove:
+                try:
+                    await asyncio.to_thread(shutil.rmtree, target, True)
+                    pruned_count += 1
+                except Exception:
+                    pass
+
+        return pruned_count

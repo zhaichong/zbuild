@@ -93,6 +93,8 @@ export interface AppConfig {
   enableDeskPet?: boolean
   deskPetStyle?: 'pixel' | 'blob'
   deskPetAutoHideDelay?: number
+  /** 并行构建项目数(1-8),控制一次最多同时打包多少个项目。 */
+  maxConcurrent?: number
   /** Web 模式：当前浏览器是否运行在服务端本机（回环地址），可编辑系统级配置。 */
   systemConfigEditable?: boolean
 }

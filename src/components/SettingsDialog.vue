@@ -96,7 +96,7 @@
             <div v-show="activeTab === 'basic'" class="space-y-5">
               <div class="border-b border-slate-200/60 pb-3">
                 <h3 class="text-sm font-bold text-slate-800">基础路径配置</h3>
-                <p class="text-xs text-slate-400 mt-0.5">配置工作空间根目录以及本地构建产物输出目录</p>
+                <p class="text-xs text-slate-400 mt-0.5">配置工作空间根目录</p>
               </div>
 
               <div class="bg-white border border-slate-200/80 rounded-xl p-5 shadow-2xs space-y-4">
@@ -108,6 +108,7 @@
                       type="text"
                       class="flex-1 form-input min-w-0 text-xs font-mono"
                       placeholder="例如: D:\build"
+                      @change="onAutoSaveConfig"
                     >
                     <button
                       type="button"
@@ -118,48 +119,6 @@
                     </button>
                   </div>
                   <p class="mt-1.5 text-[11px] text-slate-400">系统将自动扫描此目录及其子目录下的所有 Git 仓库项目。</p>
-                </div>
-
-                <div class="pt-3 border-t border-slate-100">
-                  <label class="block text-xs font-semibold text-slate-700 mb-1.5">本地输出目录 (Local Output)</label>
-                  <div class="flex gap-2">
-                    <input
-                      v-model="store.config.localOutputDir"
-                      type="text"
-                      class="flex-1 form-input min-w-0 text-xs font-mono"
-                      placeholder="例如: D:\output"
-                    >
-                    <button
-                      type="button"
-                      class="px-3.5 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shrink-0 shadow-2xs cursor-pointer"
-                      @click="onChooseDir('localOutputDir')"
-                    >
-                      浏览...
-                    </button>
-                  </div>
-                  <p class="mt-1.5 text-[11px] text-slate-400">本地构建产物存档与打包 zip 文件的目标路径。</p>
-                </div>
-
-                <div class="pt-3 border-t border-slate-100">
-                  <label class="block text-xs font-semibold text-slate-700 mb-1.5">提测单目录 / 创建目录位置</label>
-                  <div class="flex gap-2">
-                    <input
-                      v-model="store.config.orderDirPath"
-                      type="text"
-                      class="flex-1 form-input min-w-0 font-mono text-xs"
-                      placeholder="例如: D:\yh\特殊订单\2026"
-                    >
-                    <button
-                      type="button"
-                      class="px-3.5 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shrink-0 shadow-2xs cursor-pointer"
-                      @click="onChooseDir('orderDirPath')"
-                    >
-                      浏览...
-                    </button>
-                  </div>
-                  <p class="mt-1.5 text-[11px] text-slate-400 leading-relaxed">
-                    配置后在主界面输入订单号后可勾选「自动创建提测目录」，系统将自动创建订单同名文件夹并生成 Excel 提测单。
-                  </p>
                 </div>
               </div>
             </div>
@@ -1061,6 +1020,31 @@
                   </div>
                 </fieldset>
               </div>
+
+              <div class="bg-white border border-slate-200/80 rounded-xl p-5 shadow-2xs space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-xs font-semibold text-slate-800">并行构建项目数</div>
+                    <div class="text-[11px] text-slate-400 mt-0.5">一次最多同时打包几个项目（1–8）。构建阶段并行执行，上传阶段自动串行，避免 SVN 并发提交冲突</div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class="w-7 h-7 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors font-bold cursor-pointer disabled:opacity-40"
+                      :disabled="maxConcurrent <= 1"
+                      @click="maxConcurrent--"
+                    >−</button>
+                    <span class="w-9 text-center text-sm font-bold text-slate-800 tabular-nums">{{ maxConcurrent }}</span>
+                    <button
+                      type="button"
+                      class="w-7 h-7 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors font-bold cursor-pointer disabled:opacity-40"
+                      :disabled="maxConcurrent >= 8"
+                      @click="maxConcurrent++"
+                    >+</button>
+                  </div>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">设为 1 即为原串行模式。并发打包更省时，但每个项目打包都较耗 CPU/内存，机器配置一般时建议保持 2。</p>
+              </div>
             </div>
 
             <!-- ==================== Tab 6: 关于软件 (about) ==================== -->
@@ -1312,6 +1296,16 @@ const deskPetStyle = computed({
     if (store.config) {
       store.config.deskPetStyle = val
     }
+  },
+})
+
+const maxConcurrent = computed({
+  get() {
+    return store.config?.maxConcurrent ?? 2
+  },
+  set(val: number) {
+    if (!store.config) return
+    store.config.maxConcurrent = Math.max(1, Math.min(8, Math.floor(Number(val) || 2)))
   },
 })
 
@@ -1633,12 +1627,29 @@ function confirmAddArtifactProject() {
   }
 }
 
+async function onAutoSaveConfig() {
+  if (!store.config) return
+  try {
+    await saveConfig(store.config)
+    store.showToast('配置已自动保存', 'success')
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.warn('Auto save failed:', msg)
+  }
+}
+
 async function onChooseDir(field: 'rootPath' | 'localOutputDir' | 'orderDirPath') {
   if (!store.config) return
   const current = store.config[field] || ''
   const result = await ipc.chooseDirectory(current)
   if (result) {
     store.config[field] = result
+    try {
+      await saveConfig(store.config)
+      store.showToast(`路径已更新并自动保存: ${result}`, 'success')
+    } catch (e: unknown) {
+      console.warn('Auto save directory failed:', e)
+    }
   }
 }
 
@@ -1648,6 +1659,12 @@ async function onChooseExe(tool: 'git' | 'bash' | 'svn' | 'node' | 'npm') {
   const result = await ipc.chooseExecutable(current)
   if (result) {
     store.config.tools[tool] = result
+    try {
+      await saveConfig(store.config)
+      store.showToast(`工具路径已更新并自动保存`, 'success')
+    } catch (e: unknown) {
+      console.warn('Auto save exe failed:', e)
+    }
   }
 }
 

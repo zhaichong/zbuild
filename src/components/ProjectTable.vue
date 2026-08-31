@@ -103,32 +103,16 @@
               </div>
             </td>
 
-            <!-- Target Branch Picker -->
+            <!-- Target Branch Inline Searchable Dropdown -->
             <td class="px-4 py-3.5">
               <div class="flex items-center gap-2">
-                <button
-                  type="button"
-                  class="flex items-center justify-between px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-900 font-mono font-bold hover:border-blue-500 hover:bg-blue-50/20 transition-all text-left flex-1 max-w-[280px] shadow-2xs cursor-pointer group"
-                  :title="'当前分支打包命令: ' + store.getEffectiveBuildCommand(project.projectName, store.projectBranches[project.projectName] || project.currentBranch)"
-                  @click="openBranchPicker(project)"
-                >
-                  <span class="truncate">
-                    {{ store.projectBranches[project.projectName] || project.currentBranch || '选择分支' }}
-                  </span>
-                  <svg
-                    class="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1.5 transition-colors"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
+                <BranchSelect
+                  :model-value="store.projectBranches[project.projectName] || project.currentBranch || ''"
+                  :branches="getProjectBranches(project)"
+                  :project-name="project.projectName"
+                  :custom-commands="store.config?.branchBuildCommands?.[project.projectName] || {}"
+                  @update:model-value="(val) => onBranchSelected(project.projectName, val)"
+                />
 
                 <!-- Custom Command Flash Indicator -->
                 <span
@@ -211,15 +195,6 @@
         暂无项目，请先在右上角配置工作目录
       </p>
     </div>
-
-    <!-- Branch Picker Dialog -->
-    <PickerDialog
-      ref="pickerRef"
-      title="选择分支"
-      :items="pickerItems"
-      :current-value="pickerCurrentValue"
-      @choose="onBranchChoose"
-    />
   </div>
 </template>
 
@@ -228,21 +203,39 @@ import { computed, ref } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { refreshBranches } from '@/composables/useProjects'
 import { useAffected } from '@/composables/useAffected'
-import PickerDialog from '@/components/PickerDialog.vue'
+import BranchSelect from '@/components/BranchSelect.vue'
 import type { ProjectInfo, StepStatusType } from '@/types'
 
 const store = useAppStore()
 const { loading, detectAffectedStaged, selectAffected } = useAffected()
 
-const pickerRef = ref<InstanceType<typeof PickerDialog> | null>(null)
-const pickerItems = ref<string[]>([])
-const pickerCurrentValue = ref('')
-const pickerProjectName = ref('')
 const refreshingProject = ref('')
 
 const allSelected = computed(() => {
   return store.projects.length > 0 && store.selectedProjects.size === store.projects.length
 })
+
+function getProjectBranches(project: ProjectInfo): string[] {
+  if (project.branches && project.branches.length > 0) {
+    return project.branches
+  }
+  return project.currentBranch ? [project.currentBranch] : []
+}
+
+function onBranchSelected(projectName: string, branch: string) {
+  if (!projectName || !branch) return
+  store.projectBranches[projectName] = branch
+
+  // Persist selected branch to localStorage for subsequent sessions
+  try {
+    const raw = localStorage.getItem('zbuild_selected_branches')
+    const map = raw ? JSON.parse(raw) : {}
+    map[projectName] = branch
+    localStorage.setItem('zbuild_selected_branches', JSON.stringify(map))
+  } catch {
+    // ignore
+  }
+}
 
 function statusLabel(status: StepStatusType): string {
   const labels: Record<StepStatusType, string> = {
@@ -281,35 +274,6 @@ function hasBranchCustomCommand(projectName: string, branch: string): boolean {
     }
   }
   return false
-}
-
-async function openBranchPicker(project: ProjectInfo) {
-  pickerProjectName.value = project.projectName
-  let branches = project.branches || []
-  if (branches.length === 0) {
-    try {
-      refreshingProject.value = project.projectName
-      await refreshBranches(project.projectName)
-      const updated = store.projects.find((p) => p.projectName === project.projectName)
-      if (updated) branches = updated.branches || []
-    } catch (e) {
-      console.error('Failed to refresh branches for ' + project.projectName + ':', e)
-    } finally {
-      refreshingProject.value = ''
-    }
-  }
-  pickerItems.value = branches
-  const currentVal = store.projectBranches[project.projectName] || project.currentBranch || ''
-  pickerCurrentValue.value = currentVal
-  if (pickerRef.value) {
-    pickerRef.value.show(currentVal)
-  }
-}
-
-function onBranchChoose(branch: string) {
-  if (pickerProjectName.value) {
-    store.projectBranches[pickerProjectName.value] = branch
-  }
 }
 
 async function onRefreshAll() {

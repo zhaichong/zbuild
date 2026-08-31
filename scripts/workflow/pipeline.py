@@ -8,8 +8,9 @@ that supports retry, per-project execution, and execution recording.
 import logging
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from core.models import (
     StepStatus,
@@ -238,13 +239,12 @@ class Pipeline:
             started_at=time.time(),
         )
 
+        from git.build_cmd import resolve_branch_build_command
+
         build_command = (
             project_config.get("build_command")
             or project_config.get("buildCommand")
-            or self.config.get("build_commands", {}).get(name)
-            or self.config.get("build_command")
-            or self.config.get("buildCommand")
-            or "deploy.sh"
+            or resolve_branch_build_command(self.config, name, branch)
         )
 
         ctx = StepContext(
@@ -337,6 +337,61 @@ class Pipeline:
         return proj_record
 
     # ------------------------------------------------------------------
+    # Parallel project execution
+    # ------------------------------------------------------------------
+
+    def _max_workers(self, project_count: int) -> int:
+        """Compute how many projects may run concurrently.
+
+        Uses ``max_concurrent`` from the config (default 2), clamped to
+        [1, 8] and bounded by the number of enabled projects.
+        """
+        try:
+            workers = max(1, min(8, int(self.config.get("max_concurrent", 2) or 2)))
+        except (TypeError, ValueError):
+            workers = 2
+        return max(1, min(workers, project_count))
+
+    def _run_projects(self, enabled_projects: List[Dict[str, Any]]) -> List[ProjectRunRecord]:
+        """Run all enabled projects, optionally in parallel.
+
+        Projects run concurrently up to ``max_concurrent`` workers (default 2).
+        The upload phase is serialized by ``UPLOAD_LOCK`` inside the step
+        functions, so builds overlap while SVN commits / SFTP deploys queue up.
+        Records are returned in submission order; an unexpected exception in
+        one project is recorded as a failed record instead of aborting the run.
+        """
+        workers = self._max_workers(len(enabled_projects))
+        if workers <= 1:
+            return [self.run_one(proj_config) for proj_config in enabled_projects]
+
+        emit_log(f"并行构建已开启: {len(enabled_projects)} 个项目，并发数 {workers} ...")
+        records_by_index: Dict[int, ProjectRunRecord] = {}
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="zbuild-project") as executor:
+            futures = {
+                executor.submit(self.run_one, proj_config): index
+                for index, proj_config in enumerate(enabled_projects)
+            }
+            for future in as_completed(futures):
+                index = futures[future]
+                try:
+                    records_by_index[index] = future.result()
+                except Exception as exc:  # defensive: run_one normally converts step errors to failed records
+                    proj_config = enabled_projects[index]
+                    name = proj_config.get("name", "?")
+                    logger.exception("Unexpected error while running project %s", name)
+                    emit_log(f"项目 {name} 执行异常: {exc}", level="error", project=name)
+                    records_by_index[index] = ProjectRunRecord(
+                        project_name=name,
+                        branch=proj_config.get("branch", ""),
+                        success=False,
+                        started_at=time.time(),
+                        finished_at=time.time(),
+                        error_message=f"并行执行异常: {exc}",
+                    )
+        return [records_by_index[index] for index in range(len(enabled_projects))]
+
+    # ------------------------------------------------------------------
     # Full pipeline execution
     # ------------------------------------------------------------------
 
@@ -391,11 +446,9 @@ class Pipeline:
         enabled_projects = [p for p in projects if p.get("enabled", True)]
 
         all_ok = True
-        for proj_config in enabled_projects:
-            proj_record = self.run_one(proj_config)
-            record.projects.append(proj_record)
-            if not proj_record.success:
-                all_ok = False
+        if enabled_projects:
+            record.projects = self._run_projects(enabled_projects)
+            all_ok = all(pr.success for pr in record.projects)
 
         record.finished_at = time.time()
         record.success = all_ok

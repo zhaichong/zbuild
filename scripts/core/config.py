@@ -99,6 +99,8 @@ def default_config() -> Dict[str, Any]:
         "auto_install_deps": True,
         "skip_svn_commit": False,
         "node_required_version": "14.21.3",
+        "use_build_cache": True,
+        "max_concurrent": 2,
         "build_command": DEFAULT_BUILD_COMMAND,
         "build_commands": dict(DEFAULT_BUILD_COMMANDS),
         "branch_build_commands": {},
@@ -130,6 +132,12 @@ def normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
     # Ensure mode is valid
     if config["mode"] not in ("svn", "server", "local"):
         config["mode"] = "svn"
+
+    # Normalize max_concurrent (parallel project workers, 1..8)
+    try:
+        config["max_concurrent"] = max(1, min(8, int(config.get("max_concurrent", 2) or 2)))
+    except (TypeError, ValueError):
+        config["max_concurrent"] = 2
 
     # Normalize svn_locations list
     raw_svn_locs = config.get("svn_locations")

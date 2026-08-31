@@ -10,7 +10,7 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import aiohttp
 from aiohttp import web
@@ -43,7 +43,7 @@ PROFILE_COOKIE = "zbuild_profile"
 PROFILE_CONFIG_KEYS = (
     "mode", "server", "selected_projects", "project_branches", "hospital_name", "order_no",
     "order_notes", "create_order_dir", "svn_credentials", "svn_upload_directory",
-    "artifact_paths", "project_artifact_paths",
+    "artifact_paths", "project_artifact_paths", "local_output", "order_dir_path",
 )
 
 
@@ -107,7 +107,7 @@ def _config_view(system_public: Dict[str, Any], profile_public: Dict[str, Any]) 
     # configuration. Artifact-directory defaults may inherit until this browser
     # saves its own choice.
     for key in PROFILE_CONFIG_KEYS:
-        if key in {"artifact_paths", "project_artifact_paths", "svn_upload_directory"}:
+        if key in {"artifact_paths", "project_artifact_paths", "svn_upload_directory", "local_output", "order_dir_path"}:
             continue
         value.pop(key, None)
     value.update(profile_public.get("config") or {})
@@ -564,7 +564,81 @@ async def handle_order_deploy_open_file(request: web.Request) -> web.Response:
 async def handle_order_dir_create(request: web.Request) -> web.Response:
     payload = await request.json()
     res = await _execute_command("create-order-dir", payload)
+    if isinstance(res, dict) and res.get("success"):
+        dir_path = res.get("dir", "")
+        excel_path = res.get("excel", "")
+        docx_path = res.get("docx", "")
+        if dir_path:
+            res["zipDownloadUrl"] = f"/api/order-dir/download-zip?path={quote(dir_path)}"
+        if excel_path:
+            res["excelDownloadUrl"] = f"/api/order-dir/download-file?path={quote(excel_path)}"
+        if docx_path:
+            res["docxDownloadUrl"] = f"/api/order-dir/download-file?path={quote(docx_path)}"
     return web.json_response(res)
+
+
+async def handle_order_dir_download_file(request: web.Request) -> web.StreamResponse:
+    file_path = request.query.get("path", "").strip()
+    if not file_path:
+        return web.Response(status=400, text="缺少文件路径参数")
+    
+    resolved = Path(unquote(file_path)).resolve()
+    if not resolved.exists() or not resolved.is_file():
+        return web.Response(status=404, text=f"目标文件不存在: {resolved.name}")
+
+    filename = resolved.name
+    encoded_filename = quote(filename)
+    
+    # 智能识别 MIME 类型，确保浏览器将其作为附件下载而不是文本解析
+    ext = resolved.suffix.lower()
+    if ext == ".xlsx":
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif ext == ".docx":
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif ext == ".zip":
+        content_type = "application/zip"
+    else:
+        content_type = "application/octet-stream"
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{encoded_filename}"; filename*=UTF-8\'\'{encoded_filename}',
+        "Content-Type": content_type,
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+    return web.FileResponse(resolved, headers=headers)
+
+
+async def handle_order_dir_download_zip(request: web.Request) -> web.StreamResponse:
+    dir_path = request.query.get("path", "").strip()
+    if not dir_path:
+        return web.Response(status=400, text="缺少目录路径参数")
+
+    resolved_dir = Path(unquote(dir_path)).resolve()
+    if not resolved_dir.exists() or not resolved_dir.is_dir():
+        return web.Response(status=404, text=f"目标目录不存在: {resolved_dir.name}")
+
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for file in resolved_dir.rglob("*"):
+            if file.is_file():
+                arcname = file.relative_to(resolved_dir)
+                zip_file.write(file, arcname)
+
+    buffer.seek(0)
+    zip_bytes = buffer.getvalue()
+    zip_name = f"{resolved_dir.name}.zip"
+    encoded_name = quote(zip_name)
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{encoded_name}"; filename*=UTF-8\'\'{encoded_name}',
+        "Content-Type": "application/zip",
+        "Content-Length": str(len(zip_bytes)),
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+    return web.Response(body=zip_bytes, headers=headers)
 
 
 async def handle_templates_list(request: web.Request) -> web.Response:
@@ -791,6 +865,8 @@ def create_app(
     app.router.add_post("/api/order-deploy/list", handle_order_deploy_list)
     app.router.add_post("/api/order-deploy/open-file", handle_order_deploy_open_file)
     app.router.add_post("/api/order-dir/create", handle_order_dir_create)
+    app.router.add_get("/api/order-dir/download-file", handle_order_dir_download_file)
+    app.router.add_get("/api/order-dir/download-zip", handle_order_dir_download_zip)
     app.router.add_get("/api/templates", handle_templates_list)
     app.router.add_get("/api/templates/{id}", handle_template_get)
     app.router.add_post("/api/templates", handle_template_save)

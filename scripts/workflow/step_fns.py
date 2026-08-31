@@ -7,6 +7,7 @@ Each function takes a ``StepContext`` and returns a ``StepResult``.
 import logging
 import importlib.util
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -15,6 +16,11 @@ from workflow.steps import StepContext, StepResult
 from core.errors import ToolError, BuildError, GitError, DependencyError, UploadError
 
 logger = logging.getLogger(__name__)
+
+# When multiple projects run in parallel, serialize the upload phase so
+# concurrent SVN commits / SFTP deployments cannot race on the same
+# repository or server target.  Builds stay parallel; only uploads queue up.
+UPLOAD_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -117,11 +123,23 @@ def step_pull_latest(ctx: StepContext) -> StepResult:
     if not ctx.config.get("auto_pull", True):
         return StepResult(success=True, message="跳过拉取（已禁用）")
 
-    from git.sync import pull_latest, latest_commit_info
+    from git.sync import pull_latest, latest_commit_info, sync_micro_frontend_siblings
+    from runner.protocol import emit_log
 
     ok, message = pull_latest(ctx.project_path)
     if not ok:
         return StepResult(success=False, message=f"拉取失败: {message}")
+
+    # Micro-frontend auto-synchronization: sync sibling micro repos (e.g. yarward-micro-menu, yarward-nova-ai)
+    try:
+        sync_micro_frontend_siblings(
+            ctx.project_path,
+            target_branch=ctx.branch,
+            on_line=lambda line: emit_log(line, project=ctx.project_name),
+        )
+    except Exception as exc:
+        logger.warning("Micro-frontend sibling sync skipped for %s: %s", ctx.project_name, exc)
+
     # Log latest commit info for traceability
     try:
         info = latest_commit_info(ctx.project_path)
@@ -144,10 +162,18 @@ def step_install_deps(ctx: StepContext) -> StepResult:
 
     from git.deps import ensure_dependencies
     from runner.protocol import emit
+    from git.build_cmd import resolve_branch_build_command
+
+    build_cmd = (
+        ctx.extra.get("build_command")
+        or resolve_branch_build_command(ctx.config, ctx.project_name, ctx.branch)
+    )
 
     try:
         ensure_dependencies(
             ctx.project_path,
+            build_command=build_cmd,
+            branch=ctx.branch,
             on_line=lambda line: emit("log", {"level": "info", "message": line, "project": ctx.project_name}),
         )
         return StepResult(success=True, message="依赖安装完成")
@@ -178,7 +204,7 @@ def step_build(ctx: StepContext) -> StepResult:
         or ctx.config.get("artifact_paths")
         or ["dist"]
     )
-    use_cache = ctx.config.get("use_build_cache", False)
+    use_cache = ctx.config.get("use_build_cache", True)
 
     input_hash = ""
     cache = None
@@ -190,10 +216,10 @@ def step_build(ctx: StepContext) -> StepResult:
         cached_artifact = cache.get_cached_artifact(input_hash)
         if cached_artifact:
             ctx.artifact_path = cached_artifact
-            emit_log(f"缓存命中，跳过构建: {cached_artifact.name}", project=ctx.project_name)
+            emit_log(f"⚡ 构建产物缓存命中 (Commit/配置未变)，0秒跳过Webpack编译: {cached_artifact.name}", project=ctx.project_name)
             return StepResult(
                 success=True,
-                message=f"缓存命中，跳过构建: {cached_artifact.name}",
+                message=f"⚡ 缓存命中，跳过编译: {cached_artifact.name}",
                 context_updates={"artifact_path": str(cached_artifact)},
             )
 
@@ -209,8 +235,11 @@ def step_build(ctx: StepContext) -> StepResult:
             on_line=lambda line: emit("log", {"level": "info", "message": line, "project": ctx.project_name}),
         )
         if artifact:
-            if use_cache and cache and input_hash:
-                cache.store_artifact(input_hash, artifact)
+            if use_cache and cache and input_hash and artifact.is_file():
+                try:
+                    cache.store_artifact(input_hash, artifact)
+                except Exception as exc:
+                    logger.debug("Failed to store artifact in cache: %s", exc)
             ctx.artifact_path = artifact
             emit_log(f"构建完成，生成产物: {artifact.name}", project=ctx.project_name)
             return StepResult(
@@ -272,7 +301,8 @@ def step_upload_svn(ctx: StepContext) -> StepResult:
     uploader = SvnUploader()
     try:
         log_fn = lambda msg: emit_log(msg, project=ctx.project_name)
-        result = uploader.upload(ctx.artifact_path, ctx.config, log_fn, ctx.project_name)
+        with UPLOAD_LOCK:
+            result = uploader.upload(ctx.artifact_path, ctx.config, log_fn, ctx.project_name)
         if result.success:
             ctx.target_url = result.target_url
             return StepResult(
@@ -300,7 +330,8 @@ def step_upload_server(ctx: StepContext) -> StepResult:
     uploader = ServerUploader()
     try:
         log_fn = lambda msg: emit_log(msg, project=ctx.project_name)
-        result = uploader.upload(ctx.artifact_path, ctx.config, log_fn, ctx.project_name)
+        with UPLOAD_LOCK:
+            result = uploader.upload(ctx.artifact_path, ctx.config, log_fn, ctx.project_name)
         if result.success:
             ctx.target_url = result.target_url
             return StepResult(

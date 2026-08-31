@@ -116,6 +116,8 @@ def build_project(
     bash_exe: str = "bash",
     build_command: str = "deploy.sh",
     target_branch: str = "",
+    parent_command: str = "",
+    parent_branch: str = "",
     artifact_paths: Union[List[str], Optional[str]] = None,
     on_line: Optional[callable] = None,
 ) -> Tuple[subprocess.CompletedProcess, Optional[Path]]:
@@ -164,12 +166,35 @@ def build_project(
     pre_snapshot = artifact_snapshot(project, candidate_paths=artifact_paths)
     build_start = time.time()
 
+    # Auto-synchronize sibling micro-frontend projects before build execution
+    # when running a micro-frontend deploy script (e.g. deploy-micro.sh) or on branch 3.5.0
+    from git.sync import sync_micro_frontend_siblings
+    try:
+        sync_micro_frontend_siblings(
+            project,
+            target_branch=target_branch,
+            on_line=on_line,
+        )
+    except Exception as exc:
+        logger.warning("Sibling micro-frontend auto-sync before build skipped for %s: %s", project, exc)
+
     logger.info("Running build command '%s' in %s", " ".join(run_cmd), project)
 
-    # Use the same Node 14 shims and isolated npm prefix as dependency install.
-    # deploy.sh runs under Bash and otherwise resolves Volta/system Node first.
+    from git.build_cmd import resolve_project_node_version
     from git.deps import _node_env
-    env = _node_env()
+
+    node_ver = resolve_project_node_version(
+        project.name,
+        build_command=build_command,
+        branch=target_branch,
+        parent_command=parent_command,
+        parent_branch=parent_branch,
+    )
+    env = _node_env(version=node_ver)
+    if target_branch:
+        env["BRANCH_NAME"] = str(target_branch)
+        env["BUILD_BRANCH"] = str(target_branch)
+        env["GIT_BRANCH"] = str(target_branch)
 
     try:
         result = run_process_stream(

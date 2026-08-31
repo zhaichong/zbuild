@@ -221,8 +221,9 @@ class TestMultiProjectPipeline(unittest.TestCase):
                 result = pipeline.run()
 
             self.assertTrue(result.success)
-            self.assertEqual(uploaded, ["project-a", "project-b"])
-            self.assertEqual([item.project_name for item in result.projects], uploaded)
+            self.assertEqual(sorted(uploaded), ["project-a", "project-b"])
+            # Records keep submission order even when projects run in parallel
+            self.assertEqual([item.project_name for item in result.projects], ["project-a", "project-b"])
             self.assertTrue(all(item.artifact and item.artifact.size_bytes > 0 for item in result.projects))
 
     def test_failed_build_is_not_uploaded_and_next_project_continues(self):
@@ -262,6 +263,132 @@ class TestMultiProjectPipeline(unittest.TestCase):
             self.assertFalse(result.success)
             self.assertEqual(uploaded, ["healthy"])
             self.assertEqual([item.success for item in result.projects], [False, True])
+
+
+class TestParallelPipeline(unittest.TestCase):
+    """Parallel multi-project execution (max_concurrent)."""
+
+    def setUp(self):
+        self._temp_dirs = []
+
+    def tearDown(self):
+        for temp_dir in self._temp_dirs:
+            temp_dir.cleanup()
+
+    def _pipeline(self, projects, max_concurrent: int):
+        temp_dir = tempfile.TemporaryDirectory()
+        self._temp_dirs.append(temp_dir)
+        root = Path(temp_dir.name)
+        for name in projects:
+            (root / name).mkdir()
+        config = {
+            "mode": "local",
+            "max_concurrent": max_concurrent,
+            "projects": [
+                {"name": name, "path": str(root / name), "enabled": True}
+                for name in projects
+            ],
+        }
+        pipeline = Pipeline.__new__(Pipeline)
+        pipeline.payload = {}
+        pipeline.mode = "local"
+        pipeline.config = config
+        pipeline.history_store = HistoryStore(root / "history")
+        return pipeline
+
+    def test_projects_overlap_when_max_concurrent_gt_1(self):
+        events = []  # (name, 'start'|'end', timestamp)
+        import time as _time
+
+        def build(ctx):
+            events.append((ctx.project_name, "start", _time.time()))
+            _time.sleep(0.4)
+            events.append((ctx.project_name, "end", _time.time()))
+            artifact = ctx.project_path / "dist" / f"{ctx.project_name}.tar.gz"
+            artifact.parent.mkdir()
+            artifact.write_bytes(ctx.project_name.encode())
+            ctx.artifact_path = artifact
+            return StepResult(True, "built", {"artifact_path": str(artifact)})
+
+        def upload(ctx):
+            return StepResult(True, "uploaded")
+
+        pipeline = self._pipeline(["project-a", "project-b"], max_concurrent=2)
+        steps = [StepDefinition("build", build), StepDefinition("upload", upload)]
+
+        with patch("workflow.pipeline.get_steps", return_value=steps):
+            result = pipeline.run()
+
+        self.assertTrue(result.success)
+        start_a = next(t for n, k, t in events if n == "project-a" and k == "start")
+        end_a = next(t for n, k, t in events if n == "project-a" and k == "end")
+        start_b = next(t for n, k, t in events if n == "project-b" and k == "start")
+        # Both builds must have overlapped (b started before a finished)
+        self.assertLess(start_b, end_a, "projects should run concurrently with max_concurrent=2")
+        self.assertLess(start_a, end_a)
+
+    def test_serial_when_max_concurrent_is_1(self):
+        events = []
+        import time as _time
+
+        def build(ctx):
+            events.append((ctx.project_name, "start", _time.time()))
+            _time.sleep(0.1)
+            events.append((ctx.project_name, "end", _time.time()))
+            artifact = ctx.project_path / "dist" / f"{ctx.project_name}.tar.gz"
+            artifact.parent.mkdir()
+            artifact.write_bytes(ctx.project_name.encode())
+            ctx.artifact_path = artifact
+            return StepResult(True, "built", {"artifact_path": str(artifact)})
+
+        def upload(ctx):
+            return StepResult(True, "uploaded")
+
+        pipeline = self._pipeline(["project-a", "project-b"], max_concurrent=1)
+        steps = [StepDefinition("build", build), StepDefinition("upload", upload)]
+
+        with patch("workflow.pipeline.get_steps", return_value=steps):
+            result = pipeline.run()
+
+        self.assertTrue(result.success)
+        start_a = next(t for n, k, t in events if n == "project-a" and k == "start")
+        end_a = next(t for n, k, t in events if n == "project-a" and k == "end")
+        start_b = next(t for n, k, t in events if n == "project-b" and k == "start")
+        self.assertGreaterEqual(start_b, end_a, "max_concurrent=1 must run projects serially")
+
+    def test_exception_in_one_project_does_not_hide_others(self):
+        uploaded = []
+
+        def build(ctx):
+            artifact = ctx.project_path / "dist" / f"{ctx.project_name}.tar.gz"
+            artifact.parent.mkdir()
+            artifact.write_bytes(ctx.project_name.encode())
+            ctx.artifact_path = artifact
+            return StepResult(True, "built", {"artifact_path": str(artifact)})
+
+        def upload(ctx):
+            uploaded.append(ctx.project_name)
+            return StepResult(True, "uploaded")
+
+        pipeline = self._pipeline(["broken", "healthy"], max_concurrent=2)
+        steps = [StepDefinition("build", build), StepDefinition("upload", upload)]
+        original_run_one = Pipeline.run_one
+
+        def exploding_run_one(self, proj_config):
+            if proj_config["name"] == "broken":
+                raise RuntimeError("boom")
+            return original_run_one(self, proj_config)
+
+        with patch("workflow.pipeline.get_steps", return_value=steps), patch.object(
+            Pipeline, "run_one", exploding_run_one
+        ):
+            result = pipeline.run()
+
+        self.assertFalse(result.success)
+        self.assertEqual([p.project_name for p in result.projects], ["broken", "healthy"])
+        self.assertEqual([p.success for p in result.projects], [False, True])
+        self.assertIn("boom", result.projects[0].error_message)
+        self.assertEqual(uploaded, ["healthy"])
 
 
 if __name__ == "__main__":

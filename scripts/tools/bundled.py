@@ -149,8 +149,80 @@ def find_node14_dir() -> Optional[Path]:
     return None
 
 
-def bundled_node() -> Optional[str]:
-    """Path to the Node.js 14 executable, or None."""
+def find_node22_dir() -> Optional[Path]:
+    """Find the directory containing a Node.js 22 installation.
+
+    Checks:
+    1. Volta Node 22 image directory (e.g. AppData/Local/Volta/tools/image/node/22.*)
+    2. Bundled node22 in runtime_root() / 'node22' or runtime_root() / 'node-22'
+    3. NVM Node 22 directory (e.g. AppData/Roaming/nvm/v22.* or NVM_HOME/v22.*)
+    4. System Node if version 22
+    """
+    # 1. Volta image directory
+    if os.name == "nt":
+        volta_node_dir = Path.home() / "AppData" / "Local" / "Volta" / "tools" / "image" / "node"
+    else:
+        volta_node_dir = Path.home() / ".volta" / "tools" / "image" / "node"
+    if volta_node_dir.is_dir():
+        v22_dirs = [d for d in volta_node_dir.iterdir() if d.is_dir() and d.name.startswith("22.")]
+        if v22_dirs:
+            v22_dirs.sort(key=lambda d: [int(p) if p.isdigit() else 0 for p in d.name.split(".")], reverse=True)
+            return v22_dirs[0]
+
+    # 2. Bundled runtime node22
+    root = runtime_root()
+    for name in ("node22", "node-22"):
+        cand = root / name
+        if (cand / "node.exe").is_file() or (cand / "bin" / "node").is_file() or (cand / "node").is_file():
+            return cand
+
+    # 3. NVM directory
+    if os.name == "nt":
+        nvm_dir = Path(os.environ.get("NVM_HOME", Path.home() / "AppData" / "Roaming" / "nvm"))
+    else:
+        nvm_dir = Path.home() / ".nvm" / "versions" / "node"
+    if nvm_dir.is_dir():
+        v22_dirs = [d for d in nvm_dir.iterdir() if d.is_dir() and (d.name.startswith("v22.") or d.name.startswith("22."))]
+        if v22_dirs:
+            v22_dirs.sort(key=lambda d: [int(p) if p.isdigit() else 0 for p in d.name.lstrip("v").split(".")], reverse=True)
+            return v22_dirs[0]
+
+    # 4. Global Node.js directory if version 22
+    sys_node = shutil.which("node")
+    if sys_node:
+        try:
+            r = run_process([sys_node, "--version"])
+            if r.returncode == 0 and r.stdout.strip().lstrip("v").startswith("22."):
+                return Path(sys_node).parent
+        except Exception:
+            pass
+
+    return None
+
+
+def bundled_node(version: str = "14") -> Optional[str]:
+    """Path to the Node.js executable for the requested version ('14' or '22'), or None."""
+    if str(version).startswith("22"):
+        node22_dir = find_node22_dir()
+        if node22_dir:
+            if os.name == "nt":
+                for c in [node22_dir / "node.exe", node22_dir / "bin" / "node.exe"]:
+                    if c.is_file():
+                        return str(c)
+            else:
+                for c in [node22_dir / "bin" / "node", node22_dir / "node"]:
+                    if c.is_file():
+                        return str(c)
+        sys_node = shutil.which("node")
+        if sys_node:
+            try:
+                r = run_process([sys_node, "--version"])
+                if r.returncode == 0 and r.stdout.strip().lstrip("v").startswith("22."):
+                    return sys_node
+            except Exception:
+                pass
+        return None
+
     node14_dir = find_node14_dir()
     if node14_dir:
         if os.name == "nt":
@@ -249,13 +321,25 @@ def _stock_npx_path() -> Optional[str]:
     return None
 
 
-def bundled_npm() -> Optional[str]:
-    """Path to a safe npm entrypoint for Node 14 (shim preferred), or None.
+def bundled_npm(version: str = "14") -> Optional[str]:
+    """Path to a safe npm entrypoint for the requested Node version ('14' or '22')."""
+    if str(version).startswith("22"):
+        node22_dir = find_node22_dir()
+        if node22_dir:
+            if os.name == "nt":
+                for c in [node22_dir / "npm.cmd", node22_dir / "npm", node22_dir / "bin" / "npm.cmd"]:
+                    if c.is_file():
+                        return str(c)
+            else:
+                for c in [node22_dir / "bin" / "npm", node22_dir / "npm"]:
+                    if c.is_file():
+                        return str(c)
+        sys_npm = shutil.which("npm")
+        if sys_npm:
+            return sys_npm
+        return "npm"
 
-    Returns the generated shim path so callers never hit stock ``npm.cmd``'s
-    global-prefix redirect onto a foreign (newer) npm.
-    """
-    if not bundled_node() and not _stock_npm_path() and not shutil.which("volta"):
+    if not bundled_node("14") and not _stock_npm_path() and not shutil.which("volta"):
         return None
     shim = node_shim_dir()
     if os.name == "nt":
@@ -265,9 +349,25 @@ def bundled_npm() -> Optional[str]:
     return str(cand) if cand.is_file() else _stock_npm_path()
 
 
-def bundled_npx() -> Optional[str]:
-    """Path to a safe npx entrypoint for Node 14 (shim preferred), or None."""
-    if not bundled_node() and not _stock_npx_path() and not shutil.which("volta"):
+def bundled_npx(version: str = "14") -> Optional[str]:
+    """Path to a safe npx entrypoint for the requested Node version ('14' or '22')."""
+    if str(version).startswith("22"):
+        node22_dir = find_node22_dir()
+        if node22_dir:
+            if os.name == "nt":
+                for c in [node22_dir / "npx.cmd", node22_dir / "npx", node22_dir / "bin" / "npx.cmd"]:
+                    if c.is_file():
+                        return str(c)
+            else:
+                for c in [node22_dir / "bin" / "npx", node22_dir / "npx"]:
+                    if c.is_file():
+                        return str(c)
+        sys_npx = shutil.which("npx")
+        if sys_npx:
+            return sys_npx
+        return "npx"
+
+    if not bundled_node("14") and not _stock_npx_path() and not shutil.which("volta"):
         return None
     shim = node_shim_dir()
     if os.name == "nt":

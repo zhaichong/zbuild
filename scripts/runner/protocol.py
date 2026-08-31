@@ -8,11 +8,16 @@ provides helpers for both sides of that protocol.
 
 import json
 import sys
+import threading
 from typing import Any, Dict, Optional
 
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+# Serialize stdout writes so parallel project threads cannot interleave
+# JSON event lines on the same stream.
+_EMIT_LOCK = threading.Lock()
 
 
 def read_stdin_json() -> Dict[str, Any]:
@@ -45,8 +50,9 @@ def emit(event: str, data: Optional[Dict[str, Any]] = None) -> None:
     if data:
         msg.update(data)
     try:
-        sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
+        with _EMIT_LOCK:
+            sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
     except (OSError, BrokenPipeError):
         pass
 

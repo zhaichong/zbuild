@@ -557,6 +557,14 @@ function savePluginConfig() {
 }
 
 function loadPluginConfig() {
+  // Sync SVN credentials from global store if available
+  if (store.config?.form?.svnUsername) {
+    svnUsername.value = store.config.form.svnUsername
+  }
+  if (store.config?.form?.svnPassword) {
+    svnPassword.value = store.config.form.svnPassword
+  }
+
   const raw = localStorage.getItem('zbuild_order_deploy_config')
   if (raw) {
     try {
@@ -565,8 +573,8 @@ function loadPluginConfig() {
       currentSvnUrl.value = parsed.currentSvnUrl || moduleSvnLocations.value[0]?.url || 'https://10.1.1.120/svn/智慧病房特殊订单'
       hospitalName.value = parsed.hospitalName || ''
       orderNo.value = parsed.orderNo || ''
-      svnUsername.value = parsed.svnUsername || ''
-      svnPassword.value = parsed.svnPassword || ''
+      svnUsername.value = store.config?.form?.svnUsername || parsed.svnUsername || ''
+      svnPassword.value = store.config?.form?.svnPassword || parsed.svnPassword || ''
       serverAddress.value = parsed.serverAddress || '192.168.31.202'
       serverUsername.value = parsed.serverUsername || 'yahua'
       serverPassword.value = parsed.serverPassword || ''

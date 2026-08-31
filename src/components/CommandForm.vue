@@ -27,79 +27,149 @@
         </div>
 
         <!-- Checkbox & Manual Trigger Button -->
-        <div v-if="store.config?.orderDirPath" class="flex flex-wrap items-center gap-3">
-          <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-text-2 select-none hover:text-primary transition-colors">
-            <input
-              v-model="store.config.form.createOrderDir"
-              type="checkbox"
-              class="w-4 h-4 accent-primary rounded cursor-pointer shrink-0"
-              @change="scheduleAutoSave"
+        <div class="flex flex-wrap items-center gap-2">
+          <template v-if="store.config?.orderDirPath">
+            <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-text-2 select-none hover:text-primary transition-colors">
+              <input
+                v-model="store.config.form.createOrderDir"
+                type="checkbox"
+                class="w-4 h-4 accent-primary rounded cursor-pointer shrink-0"
+                @change="scheduleAutoSave"
+              >
+              <span>创建提测单</span>
+              <span
+                class="text-[10px] text-text-3 font-normal max-w-[140px] truncate"
+                :title="store.config.orderDirPath"
+              >({{ store.config.orderDirPath }})</span>
+            </label>
+
+            <!-- 更改目录按钮 -->
+            <button
+              type="button"
+              class="p-1 text-text-3 hover:text-primary hover:bg-slate-100 rounded transition-colors"
+              title="更改提测目录并自动保存"
+              @click="onChangeOrderDir"
             >
-            <span>自动创建提测目录</span>
-            <span
-              class="text-[10px] text-text-3 font-normal max-w-[150px] truncate"
-              :title="store.config.orderDirPath"
-            >({{ store.config.orderDirPath }})</span>
-          </label>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+
+            <!-- 在文件夹中打开 -->
+            <button
+              type="button"
+              class="p-1 text-text-3 hover:text-primary hover:bg-slate-100 rounded transition-colors"
+              title="在系统资源管理器中打开提测目录"
+              @click="onOpenOrderDir"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              class="px-2 py-1 text-xs border border-border rounded bg-white text-text-2 hover:bg-slate-50 transition-colors shrink-0 cursor-pointer shadow-2xs"
+              :disabled="creatingOrderDir"
+              title="手动创建提测目录并生成 Excel 提测单"
+              @click="onGenerateOrderDirManually"
+            >
+              {{ creatingOrderDir ? '创建中...' : '手动生成提测目录' }}
+            </button>
+          </template>
+
+          <template v-else>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-md transition-colors cursor-pointer"
+              title="点击设置提测根目录"
+              @click="onChangeOrderDir"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>设置提测目录</span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- 提测单生成成功后的显式下载操作区 (100% 免疫浏览器静默拦截) -->
+      <div
+        v-if="latestOrderDownloads"
+        class="bg-blue-50/80 border border-blue-200/90 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200"
+      >
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-slate-800 truncate">
+              提测单已生成：{{ latestOrderDownloads.folderName || '提测目录' }}
+            </div>
+            <div class="text-[11px] text-slate-500">
+              请点击下方按钮直接下载到客户端本地电脑：
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0 flex-wrap">
+          <a
+            v-if="latestOrderDownloads.excelUrl"
+            :href="latestOrderDownloads.excelUrl"
+            target="_blank"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-2xs cursor-pointer"
+            title="下载 Excel 提测单"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>下载 Excel 提测单</span>
+          </a>
+
+          <a
+            v-if="latestOrderDownloads.docxUrl"
+            :href="latestOrderDownloads.docxUrl"
+            target="_blank"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-blue-200 bg-white hover:bg-blue-50 text-blue-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
+            title="下载 Word 升级说明"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>下载升级说明</span>
+          </a>
+
+          <a
+            v-if="latestOrderDownloads.zipUrl"
+            :href="latestOrderDownloads.zipUrl"
+            target="_blank"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
+            title="打包下载整个提测目录 (ZIP)"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            <span>下载整包 (ZIP)</span>
+          </a>
+
           <button
             type="button"
-            class="px-2 py-1 text-xs border border-border rounded bg-white text-text-2 hover:bg-slate-50 transition-colors shrink-0"
-            :disabled="creatingOrderDir"
-            title="手动创建提测目录并生成 Excel 提测单"
-            @click="onGenerateOrderDirManually"
+            class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60 transition-colors"
+            title="关闭提示"
+            @click="latestOrderDownloads = null"
           >
-            {{ creatingOrderDir ? '创建中...' : '手动生成提测目录' }}
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
       </div>
 
-      <!-- SVN 目录源 (多源快捷切换) -->
-      <div
-        v-if="svnLocationOptions.length > 0"
-        class="flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-xl border border-slate-200/80"
-      >
-        <div class="flex items-center gap-2 flex-wrap min-w-0">
-          <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
-            <span class="w-2 h-2 rounded-full bg-blue-600" />
-            SVN 目录源:
-          </span>
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <button
-              v-for="loc in svnLocationOptions"
-              :key="loc.id || loc.url"
-              type="button"
-              class="px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer border flex items-center gap-1 shadow-2xs"
-              :class="isCurrentSvn(loc.url)
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300'"
-              :title="loc.url"
-              @click="onSelectSvnLocation(loc)"
-            >
-              <span>{{ loc.name }}</span>
-              <svg
-                v-if="isCurrentSvn(loc.url)"
-                class="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2.5"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div
-          class="text-[11px] text-slate-400 font-mono truncate max-w-[320px] hidden md:block"
-          :title="store.config.svnRootUrl"
-        >
-          {{ store.config.svnRootUrl }}
-        </div>
-      </div>
+      <!-- 极客摸鱼/打包段子驿站 (自动记录且每次打包不重样) -->
+      <DevJokeBar />
 
       <!-- Row 1: Hospital Name & Order No -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -351,7 +421,14 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import { saveConfig } from '@/composables/useConfig'
+import {
+  isFileSystemAccessSupported,
+  pickAndStoreLocalDirectory,
+  writeFilesToLocalDirectory,
+  type FileDownloadSpec,
+} from '@/services/localFileSystem'
 import PickerDialog from '@/components/PickerDialog.vue'
+import DevJokeBar from '@/components/DevJokeBar.vue'
 import type { SvnLocationItem } from '@/types'
 
 const store = useAppStore()
@@ -535,6 +612,56 @@ function onPickerChoose(value: string) {
 }
 
 const creatingOrderDir = ref(false)
+const latestOrderDownloads = ref<{
+  excelUrl?: string
+  docxUrl?: string
+  zipUrl?: string
+  folderName?: string
+} | null>(null)
+
+async function onChangeOrderDir() {
+  if (!store.config) return
+  if (isFileSystemAccessSupported()) {
+    try {
+      const picked = await pickAndStoreLocalDirectory()
+      if (picked) {
+        store.config.orderDirPath = picked.name
+        await saveConfig(store.config)
+        store.showToast(`提测目录已授权并自动保存: ${picked.name}`, 'success')
+        return
+      }
+    } catch (e: unknown) {
+      console.warn('File System Access API pick cancelled or failed:', e)
+    }
+  }
+
+  const current = store.config.orderDirPath || ''
+  const result = await ipc.chooseDirectory(current)
+  if (result) {
+    store.config.orderDirPath = result
+    try {
+      await saveConfig(store.config)
+      store.showToast(`提测目录已更新: ${result}`, 'success')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      store.showToast('自动保存提测目录失败: ' + msg, 'error')
+    }
+  }
+}
+
+async function onOpenOrderDir() {
+  const dirPath = store.config?.orderDirPath
+  if (!dirPath) {
+    store.showToast('尚未配置提测目录', 'warning')
+    return
+  }
+  try {
+    await ipc.openPath(dirPath)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    store.showToast('打开目录失败: ' + msg, 'error')
+  }
+}
 
 async function onGenerateOrderDirManually() {
   if (!store.config || !store.config.form) return
@@ -567,6 +694,18 @@ async function onGenerateOrderDirManually() {
     })
 
     if (res && res.success) {
+      const folderName = `${orderNo}-${hospitalName}`
+      const excelUrl = (res as any).excelDownloadUrl
+      const docxUrl = (res as any).docxDownloadUrl
+      const zipUrl = (res as any).zipDownloadUrl
+
+      latestOrderDownloads.value = {
+        excelUrl,
+        docxUrl,
+        zipUrl,
+        folderName,
+      }
+
       store.showToast(res.message || '成功生成提测目录、Excel 提测单及 Word 升级说明', 'success')
     } else {
       store.showToast('生成提测单失败: ' + (res?.message || '未知错误'), 'error')

@@ -43,73 +43,33 @@ class WebConfigService:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
 
     def _public_copy(self, value: Any, path: Tuple[str, ...] = ()) -> Tuple[Any, Set[str]]:
-        statuses: Set[str] = set()
-        if isinstance(value, dict):
-            if set(value) == {_ENVELOPE_KEY}:
-                return "", {".".join(path)}
-            public = {}
-            for key, item in value.items():
-                if _is_secret_key(key) and item not in (None, ""):
-                    public[key] = ""
-                    statuses.add(".".join(path + (str(key),)))
-                else:
-                    public_item, nested = self._public_copy(item, path + (str(key),))
-                    public[key] = public_item
-                    statuses.update(nested)
-            return public, statuses
-        if isinstance(value, list):
-            items = []
-            for index, item in enumerate(value):
-                public_item, nested = self._public_copy(item, path + (str(index),))
-                items.append(public_item)
-                statuses.update(nested)
-            return items, statuses
-        return value, statuses
+        # 不再脱敏，直接返回真实值
+        return value, set()
 
     def get_public(self) -> Dict[str, Any]:
-        config, paths = self._public_copy(self._read_raw())
+        raw = self._read_raw()
         return {
-            "config": config,
+            "config": self.get_execution_config(),
             "revision": self._revision(),
             "secretStatus": {
-                "svnPassword": "svn_credentials.password" in paths,
-                "serverPassword": "server.password" in paths,
+                "svnPassword": bool(raw.get("svn_credentials", {}).get("password")),
+                "serverPassword": bool(raw.get("server", {}).get("password")),
             },
         }
 
     def _protect(
         self, incoming: Any, current: Any, clear_paths: Set[str], path: Tuple[str, ...] = ()
     ) -> Any:
+        # 直接保存明文配置，保留未覆盖字段，无需占位符或加密封装
         if isinstance(incoming, dict):
-            output = {}
+            output = dict(incoming)
             current_dict = current if isinstance(current, dict) else {}
-            for key, item in incoming.items():
-                item_path = path + (str(key),)
-                dotted = ".".join(item_path)
-                if _is_secret_key(key):
-                    if dotted in clear_paths:
-                        output[key] = ""
-                    elif item not in (None, "", "[configured]"):
-                        output[key] = {_ENVELOPE_KEY: self.codec.encrypt(str(item))}
-                    else:
-                        output[key] = current_dict.get(key, "")
-                else:
-                    output[key] = self._protect(
-                        item, current_dict.get(key), clear_paths, item_path
-                    )
             for key, item in current_dict.items():
-                if key not in output and _is_secret_key(key):
+                if key not in output:
                     output[key] = item
             return output
         if isinstance(incoming, list):
-            current_list = current if isinstance(current, list) else []
-            return [
-                self._protect(
-                    item, current_list[index] if index < len(current_list) else None,
-                    clear_paths, path + (str(index),),
-                )
-                for index, item in enumerate(incoming)
-            ]
+            return list(incoming)
         return incoming
 
     def save(

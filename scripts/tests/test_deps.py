@@ -52,7 +52,30 @@ class TestDependencyManagement(unittest.TestCase):
         """Test default package manager install commands."""
         with patch("git.deps.package_manager_executable", return_value="npm"):
             cmd = dependency_install_command(self.project_dir)
-            self.assertEqual(cmd, ["npm", "install"])
+            self.assertEqual(cmd, ["npm", "install", "--prefer-offline", "--no-audit", "--no-fund", "--progress=false", "--no-optional", "--ignore-engines"])
+
+    def test_extract_missing_packages_from_output(self):
+        from git.deps import extract_missing_packages_from_output
+        output = """
+        npm ERR! code ETARGET
+        npm ERR! notarget No matching version found for @vue/compiler-core@3.5.42.
+        npm ERR! notarget In most cases you or one of your dependencies are requesting
+        """
+        missing = extract_missing_packages_from_output(output)
+        self.assertEqual(missing, [("@vue/compiler-core", "3.5.42")])
+
+    @patch("git.deps.attempt_npmmirror_auto_sync", return_value=True)
+    @patch("git.deps.run_process_stream")
+    def test_ensure_dependencies_retries_on_etarget_auto_sync(self, mock_run, mock_sync):
+        """When install fails with ETARGET and auto-sync succeeds, it should retry."""
+        fail_res = MagicMock(returncode=1, stdout="No matching version found for @vue/compiler-core@3.5.42.")
+        succ_res = MagicMock(returncode=0, stdout="ok")
+        mock_run.side_effect = [fail_res, succ_res]
+
+        result = ensure_dependencies(self.project_dir)
+        self.assertTrue(result)
+        self.assertEqual(mock_run.call_count, 2)
+        mock_sync.assert_called_once()
 
     @patch("git.deps.run_process_stream")
     def test_ensure_dependencies_skips_when_fingerprint_matches(self, mock_run):

@@ -131,13 +131,28 @@ function getWebSocket(): Promise<WebSocket> {
 
 let configRevision = '0'
 
-function getSubmitter(): string {
-  const key = 'zbuild.submitter'
-  const current = window.localStorage.getItem(key)?.trim()
-  if (current) return current
-  const entered = window.prompt('请输入您的姓名，用于任务记录：', '')?.trim() || '内网用户'
-  window.localStorage.setItem(key, entered)
-  return entered
+function getSubmitter(payload?: Record<string, unknown>): string {
+  // 1. 优先从 payload 中的 config / svnUsername 读取
+  const payloadConfig = (payload?.config as Record<string, unknown> | undefined)?.form as Record<string, unknown> | undefined
+  const payloadSvnUser = payloadConfig?.svnUsername || payload?.svnUsername
+  if (typeof payloadSvnUser === 'string' && payloadSvnUser.trim()) {
+    return payloadSvnUser.trim()
+  }
+
+  // 2. 从本地缓存的 SVN 用户名读取
+  const savedSvnUser = window.localStorage.getItem('zbuild_svn_username')?.trim()
+  if (savedSvnUser) {
+    return savedSvnUser
+  }
+
+  // 3. 从已记录的任务提交人读取
+  const savedSubmitter = window.localStorage.getItem('zbuild.submitter')?.trim()
+  if (savedSubmitter) {
+    return savedSubmitter
+  }
+
+  // 4. 默认兜底使用内网用户，不再弹出 window.prompt 输入框
+  return '内网用户'
 }
 
 function createRequestId(): string {
@@ -155,7 +170,7 @@ async function createTask(
   const task = await request<TaskSummary>('/api/tasks', {
     method: 'POST',
     body: JSON.stringify({
-      requestId: createRequestId(), type, submitter: getSubmitter(), payload,
+      requestId: createRequestId(), type, submitter: getSubmitter(payload), payload,
     }),
   })
   currentTaskId = task.taskId
@@ -180,13 +195,38 @@ export const webApi = {
       systemConfigEditable: boolean
     }>('/api/config')
     configRevision = response.revision
-    if (response.secretStatus.svnPassword) response.config.form.svnPassword = '[configured]'
-    if (response.secretStatus.serverPassword) response.config.form.serverPassword = '[configured]'
     response.config.systemConfigEditable = response.systemConfigEditable
+
+    // 优先加载客户端本地独立缓存的目录，防止服务端默认值冲刷
+    try {
+      const cachedLocalOutput = localStorage.getItem('zbuild_local_output_dir')
+      if (cachedLocalOutput !== null) {
+        response.config.localOutputDir = cachedLocalOutput
+      }
+      const cachedOrderDir = localStorage.getItem('zbuild_order_dir_path')
+      if (cachedOrderDir !== null) {
+        response.config.orderDirPath = cachedOrderDir
+      }
+    } catch (e) {
+      console.warn('Failed to apply localStorage cached paths in webApi:', e)
+    }
+
     return response.config
   },
 
   saveConfig: async (config: AppConfig): Promise<AppConfig> => {
+    // 客户端优先存入本地独立缓存
+    try {
+      if (config.localOutputDir !== undefined) {
+        localStorage.setItem('zbuild_local_output_dir', config.localOutputDir || '')
+      }
+      if (config.orderDirPath !== undefined) {
+        localStorage.setItem('zbuild_order_dir_path', config.orderDirPath || '')
+      }
+    } catch (e) {
+      console.warn('Failed to save to localStorage in webApi:', e)
+    }
+
     const response = await request<{
       config: AppConfig
       revision: string
@@ -199,9 +239,22 @@ export const webApi = {
       },
     )
     configRevision = response.revision
-    if (response.secretStatus.svnPassword) response.config.form.svnPassword = '[configured]'
-    if (response.secretStatus.serverPassword) response.config.form.serverPassword = '[configured]'
     response.config.systemConfigEditable = response.systemConfigEditable
+
+    // 确保服务端接口响应绝不会把客户端本地缓存的目录覆盖还原
+    try {
+      const cachedLocalOutput = localStorage.getItem('zbuild_local_output_dir')
+      if (cachedLocalOutput !== null) {
+        response.config.localOutputDir = cachedLocalOutput
+      }
+      const cachedOrderDir = localStorage.getItem('zbuild_order_dir_path')
+      if (cachedOrderDir !== null) {
+        response.config.orderDirPath = cachedOrderDir
+      }
+    } catch (e) {
+      console.warn('Failed to re-apply localStorage cached paths in webApi:', e)
+    }
+
     return response.config
   },
 

@@ -546,6 +546,12 @@
         </div>
       </div>
     </teleport>
+
+    <!-- SVN Account Setup Modal -->
+    <SvnAccountModal
+      ref="svnModalRef"
+      @success="onSvnModalSuccess"
+    />
   </div>
 </template>
 
@@ -553,6 +559,7 @@
 import { ref, computed } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
+import SvnAccountModal from '@/components/SvnAccountModal.vue'
 
 export interface PortalApp {
   id: string
@@ -621,17 +628,17 @@ const defaultApps: PortalApp[] = [
     status: 'active',
     statusLabel: '核心内置',
   },
-  {
-    id: 'order-build-upload',
-    name: '订单打包上传 SVN',
-    description: '选择医院和订单，为每个本地项目确认对应分支，按队列完成打包并上传至 SVN。',
-    icon: '📦',
-    iconType: 'build',
-    category: '核心构建',
-    tags: ['项目分支配对', '构建队列', 'SVN 上传'],
-    status: 'active',
-    statusLabel: '核心内置',
-  },
+  // {
+  //   id: 'order-build-upload',
+  //   name: '订单打包上传 SVN',
+  //   description: '选择医院和订单，为每个本地项目确认对应分支，按队列完成打包并上传至 SVN。',
+  //   icon: '📦',
+  //   iconType: 'build',
+  //   category: '核心构建',
+  //   tags: ['项目分支配对', '构建队列', 'SVN 上传'],
+  //   status: 'active',
+  //   statusLabel: '核心内置',
+  // },
   {
     id: 'mock-query',
     name: '终端数据链路提取控制台',
@@ -741,7 +748,34 @@ function clearFilters() {
   searchQuery.value = ''
 }
 
+const svnModalRef = ref<InstanceType<typeof SvnAccountModal> | null>(null)
+
+function hasSvnAccount(): boolean {
+  const form = store.config?.form
+  const username = form?.svnUsername?.trim() || ''
+  const password = form?.svnPassword?.trim() || ''
+  return Boolean(username && password)
+}
+
+function onSvnModalSuccess(appId: string) {
+  if (appId) {
+    emit('launch-app', appId)
+  }
+}
+
 async function onLaunchApp(app: PortalApp) {
+  // SVN 核心应用校验 SVN 账户
+  const svnRequiredApps = ['zbuild', 'order-deploy', 'order-build-upload']
+  if (svnRequiredApps.includes(app.id)) {
+    if (!hasSvnAccount()) {
+      svnModalRef.value?.show({
+        targetAppId: app.id,
+        targetAppName: app.name,
+      })
+      return
+    }
+  }
+
   if (app.id === 'zbuild') {
     emit('launch-app', 'zbuild')
   } else if (app.id === 'order-deploy') {

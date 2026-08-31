@@ -41,16 +41,27 @@ class BuildCache:
     # Hash computation
     # ------------------------------------------------------------------
 
-    def compute_input_hash(self, project_path: Union[Path, str], build_command: str = "deploy.sh") -> str:
+    def compute_input_hash(
+        self,
+        project_path: Union[Path, str],
+        build_command: str = "deploy.sh",
+        target_branch: str = "",
+    ) -> str:
         """Compute a content hash from the project's build inputs.
 
         Combines commit SHA, build command/script, package.json, and lock file
         into a single SHA-256 hash.
+
+        For composite / micro-frontend builds (e.g. yarward-web-frontend with
+        deploy-micro.sh or branch 3.5.0), also incorporates the Commit SHA and
+        manifests of sibling micro-frontend projects (yarward-micro-menu,
+        yarward-nova-ai) so that sub-project commits immediately invalidate
+        the parent build cache.
         """
         project = Path(project_path)
         h = hashlib.sha256()
 
-        # Commit SHA
+        # Commit SHA of main project
         sha = get_commit_sha(project)
         h.update(f"commit:{sha}\n".encode())
 
@@ -85,6 +96,23 @@ class BuildCache:
                 h.update(lock_file.read_bytes())
                 h.update(b"\n")
                 break
+
+        # ------------------------------------------------------------------
+        # Micro-frontend composite dependency hashing
+        # ------------------------------------------------------------------
+        from git.build_cmd import MICRO_APPS
+        parent_dir = project.resolve().parent
+        if parent_dir.is_dir():
+            for sibling_name in sorted(MICRO_APPS):
+                sibling_dir = parent_dir / sibling_name
+                if sibling_dir.is_dir() and (sibling_dir / ".git").exists():
+                    sub_sha = get_commit_sha(sibling_dir)
+                    h.update(f"sibling:{sibling_name}:commit:{sub_sha}\n".encode())
+                    sub_pkg = sibling_dir / "package.json"
+                    if sub_pkg.is_file():
+                        h.update(f"sibling:{sibling_name}:pkg:{sub_pkg.stat().st_size}\n".encode())
+                        h.update(sub_pkg.read_bytes())
+                        h.update(b"\n")
 
         return h.hexdigest()
 

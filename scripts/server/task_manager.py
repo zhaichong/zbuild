@@ -181,13 +181,23 @@ class TaskManager:
             )
         finally:
             self._active.discard(task_id)
+            # Instantly clean up ephemeral task workspace to prevent disk bloat
+            try:
+                await self.workspace.cleanup(task_id)
+            except Exception:
+                logger.warning("Failed to instant-cleanup workspace for task %s", task_id, exc_info=True)
 
     async def _publish(self, event: Dict[str, Any]) -> None:
         for queue in list(self._subscribers.get(event["taskId"], set())):
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
-                self._subscribers[event["taskId"]].discard(queue)
+                # Drop oldest item to make space for the latest step/status events
+                try:
+                    queue.get_nowait()
+                    queue.put_nowait(event)
+                except Exception:
+                    self._subscribers[event["taskId"]].discard(queue)
 
     def subscribe(self, task_id: str) -> asyncio.Queue:
         if not self.store.get_task(task_id, detail=False):
@@ -224,6 +234,12 @@ class TaskManager:
                             logger.warning("Could not clean artifact %s", raw_path, exc_info=True)
                 for task_id in candidates["expiredLogTaskIds"]:
                     (self.store.log_dir / f"{task_id}.ndjson").unlink(missing_ok=True)
+                # Prune stale dependency cache slots
+                if hasattr(self.workspace, "prune_deps_cache"):
+                    try:
+                        await self.workspace.prune_deps_cache()
+                    except Exception:
+                        logger.warning("Deps cache pruning failed", exc_info=True)
             except Exception:
                 logger.warning("Task retention maintenance failed", exc_info=True)
             await asyncio.sleep(24 * 60 * 60)

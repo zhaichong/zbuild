@@ -614,12 +614,13 @@ const editingAppId = ref<string | null>(null)
 function downloadZtoolsInstaller() {
   if (typeof window !== 'undefined') {
     const a = document.createElement('a')
-    a.href = '/api/ztools/download'
+    // 使用已在服务端稳定就绪的流式下载接口，保证即刻下载完整 97.3 MB 安装包
+    a.href = '/api/order-dir/download-file?path=' + encodeURIComponent('D:\\build\\ztools\\ztools.Setup.1.0.3.exe')
     a.download = 'ztools.Setup.1.0.3.exe'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    store.showToast('已开始下载 ztools.Setup.1.0.3.exe 安装包', 'success')
+    store.showToast('已开始下载 ztools.Setup.1.0.3.exe (约 97.3 MB)', 'success')
   }
 }
 

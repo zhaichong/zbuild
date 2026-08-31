@@ -696,18 +696,6 @@ const defaultApps: PortalApp[] = [
     status: 'active',
     statusLabel: '核心内置',
   },
-  {
-    id: 'ztools',
-    name: 'ztools 超级调试工具箱',
-    description: '内置网络嗅探、串口通信、TCP/HTTP 抓包、数据联调与日志分析等超强全能调试套件，是智慧病房现场与本地联调的核心利器！',
-    icon: '🛠️',
-    category: '调试造数',
-    tags: ['超级调试神器', '串口/TCP抓包', '接口联调', 'v1.0.3'],
-    status: 'active',
-    statusLabel: '推荐下载',
-    launchType: 'cmd',
-    pathOrUrl: 'D:\\build\\ztools\\ztools.Setup.1.0.3.exe',
-  },
 ]
 
 // Load custom apps from localStorage

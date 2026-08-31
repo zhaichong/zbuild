@@ -372,9 +372,19 @@ export const webApi = {
     }),
 
   openPath: (filePath: string): Promise<{ success: boolean; error?: string }> => {
-    // In Web mode, copy path or download/preview
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(filePath).catch(() => {})
+    // In Web mode, automatically trigger browser download
+    if (typeof window !== 'undefined' && filePath) {
+      try {
+        const downloadUrl = `/api/order-dir/download-file?path=${encodeURIComponent(filePath)}`
+        const a = document.createElement('a')
+        a.href = downloadUrl
+        a.target = '_blank'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      } catch (e) {
+        console.warn('Failed to trigger auto download:', e)
+      }
     }
     return Promise.resolve({ success: true })
   },

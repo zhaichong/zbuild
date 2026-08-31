@@ -641,6 +641,40 @@ async def handle_order_dir_download_zip(request: web.Request) -> web.StreamRespo
     return web.Response(body=zip_bytes, headers=headers)
 
 
+async def handle_ztools_info(request: web.Request) -> web.Response:
+    ztools_dir = Path(r"D:\build\ztools")
+    installer = ztools_dir / "ztools.Setup.1.0.3.exe"
+    exists = installer.exists()
+    size = installer.stat().st_size if exists else 0
+    return web.json_response({
+        "success": True,
+        "exists": exists,
+        "name": "ztools",
+        "version": "1.0.3",
+        "fileName": installer.name,
+        "filePath": str(installer),
+        "dirPath": str(ztools_dir),
+        "size": size,
+        "downloadUrl": "/api/ztools/download",
+    })
+
+
+async def handle_ztools_download(request: web.Request) -> web.StreamResponse:
+    installer = Path(r"D:\build\ztools\ztools.Setup.1.0.3.exe")
+    if not installer.exists():
+        return web.Response(status=404, text="ztools 安装程序不存在")
+
+    filename = installer.name
+    encoded_name = quote(filename)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{encoded_name}"; filename*=UTF-8\'\'{encoded_name}',
+        "Content-Type": "application/octet-stream",
+        "Content-Length": str(installer.stat().st_size),
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+    return web.FileResponse(installer, headers=headers)
+
+
 async def handle_templates_list(request: web.Request) -> web.Response:
     res = await _execute_command("template-list", {})
     return web.json_response(res.get("templates", res.get("data", res)))
@@ -876,6 +910,8 @@ def create_app(
     app.router.add_post("/api/mock-query/request", handle_mock_query_request)
     app.router.add_post("/api/db/test-connection", handle_db_test_connection)
     app.router.add_post("/api/db/execute-sql", handle_db_execute_sql)
+    app.router.add_get("/api/ztools/info", handle_ztools_info)
+    app.router.add_get("/api/ztools/download", handle_ztools_download)
 
     register_task_routes(app)
 

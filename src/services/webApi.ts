@@ -455,6 +455,20 @@ export const webApi = {
     }
   },
 
+  getZtoolsInfo: (): Promise<{ success: boolean; exists: boolean; name: string; version: string; fileName: string; filePath: string; dirPath: string; size: number; downloadUrl: string }> =>
+    request('/api/ztools/info'),
+
+  downloadZtools: (): void => {
+    if (typeof window !== 'undefined') {
+      const a = document.createElement('a')
+      a.href = '/api/ztools/download'
+      a.download = 'ztools.Setup.1.0.3.exe'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
+  },
+
   listTasks: (): Promise<TaskSummary[]> => request<TaskSummary[]>('/api/tasks'),
 
   getTask: (taskId: string): Promise<TaskDetail> =>

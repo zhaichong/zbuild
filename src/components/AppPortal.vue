@@ -50,6 +50,77 @@
         </div>
       </div>
 
+      <!-- Spotlight Recommendation Banner: ztools Debugging Suite -->
+      <div
+        v-if="showZtoolsBanner"
+        class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 border border-amber-200/90 p-4 sm:p-5 shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)] transition-all duration-300"
+      >
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <!-- Banner Left: Icon & Description -->
+          <div class="flex items-start gap-3.5 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl shadow-md shadow-orange-500/25 shrink-0">
+              🛠️
+            </div>
+            <div class="space-y-1 min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <span>推荐神器：ztools 超级调试工具箱</span>
+                  <span class="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold shadow-xs">很强 · 必备</span>
+                </h3>
+                <span class="text-[11px] font-mono text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md font-semibold border border-amber-200/60">
+                  v1.0.3
+                </span>
+                <span class="text-[11px] text-slate-400 font-mono">
+                  (D:\build\ztools)
+                </span>
+              </div>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                包含强大的多功能终端嗅探、串口通讯、TCP抓包、接口联调、日志分析等超强全能调试套件，是智慧病房现场与本地联调的核心利器！
+              </p>
+            </div>
+          </div>
+
+          <!-- Banner Right: Download & Action Buttons -->
+          <div class="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-xs shadow-sm hover:shadow-md hover:shadow-orange-500/25 transition-all duration-200 cursor-pointer active:scale-98"
+              title="点击下载 ztools.Setup.1.0.3.exe 安装包"
+              @click="downloadZtoolsInstaller"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>立即下载安装包</span>
+            </button>
+
+            <button
+              v-if="ipc.isElectron()"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-amber-300/80 text-amber-900 hover:bg-amber-50 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+              title="在系统文件管理器中打开 D:\build\ztools"
+              @click="openZtoolsFolder"
+            >
+              <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+              </svg>
+              <span>打开目录</span>
+            </button>
+
+            <button
+              type="button"
+              class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-colors cursor-pointer"
+              title="关闭提示"
+              @click="dismissZtoolsBanner"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Filter Controls & Search Toolbar -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <!-- Category Segmented Buttons -->
@@ -586,6 +657,34 @@ const appVersion = computed(() => (ipc.version ? `v${ipc.version}` : 'v1.0.4'))
 const showAddAppModal = ref(false)
 const isEditing = ref(false)
 const editingAppId = ref<string | null>(null)
+const showZtoolsBanner = ref(localStorage.getItem('zbuild_ztools_banner_dismissed') !== 'true')
+
+function downloadZtoolsInstaller() {
+  if (typeof window !== 'undefined') {
+    const a = document.createElement('a')
+    a.href = '/api/ztools/download'
+    a.download = 'ztools.Setup.1.0.3.exe'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    store.showToast('已开始下载 ztools.Setup.1.0.3.exe 安装包', 'success')
+  }
+}
+
+async function openZtoolsFolder() {
+  const res = await ipc.openPath('D:\\build\\ztools')
+  if (res.success) {
+    store.showToast('已在文件管理器中打开 D:\\build\\ztools', 'success')
+  } else {
+    store.showToast('打开文件夹失败: ' + (res.error || '未知错误'), 'error')
+  }
+}
+
+function dismissZtoolsBanner() {
+  showZtoolsBanner.value = false
+  localStorage.setItem('zbuild_ztools_banner_dismissed', 'true')
+  store.showToast('提示已隐藏，可在下方「调试造数」列表中随时下载', 'info')
+}
 const selectedCategory = ref<string>('all')
 const searchQuery = ref<string>('')
 
@@ -649,6 +748,18 @@ const defaultApps: PortalApp[] = [
     tags: ['MySQL 直连', '跨域代理', '自动组装', '6 大数据模版'],
     status: 'active',
     statusLabel: '核心内置',
+  },
+  {
+    id: 'ztools',
+    name: 'ztools 超级调试工具箱',
+    description: '内置网络嗅探、串口通信、TCP/HTTP 抓包、数据联调与日志分析等超强全能调试套件，是智慧病房现场与本地联调的核心利器！',
+    icon: '🛠️',
+    category: '调试造数',
+    tags: ['超级调试神器', '串口/TCP抓包', '接口联调', 'v1.0.3'],
+    status: 'active',
+    statusLabel: '推荐下载',
+    launchType: 'cmd',
+    pathOrUrl: 'D:\\build\\ztools\\ztools.Setup.1.0.3.exe',
   },
 ]
 

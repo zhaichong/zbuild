@@ -2,54 +2,6 @@
   <div class="flex-1 min-h-0 overflow-y-auto bg-[#f8fafc] p-5 sm:p-7 text-slate-800 font-sans">
     <div class="max-w-6xl mx-auto space-y-6">
       
-      <!-- Top Hero Header Card (Delicate & Clean) -->
-      <div class="relative overflow-hidden rounded-2xl bg-white border border-slate-200/70 p-5 sm:p-6 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.04)]">
-        <!-- Subtle Ambient Background Accents -->
-        <div class="absolute -top-20 -right-20 w-64 h-64 bg-gradient-to-br from-blue-50 via-indigo-50/50 to-transparent rounded-full blur-3xl pointer-events-none" />
-        <div class="absolute -bottom-20 -left-20 w-64 h-64 bg-gradient-to-tr from-emerald-50 via-teal-50/50 to-transparent rounded-full blur-3xl pointer-events-none" />
-
-        <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <!-- Left Info Section -->
-          <div class="space-y-1.5">
-            <div class="flex flex-wrap items-center gap-2.5">
-              <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs shadow-blue-500/20">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-              </div>
-              <h1 class="text-lg font-bold text-slate-900 tracking-tight">
-                开发者中心与应用工作台
-              </h1>
-              <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-mono font-medium">
-                {{ appVersion }}
-              </span>
-              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-medium">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                内部服务正常
-              </span>
-            </div>
-            
-            <p class="text-xs text-slate-500 leading-relaxed max-w-2xl">
-              集中调度智慧病房项目自动化构建打包、SVN/远程部署发布、终端链路抓取以及数据库造数控制台。
-            </p>
-          </div>
-
-          <!-- Right Action Button -->
-          <div class="shrink-0 flex items-center">
-            <button
-              type="button"
-              class="group inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-xs hover:shadow-md hover:shadow-blue-500/20 transition-all duration-200 cursor-pointer active:scale-98"
-              @click="openAddAppModal"
-            >
-              <svg class="w-3.5 h-3.5 text-white transition-transform group-hover:rotate-90 duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
-              </svg>
-              <span>添加自定义扩展</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- Spotlight Recommendation Banner: ztools Debugging Suite -->
       <div
         v-if="showZtoolsBanner"
@@ -145,28 +97,41 @@
           </button>
         </div>
 
-        <!-- Search Input -->
-        <div class="relative w-full sm:w-64">
-          <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none flex items-center">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+        <!-- Right: Search Input + Add App Button -->
+        <div class="flex items-center gap-2.5">
+          <div class="relative w-full sm:w-64">
+            <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none flex items-center">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              id="portal-app-search"
+              v-model="searchQuery"
+              type="text"
+              name="portal-app-search"
+              placeholder="搜索套件、功能或标签..."
+              class="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-all shadow-2xs"
+            >
+            <button
+              v-if="searchQuery"
+              type="button"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-100 cursor-pointer"
+              @click="searchQuery = ''"
+            >
+              ✕
+            </button>
           </div>
-          <input
-            id="portal-app-search"
-            v-model="searchQuery"
-            type="text"
-            name="portal-app-search"
-            placeholder="搜索套件、功能或标签..."
-            class="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-all shadow-2xs"
-          >
+
           <button
-            v-if="searchQuery"
             type="button"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-100 cursor-pointer"
-            @click="searchQuery = ''"
+            class="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-xs hover:shadow-md hover:shadow-blue-500/20 transition-all duration-200 cursor-pointer shrink-0 active:scale-98"
+            @click="openAddAppModal"
           >
-            ✕
+            <svg class="w-3.5 h-3.5 text-white transition-transform group-hover:rotate-90 duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>添加扩展</span>
           </button>
         </div>
       </div>

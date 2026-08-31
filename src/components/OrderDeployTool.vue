@@ -490,8 +490,8 @@ const pickerItems = ref<string[]>([])
 const pickerCurrentValue = ref('')
 
 const showConfirmModal = ref(false)
-const deploySuccessCount = ref(0)
-const deployFailCount = ref(0)
+const deploySuccessCount = computed(() => store.successCount)
+const deployFailCount = computed(() => store.failureCount)
 
 const svnLocationOptions = computed(() => {
   if (moduleSvnLocations.value.length > 0) return moduleSvnLocations.value
@@ -866,9 +866,25 @@ async function executeDeploy() {
   showConfirmModal.value = false
   activeSideTab.value = 'pipeline'
   store.clearLogs()
+  store.resetRunState()
   deploySuccessCount.value = 0
   deployFailCount.value = 0
   store.running = true
+
+  // Pre-populate projectStates so the pipeline immediately displays selected packages and their stages
+  selectedPackagesList.value.forEach((pkg) => {
+    store.setProjectState(pkg.name, {
+      projectName: pkg.name,
+      status: 'pending',
+      statusClass: 'text-slate-500',
+      currentStep: '等待处理',
+      steps: [
+        { step: '下载 SVN 包', status: 'pending' },
+        { step: '上传到服务器', status: 'pending' },
+        { step: '解压覆盖部署', status: 'pending' },
+      ],
+    })
+  })
 
   savePluginConfig()
 

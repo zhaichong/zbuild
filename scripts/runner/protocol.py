@@ -36,19 +36,24 @@ def read_stdin_json() -> Dict[str, Any]:
         return {}
 
 
-def emit(event: str, data: Optional[Dict[str, Any]] = None) -> None:
+def emit(event: Any, data: Optional[Dict[str, Any]] = None) -> None:
     """Write a JSON event line to stdout for the Electron frontend.
 
     Parameters
     ----------
     event:
-        Event type name (e.g. "step-start", "log", "result").
+        Event type name (e.g. "step-start", "log", "result") or a full event dict.
     data:
         Optional payload dictionary.
     """
-    msg = {"type": event}
-    if data:
-        msg.update(data)
+    if isinstance(event, dict):
+        msg = dict(event)
+        if data:
+            msg.update(data)
+    else:
+        msg = {"type": str(event)}
+        if data:
+            msg.update(data)
     try:
         with _EMIT_LOCK:
             sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")

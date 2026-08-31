@@ -394,6 +394,49 @@ def deploy_order_packages(payload: Dict[str, Any]) -> Dict[str, Any]:
                 pass
 
 
+def _extract_docx_text(file_path: Path) -> str:
+    """Extract formatted text and tables from a .docx file using standard zipfile & XML."""
+    import zipfile
+    import xml.etree.ElementTree as ET
+
+    try:
+        with zipfile.ZipFile(file_path, "r") as zf:
+            if "word/document.xml" not in zf.namelist():
+                return ""
+            xml_content = zf.read("word/document.xml")
+            root = ET.fromstring(xml_content)
+
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            lines: List[str] = []
+
+            for elem in root.iter():
+                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                if tag == "p":
+                    texts = []
+                    for t in elem.findall(".//w:t", ns):
+                        if t.text:
+                            texts.append(t.text)
+                    p_text = "".join(texts).strip()
+                    if p_text:
+                        lines.append(p_text)
+                    elif lines and lines[-1] != "":
+                        lines.append("")
+                elif tag == "tr":
+                    row_cells = []
+                    for tc in elem.findall(".//w:tc", ns):
+                        cell_texts = []
+                        for t in tc.findall(".//w:t", ns):
+                            if t.text:
+                                cell_texts.append(t.text)
+                        row_cells.append("".join(cell_texts).strip())
+                    if any(row_cells):
+                        lines.append(" | ".join(row_cells))
+
+            return "\n\n".join(lines).strip()
+    except Exception as exc:
+        return f"[Word 文档解析失败: {exc}]"
+
+
 def export_svn_file_for_preview(
     file_url: str,
     svn_exe: str = "svn",
@@ -443,6 +486,12 @@ def export_svn_file_for_preview(
                     break
                 except Exception:
                     continue
+        elif ext == ".docx" and target_path.stat().st_size < 10 * 1024 * 1024:
+            # Word 文档 (.docx) 自动解析段落与表格文本，实现在线直读预览
+            extracted = _extract_docx_text(target_path)
+            if extracted:
+                is_text = True
+                content = extracted
 
         return {
             "success": True,

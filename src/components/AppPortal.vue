@@ -2,9 +2,8 @@
   <div class="flex-1 min-h-0 overflow-y-auto bg-[#f8fafc] p-5 sm:p-7 text-slate-800 font-sans">
     <div class="max-w-6xl mx-auto space-y-6">
       
-      <!-- Spotlight Recommendation Banner: ztools Debugging Suite -->
+      <!-- Spotlight Recommendation Banner: ztools Debugging Suite (常驻推荐，不可关闭) -->
       <div
-        v-if="showZtoolsBanner"
         class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 border border-amber-200/90 p-4 sm:p-5 shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)] transition-all duration-300"
       >
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -57,17 +56,6 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
               </svg>
               <span>打开目录</span>
-            </button>
-
-            <button
-              type="button"
-              class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-colors cursor-pointer"
-              title="关闭提示"
-              @click="dismissZtoolsBanner"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
             </button>
           </div>
         </div>
@@ -622,7 +610,6 @@ const appVersion = computed(() => (ipc.version ? `v${ipc.version}` : 'v1.0.4'))
 const showAddAppModal = ref(false)
 const isEditing = ref(false)
 const editingAppId = ref<string | null>(null)
-const showZtoolsBanner = ref(localStorage.getItem('zbuild_ztools_banner_dismissed') !== 'true')
 
 function downloadZtoolsInstaller() {
   if (typeof window !== 'undefined') {
@@ -643,12 +630,6 @@ async function openZtoolsFolder() {
   } else {
     store.showToast('打开文件夹失败: ' + (res.error || '未知错误'), 'error')
   }
-}
-
-function dismissZtoolsBanner() {
-  showZtoolsBanner.value = false
-  localStorage.setItem('zbuild_ztools_banner_dismissed', 'true')
-  store.showToast('提示已隐藏，可在下方「调试造数」列表中随时下载', 'info')
 }
 const selectedCategory = ref<string>('all')
 const searchQuery = ref<string>('')

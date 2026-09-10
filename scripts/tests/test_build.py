@@ -129,6 +129,26 @@ class TestBuildFailure(unittest.TestCase):
             self.assertEqual(ctx.artifact_path, artifact)
             self.assertEqual(mock_build.call_args.kwargs["build_command"], "npm run build:prod")
 
+    def test_step_build_disables_artifact_cache_by_default(self):
+        ctx = StepContext(
+            project_name="changing-project",
+            project_path=Path("/dummy/path"),
+            branch="main",
+            mode="local",
+            config={},
+            tools={"bash": "bash"},
+        )
+
+        completed = subprocess.CompletedProcess(["bash", "deploy.sh"], 0, "ok", "")
+        artifact = Path("/dummy/path/dist/app.tar.gz")
+        with patch("workflow.cache.BuildCache") as mock_cache, patch(
+            "git.build.build_project", return_value=(completed, artifact)
+        ):
+            result = step_build(ctx)
+
+        self.assertTrue(result.success)
+        mock_cache.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

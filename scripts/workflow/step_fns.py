@@ -204,7 +204,7 @@ def step_build(ctx: StepContext) -> StepResult:
         or ctx.config.get("artifact_paths")
         or ["dist"]
     )
-    use_cache = ctx.config.get("use_build_cache", True)
+    use_cache = ctx.config.get("use_build_cache", False)
 
     input_hash = ""
     cache = None

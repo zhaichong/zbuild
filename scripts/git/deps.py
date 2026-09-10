@@ -29,6 +29,19 @@ FINGERPRINT_FILE = ".zbuild_deps_fingerprint"
 INSTALL_LOCK_FILE = ".zbuild_installing.lock"
 
 
+def _node_modules_is_shared_cache(node_modules: Path) -> bool:
+    """Return True when node_modules is a symlink/junction to the shared deps cache."""
+    try:
+        if node_modules.is_symlink():
+            return True
+    except OSError:
+        pass
+    try:
+        return node_modules.resolve().parent != node_modules.parent.resolve()
+    except OSError:
+        return False
+
+
 def dependency_fingerprint(project_path: Union[Path, str]) -> str:
     """Compute a fingerprint of the dependency specification.
 
@@ -473,9 +486,18 @@ def ensure_dependencies(
                     f"{result.stdout[-500:] if result.stdout else ''}"
                 )
 
-        if current_fp and node_modules.is_dir():
+        if node_modules.is_dir():
             try:
-                fp_file.write_text(current_fp, encoding="utf-8")
+                # Isolated worktrees share a junctioned node_modules cache and reset
+                # manifests from Git each run, so persist the pre-install fingerprint.
+                # In-place builds may rewrite lockfiles during install; persist the
+                # post-install fingerprint so the next run can skip.
+                if _node_modules_is_shared_cache(node_modules):
+                    fp_to_store = current_fp
+                else:
+                    fp_to_store = dependency_fingerprint(project) or current_fp
+                if fp_to_store:
+                    fp_file.write_text(fp_to_store, encoding="utf-8")
             except Exception as exc:
                 logger.warning("Failed to write dependency fingerprint for %s: %s", project, exc)
 

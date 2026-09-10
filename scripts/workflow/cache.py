@@ -13,12 +13,15 @@ import shutil
 from pathlib import Path
 from typing import Optional, Union
 
-from core.constants import APP_DIR
+from core.constants import APP_DIR, DATA_DIR
 from git.build import get_commit_sha
+from git.build_cmd import MICRO_APPS, is_micro_frontend_context
 
 logger = logging.getLogger(__name__)
 
-CACHE_DIR = APP_DIR / "tmp" / "build-cache"
+CACHE_DIR = DATA_DIR / "tmp" / "build-cache"
+LEGACY_CACHE_DIR = APP_DIR / "tmp" / "build-cache"
+ARCHIVE_GLOBS = ("*.tar.gz", "*.tgz", "*.tar", "*.zip")
 
 
 class BuildCache:
@@ -29,6 +32,7 @@ class BuildCache:
     - deploy.sh contents
     - package.json contents
     - Lock file contents (if present)
+    - Sibling micro-frontend commits, but only for composite micro builds
 
     Cached artifacts are stored in ``CACHE_DIR/{hash}/``.
     """
@@ -47,7 +51,19 @@ class BuildCache:
         build_command: str = "deploy.sh",
         target_branch: str = "",
     ) -> str:
-        """Compute a content hash from the project's build inputs.
+        """Compute a content hash from the project's build inputs."""
+        digest, _summary = self.compute_input_fingerprint(
+            project_path, build_command=build_command, target_branch=target_branch
+        )
+        return digest
+
+    def compute_input_fingerprint(
+        self,
+        project_path: Union[Path, str],
+        build_command: str = "deploy.sh",
+        target_branch: str = "",
+    ) -> tuple:
+        """Return ``(sha256_hex, human_summary)`` for the project's build inputs.
 
         Combines commit SHA, build command/script, package.json, and lock file
         into a single SHA-256 hash.
@@ -56,65 +72,64 @@ class BuildCache:
         deploy-micro.sh or branch 3.5.0), also incorporates the Commit SHA and
         manifests of sibling micro-frontend projects (yarward-micro-menu,
         yarward-nova-ai) so that sub-project commits immediately invalidate
-        the parent build cache.
+        the parent build cache. Regular (non-micro) builds ignore those siblings.
         """
         project = Path(project_path)
         h = hashlib.sha256()
+        labels = []
 
-        # Commit SHA of main project
         sha = get_commit_sha(project)
         h.update(f"commit:{sha}\n".encode())
+        labels.append(f"commit={sha[:8] if sha else '-'}")
 
-        # Build command & script content
         cmd_str = (build_command or "deploy.sh").strip()
         h.update(f"build_command:{cmd_str}\n".encode())
+        labels.append(f"cmd={cmd_str}")
 
         normalized_cmd = cmd_str[2:] if cmd_str.startswith(("./", ".\\")) else cmd_str
         script_file = project / normalized_cmd
         if script_file.is_file():
-            h.update(f"script:{normalized_cmd}:{script_file.stat().st_size}\n".encode())
-            h.update(script_file.read_bytes())
-            h.update(b"\n")
+            self._hash_text_file(h, f"script:{normalized_cmd}", script_file)
         elif (project / "deploy.sh").is_file():
-            deploy_sh = project / "deploy.sh"
-            h.update(f"deploy.sh:{deploy_sh.stat().st_size}\n".encode())
-            h.update(deploy_sh.read_bytes())
-            h.update(b"\n")
+            self._hash_text_file(h, "deploy.sh", project / "deploy.sh")
 
-        # package.json
         pkg_json = project / "package.json"
         if pkg_json.is_file():
-            h.update(f"package.json:{pkg_json.stat().st_size}\n".encode())
-            h.update(pkg_json.read_bytes())
-            h.update(b"\n")
+            self._hash_text_file(h, "package.json", pkg_json)
 
-        # Lock file (try multiple names)
         for lock_name in ("package-lock.json", "pnpm-lock.yaml", "yarn.lock"):
             lock_file = project / lock_name
             if lock_file.is_file():
-                h.update(f"{lock_name}:{lock_file.stat().st_size}\n".encode())
-                h.update(lock_file.read_bytes())
-                h.update(b"\n")
+                self._hash_text_file(h, lock_name, lock_file)
                 break
 
-        # ------------------------------------------------------------------
-        # Micro-frontend composite dependency hashing
-        # ------------------------------------------------------------------
-        from git.build_cmd import MICRO_APPS
-        parent_dir = project.resolve().parent
-        if parent_dir.is_dir():
-            for sibling_name in sorted(MICRO_APPS):
-                sibling_dir = parent_dir / sibling_name
-                if sibling_dir.is_dir() and (sibling_dir / ".git").exists():
-                    sub_sha = get_commit_sha(sibling_dir)
-                    h.update(f"sibling:{sibling_name}:commit:{sub_sha}\n".encode())
-                    sub_pkg = sibling_dir / "package.json"
-                    if sub_pkg.is_file():
-                        h.update(f"sibling:{sibling_name}:pkg:{sub_pkg.stat().st_size}\n".encode())
-                        h.update(sub_pkg.read_bytes())
-                        h.update(b"\n")
+        sibling_names = []
+        if is_micro_frontend_context(build_command=cmd_str, branch=target_branch):
+            parent_dir = project.resolve().parent
+            if parent_dir.is_dir():
+                for sibling_name in sorted(MICRO_APPS):
+                    sibling_dir = parent_dir / sibling_name
+                    if sibling_dir.is_dir() and (sibling_dir / ".git").exists():
+                        sub_sha = get_commit_sha(sibling_dir)
+                        h.update(f"sibling:{sibling_name}:commit:{sub_sha}\n".encode())
+                        sibling_names.append(f"{sibling_name}:{sub_sha[:8] if sub_sha else '-'}")
+                        sub_pkg = sibling_dir / "package.json"
+                        if sub_pkg.is_file():
+                            self._hash_text_file(h, f"sibling:{sibling_name}:pkg", sub_pkg)
 
-        return h.hexdigest()
+        if sibling_names:
+            labels.append("siblings=" + ",".join(sibling_names))
+        else:
+            labels.append("siblings=none")
+
+        return h.hexdigest(), " ".join(labels)
+
+    @staticmethod
+    def _hash_text_file(h, label: str, path: Path) -> None:
+        data = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        h.update(f"{label}:{len(data)}\n".encode())
+        h.update(data)
+        h.update(b"\n")
 
     # ------------------------------------------------------------------
     # Cache operations
@@ -122,16 +137,33 @@ class BuildCache:
 
     def get_cached_artifact(self, input_hash: str) -> Optional[Path]:
         """Return the cached artifact path if it exists, or None."""
-        artifact_dir = self.cache_dir / input_hash
-        if not artifact_dir.is_dir():
-            return None
+        roots = [self.cache_dir]
+        try:
+            if LEGACY_CACHE_DIR.resolve() != Path(self.cache_dir).resolve():
+                roots.append(LEGACY_CACHE_DIR)
+        except OSError:
+            roots.append(LEGACY_CACHE_DIR)
 
-        tarballs = list(artifact_dir.glob("*.tar.gz"))
-        if tarballs:
-            logger.info("Cache hit for %s", input_hash[:12])
-            return tarballs[0]
+        for root in roots:
+            artifact_dir = root / input_hash
+            if not artifact_dir.is_dir():
+                continue
+            found = self._find_archive(artifact_dir)
+            if found:
+                logger.info("Cache hit for %s", input_hash[:12])
+                return found
 
         return None
+
+    @staticmethod
+    def _find_archive(artifact_dir: Path) -> Optional[Path]:
+        found: list = []
+        for pattern in ARCHIVE_GLOBS:
+            found.extend(artifact_dir.glob(pattern))
+        if not found:
+            return None
+        found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        return found[0]
 
     def store_artifact(self, input_hash: str, artifact_path: Path) -> Path:
         """Store an artifact in the cache.

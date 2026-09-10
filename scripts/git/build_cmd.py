@@ -310,6 +310,27 @@ def resolve_branch_build_command(
 MICRO_APPS = frozenset({"yarward-micro-menu", "yarward-nova-ai"})
 
 
+def is_micro_frontend_context(
+    build_command: str = "",
+    branch: str = "",
+    parent_command: str = "",
+    parent_branch: str = "",
+) -> bool:
+    """Return True when this run is a composite micro-frontend build."""
+    cmd_norm = (build_command or "").strip().lower()
+    p_cmd_norm = (parent_command or "").strip().lower()
+    branch_norm = (branch or "").strip()
+    p_branch_norm = (parent_branch or "").strip()
+    return (
+        "deploy-micro.sh" in cmd_norm
+        or "deploy-micro.sh" in p_cmd_norm
+        or branch_norm == "3.5.0"
+        or branch_norm.startswith("3.5.0")
+        or p_branch_norm == "3.5.0"
+        or p_branch_norm.startswith("3.5.0")
+    )
+
+
 def resolve_project_node_version(
     project_name: str,
     build_command: str = "deploy.sh",
@@ -328,21 +349,12 @@ def resolve_project_node_version(
       deploy-micro.sh or branch / parent_branch is 3.5.0).
     """
     proj_norm = Path(str(project_name).replace("\\", "/")).name.lower()
-    cmd_norm = (build_command or "").strip().lower()
-    p_cmd_norm = (parent_command or "").strip().lower()
-    branch_norm = (branch or "").strip()
-    p_branch_norm = (parent_branch or "").strip()
-
-    is_micro_mode = (
-        "deploy-micro.sh" in cmd_norm
-        or "deploy-micro.sh" in p_cmd_norm
-        or branch_norm == "3.5.0"
-        or branch_norm.startswith("3.5.0")
-        or p_branch_norm == "3.5.0"
-        or p_branch_norm.startswith("3.5.0")
-    )
-
-    if proj_norm in MICRO_APPS and is_micro_mode:
+    if proj_norm in MICRO_APPS and is_micro_frontend_context(
+        build_command=build_command,
+        branch=branch,
+        parent_command=parent_command,
+        parent_branch=parent_branch,
+    ):
         return "22"
 
     return "14"

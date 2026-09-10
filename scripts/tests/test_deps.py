@@ -134,6 +134,34 @@ class TestDependencyManagement(unittest.TestCase):
         self.assertTrue(result)
         mock_run.assert_called_once()
 
+    @patch("git.deps.run_process_stream")
+    def test_ensure_dependencies_stores_post_install_fingerprint(self, mock_run):
+        """In-place installs should record the lockfile after npm rewrites it."""
+        pkg_file = self.project_dir / "package.json"
+        lock_file = self.project_dir / "package-lock.json"
+        pkg_file.write_text('{"name": "test"}', encoding="utf-8")
+        lock_file.write_text('{"lockfileVersion": 1}', encoding="utf-8")
+        pre_fp = dependency_fingerprint(self.project_dir)
+
+        def _install(*_args, **_kwargs):
+            lock_file.write_text('{"lockfileVersion": 1, "rewritten": true}', encoding="utf-8")
+            (self.project_dir / "node_modules").mkdir(exist_ok=True)
+            return MagicMock(returncode=0, stdout="ok")
+
+        mock_run.side_effect = _install
+        result = ensure_dependencies(self.project_dir)
+        self.assertTrue(result)
+
+        saved_fp = (self.project_dir / "node_modules" / FINGERPRINT_FILE).read_text(encoding="utf-8")
+        post_fp = dependency_fingerprint(self.project_dir)
+        self.assertEqual(saved_fp, post_fp)
+        self.assertNotEqual(saved_fp, pre_fp)
+
+        mock_run.reset_mock()
+        skipped = ensure_dependencies(self.project_dir)
+        self.assertTrue(skipped)
+        mock_run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

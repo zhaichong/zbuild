@@ -211,17 +211,26 @@ def step_build(ctx: StepContext) -> StepResult:
     if use_cache:
         from workflow.cache import BuildCache
         cache = BuildCache()
-        input_hash = cache.compute_input_hash(ctx.project_path, build_command=build_cmd)
-        logger.info("Build input hash for %s: %s", ctx.project_name, input_hash[:12])
+        input_hash, hash_summary = cache.compute_input_fingerprint(
+            ctx.project_path, build_command=build_cmd, target_branch=ctx.branch
+        )
+        logger.info("Build input hash for %s: %s (%s)", ctx.project_name, input_hash[:12], hash_summary)
         cached_artifact = cache.get_cached_artifact(input_hash)
         if cached_artifact:
             ctx.artifact_path = cached_artifact
-            emit_log(f"⚡ 构建产物缓存命中 (Commit/配置未变)，0秒跳过Webpack编译: {cached_artifact.name}", project=ctx.project_name)
+            emit_log(
+                f"⚡ 构建产物缓存命中 ({hash_summary})，跳过编译: {cached_artifact.name}",
+                project=ctx.project_name,
+            )
             return StepResult(
                 success=True,
                 message=f"⚡ 缓存命中，跳过编译: {cached_artifact.name}",
                 context_updates={"artifact_path": str(cached_artifact)},
             )
+        emit_log(
+            f"构建缓存未命中 ({hash_summary})，将重新编译",
+            project=ctx.project_name,
+        )
 
     # Perform actual build via configured build_command
     try:
@@ -239,7 +248,7 @@ def step_build(ctx: StepContext) -> StepResult:
                 try:
                     cache.store_artifact(input_hash, artifact)
                 except Exception as exc:
-                    logger.debug("Failed to store artifact in cache: %s", exc)
+                    logger.warning("Failed to store artifact in cache: %s", exc)
             ctx.artifact_path = artifact
             emit_log(f"构建完成，生成产物: {artifact.name}", project=ctx.project_name)
             return StepResult(

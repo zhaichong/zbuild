@@ -72,22 +72,6 @@ def _personal_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _system_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Server-wide settings only; personal/profile keys stay per-browser."""
-    return {key: value for key, value in config.items() if key not in PROFILE_CONFIG_KEYS}
-
-
-def _is_loopback(request: web.Request) -> bool:
-    """True when the request comes from the machine hosting this server.
-
-    Only the local operator (browser opened on the server host via
-    127.0.0.1 / localhost / ::1) may edit server-wide system settings.
-    LAN colleagues keep a read-only view of those settings.
-    """
-    remote = (request.remote or "").strip()
-    return remote in {"127.0.0.1", "::1", "localhost"}
-
-
 def _execution_config(system_config: Dict[str, Any], profile_config: Dict[str, Any]) -> Dict[str, Any]:
     """Build execution input without allowing browsers to replace server settings."""
     value = json.loads(json.dumps(system_config))
@@ -333,7 +317,7 @@ async def handle_config_get(request: web.Request) -> web.Response:
         request.app["profile_store"].get_public(request["profile_id"]),
     )
     value["config"] = py_config_to_frontend(value["config"])
-    value["systemConfigEditable"] = _is_loopback(request)
+    value["systemConfigEditable"] = False
     return web.json_response(value)
 
 
@@ -361,31 +345,13 @@ async def handle_config_save(request: web.Request) -> web.Response:
         )
         raise
 
-    # Only the local operator may persist server-wide system settings; LAN
-    # browsers keep those fields read-only (their values are still accepted
-    # here but ignored unless the request comes from loopback).
-    if _is_loopback(request):
-        try:
-            config_service = request.app["config_service"]
-            request.app["config_service"].save(
-                _system_config(py_config),
-                config_service.get_public()["revision"],
-                clear_secrets,
-            )
-        except Exception:
-            request.app["task_store"].record_audit(
-                "config.save", "failed", submitter=str(body.get("submitter") or ""),
-                remote_ip=request.remote or "",
-            )
-            raise
-
     request.app["task_store"].record_audit(
         "config.save", "success", submitter=str(body.get("submitter") or ""),
         remote_ip=request.remote or "",
     )
     result = _config_view(request.app["config_service"].get_public(), result)
     result["config"] = py_config_to_frontend(result["config"])
-    result["systemConfigEditable"] = _is_loopback(request)
+    result["systemConfigEditable"] = False
     return web.json_response(result)
 
 

@@ -1,0 +1,7 @@
+Source: D:\build\zbuild\package.json (after T-01)
+
+scripts present: dev, build, preview, web, setup:runtime, typecheck, lint, format, test:py
+scripts absent: start, electron:dev, pack, dist, release, test:node
+dependencies absent: electron, electron-builder, electron-updater, mysql2, concurrently, wait-on, cross-env
+build/nsis/publish electron-builder config: absent
+web script remains: py scripts/start_web.py --open

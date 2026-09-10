@@ -44,19 +44,6 @@
               </svg>
               <span>立即下载安装包</span>
             </button>
-
-            <button
-              v-if="ipc.isElectron()"
-              type="button"
-              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-amber-300/80 text-amber-900 hover:bg-amber-50 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
-              title="在系统文件管理器中打开 D:\build\ztools"
-              @click="openZtoolsFolder"
-            >
-              <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-              </svg>
-              <span>打开目录</span>
-            </button>
           </div>
         </div>
       </div>
@@ -624,14 +611,6 @@ function downloadZtoolsInstaller() {
   }
 }
 
-async function openZtoolsFolder() {
-  const res = await ipc.openPath('D:\\build\\ztools')
-  if (res.success) {
-    store.showToast('已在文件管理器中打开 D:\\build\\ztools', 'success')
-  } else {
-    store.showToast('打开文件夹失败: ' + (res.error || '未知错误'), 'error')
-  }
-}
 const selectedCategory = ref<string>('all')
 const searchQuery = ref<string>('')
 
@@ -660,7 +639,7 @@ const defaultApps: PortalApp[] = [
     icon: '📦',
     iconType: 'build',
     category: '核心构建',
-    tags: ['Electron', 'SVN', 'SSH 部署', '多工程模版'],
+    tags: ['Web', 'SVN', 'SSH 部署', '多工程模版'],
     status: 'active',
     statusLabel: '核心内置',
   },
@@ -831,16 +810,12 @@ async function onLaunchApp(app: PortalApp) {
   } else if (app.id === 'mock-query') {
     emit('launch-app', 'mock-query')
   } else if (app.id.startsWith('custom-')) {
-    try {
-      store.showToast(`正在拉起「${app.name}」...`, 'info')
-      await ipc.launchTool({
-        pathOrUrl: app.pathOrUrl || '',
-        launchType: app.launchType,
-        cmdWorkDir: app.cmdWorkDir,
-      })
-    } catch (err: any) {
-      store.showToast(`拉起失败: ${err.message}`, 'error')
+    const target = (app.pathOrUrl || '').trim()
+    if (app.launchType === 'url' && /^https?:\/\//i.test(target)) {
+      window.open(target, '_blank', 'noopener,noreferrer')
+      return
     }
+    store.showToast('Web 模式仅支持打开网页链接，无法启动本机程序或命令', 'warning')
   } else {
     store.showToast(`已拉起「${app.name}」扩展环境`, 'info')
   }

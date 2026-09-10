@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zbuild 设计预览</title>
+  <style>
+    :root {
+      --bg: oklch(0.96 0.012 210);
+      --bg-2: oklch(0.93 0.018 210);
+      --surface: oklch(0.995 0.004 210);
+      --ink: oklch(0.24 0.035 230);
+      --ink-2: oklch(0.42 0.03 220);
+      --ink-3: oklch(0.55 0.02 220);
+      --line: oklch(0.89 0.02 210);
+      --teal: oklch(0.40 0.08 205);
+      --teal-2: oklch(0.34 0.07 205);
+      --teal-soft: oklch(0.93 0.03 205);
+      --honey: oklch(0.82 0.13 75);
+      --honey-ink: oklch(0.42 0.09 70);
+      --good: oklch(0.48 0.12 155);
+      --good-soft: oklch(0.94 0.04 155);
+      --bad: oklch(0.52 0.16 25);
+      --bad-soft: oklch(0.94 0.04 25);
+      --run: oklch(0.45 0.1 205);
+      --radius: 14px;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --sans: "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      --mono: "Cascadia Mono", "Sarasa Mono SC", "JetBrains Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: var(--sans);
+      background: oklch(0.22 0.03 220);
+      color: var(--ink);
+      padding: 32px 28px 72px;
+    }
+    .board-head {
+      max-width: 1320px; margin: 0 auto 24px;
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+      color: oklch(0.93 0.02 210);
+    }
+    .board-head h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.03em; }
+    .board-head p { margin: 6px 0 0; font-size: 13px; color: oklch(0.78 0.03 210); }
+    .tabs { display: flex; gap: 4px; padding: 4px; background: oklch(0.18 0.03 220); border-radius: 999px; }
+    .tabs button {
+      border: 0; background: transparent; color: oklch(0.75 0.03 210);
+      border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 650;
+      font-family: inherit; cursor: pointer;
+    }
+    .tabs button.on { background: oklch(0.82 0.13 75); color: oklch(0.28 0.06 70); }
+    .frame-wrap { display: none; max-width: 1320px; margin: 0 auto; }
+    .frame-wrap.on { display: block; }
+    .label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      color: oklch(0.72 0.03 210); margin: 0 0 10px; font-family: var(--mono);
+    }
+    .chrome {
+      width: 1280px; height: 800px; background: var(--bg);
+      border-radius: 16px; overflow: hidden;
+      display: flex; flex-direction: column;
+      box-shadow: 0 24px 0 oklch(0.16 0.03 220);
+    }
+    .top {
+      height: 58px; background: var(--surface);
+      display: flex; align-items: center; gap: 0;
+      padding-right: 16px; flex-shrink: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .mark {
+      width: 58px; height: 58px; background: var(--teal); color: #fff;
+      display: grid; place-items: center; flex-shrink: 0;
+      font-weight: 800; font-size: 22px; letter-spacing: -0.06em;
+    }
+    .top-main { flex: 1; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; min-width: 0; }
+    .brand-block { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .brand-block strong { font-size: 13px; letter-spacing: -0.02em; }
+    .brand-block span { font-size: 11px; color: var(--ink-3); }
+    .back {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 650; color: var(--ink-2); cursor: default;
+    }
+    .modes { display: flex; gap: 18px; margin-left: 28px; }
+    .modes b {
+      font-size: 13px; font-weight: 650; color: var(--ink-3); padding: 8px 0 10px;
+      border-bottom: 2px solid transparent;
+    }
+    .modes b.on { color: var(--teal); border-bottom-color: var(--teal); font-weight: 800; }
+    .top-right { display: flex; align-items: center; gap: 14px; }
+    .env { display: flex; gap: 10px; font-size: 11px; font-weight: 650; color: var(--ink-2); }
+    .env i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .ok { background: var(--good); }
+    .no { background: var(--bad); }
+    .gear {
+      width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--line);
+      display: grid; place-items: center; font-size: 14px; background: var(--surface);
+    }
+
+    .portal { flex: 1; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+    .portal-main { padding: 36px 40px 28px; display: flex; flex-direction: column; }
+    .kicker { font-size: 12px; font-weight: 700; color: var(--teal); margin: 0 0 8px; }
+    .hello { margin: 0; font-size: 40px; line-height: 1.05; letter-spacing: -0.035em; font-weight: 800; text-wrap: balance; }
+    .hello em { font-style: normal; color: var(--teal); }
+    .sub { margin: 12px 0 28px; font-size: 15px; color: var(--ink-2); max-width: 42ch; }
+    .hero {
+      background: var(--teal); color: #fff; border-radius: var(--radius);
+      padding: 22px 24px; display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center;
+    }
+    .hero-ico {
+      width: 56px; height: 56px; border-radius: 14px; background: oklch(1 0 0 / 0.12);
+      display: grid; place-items: center;
+    }
+    .hero h2 { margin: 0; font-size: 22px; letter-spacing: -0.03em; font-weight: 800; }
+    .hero p { margin: 6px 0 0; font-size: 13px; color: oklch(0.9 0.03 205); }
+    .hero small { display: block; margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--honey); }
+    .go {
+      height: 40px; padding: 0 16px; border-radius: 10px; background: var(--honey); color: var(--honey-ink);
+      font-size: 13px; font-weight: 800; display: grid; place-items: center; white-space: nowrap;
+    }
+    .others { margin-top: 22px; display: flex; flex-direction: column; gap: 8px; }
+    .other {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+      padding: 14px 16px; display: flex; align-items: center; gap: 14px;
+    }
+    .mini {
+      width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+      font-weight: 800; color: #fff; font-size: 14px;
+    }
+    .other h3 { margin: 0; font-size: 14px; font-weight: 750; }
+    .other p { margin: 3px 0 0; font-size: 12px; color: var(--ink-2); }
+    .linkish { margin-left: auto; font-size: 12px; font-weight: 750; color: var(--teal); }
+    .portal-side {
+      background: var(--bg-2); padding: 28px 22px; display: flex; flex-direction: column; gap: 16px;
+      border-left: 1px solid var(--line);
+    }
+    .pet-card {
+      background: var(--surface); border-radius: var(--radius); padding: 16px;
+      display: flex; gap: 12px; align-items: center;
+    }
+    .pet-card p { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+    .ztools {
+      margin-top: auto; background: var(--surface); border-radius: var(--radius); padding: 16px;
+    }
+    .ztools strong { display: block; font-size: 13px; margin-bottom: 6px; }
+    .ztools p { margin: 0 0 12px; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+    .quiet {
+      height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line);
+      font-size: 12px; font-weight: 750; display: inline-flex; align-items: center; background: #fff;
+    }
+
+    .work { flex: 1; min-height: 0; display: grid; grid-template-rows: auto 1fr; }
+    .slip {
+      padding: 18px 24px 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+    }
+    .order-no {
+      font-family: var(--mono); font-size: 32px; letter-spacing: -0.04em; font-weight: 700; line-height: 1;
+    }
+    .order-meta { margin-top: 8px; font-size: 13px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .chip {
+      font-size: 11px; font-weight: 750; padding: 3px 8px; border-radius: 999px;
+      background: var(--teal-soft); color: var(--teal-2);
+    }
+    .fields { display: flex; gap: 8px; }
+    .fields .in {
+      height: 36px; min-width: 140px; padding: 0 10px; border-radius: 10px;
+      border: 1px solid var(--line); background: var(--surface); font-size: 12px; color: var(--ink-2);
+      display: flex; align-items: center;
+    }
+    .cta {
+      height: 44px; padding: 0 22px; border-radius: 12px; background: var(--teal); color: #fff;
+      font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; gap: 8px; border: 0;
+    }
+    .cta.stop { background: var(--bad); }
+    .cta.retry { background: var(--surface); color: var(--honey-ink); border: 1px solid oklch(0.82 0.1 75); }
+    .cta-row { display: flex; gap: 8px; align-items: center; }
+
+    .split { min-height: 0; display: grid; grid-template-columns: 1.35fr 0.85fr; padding: 0 16px 16px; gap: 12px; }
+    .panel {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .ph {
+      padding: 12px 16px 8px; display: flex; justify-content: space-between; align-items: baseline;
+    }
+    .ph h2 { margin: 0; font-size: 13px; font-weight: 800; }
+    .ph span { font-size: 12px; color: var(--ink-3); }
+    .tr, .th {
+      display: grid; grid-template-columns: 28px 1.3fr 1.1fr 90px; gap: 8px;
+      align-items: center; padding: 0 16px; font-size: 13px;
+    }
+    .th { height: 32px; color: var(--ink-3); font-size: 11px; font-weight: 750; }
+    .tr { height: 48px; border-top: 1px solid var(--line); }
+    .name { font-weight: 750; }
+    .br { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+    .st { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; justify-self: start; }
+    .wait { background: oklch(0.95 0.01 220); color: var(--ink-3); }
+    .runn { background: var(--teal-soft); color: var(--teal-2); }
+    .done { background: var(--good-soft); color: var(--good); }
+    .fail { background: var(--bad-soft); color: var(--bad); }
+
+    .rtabs { display: flex; gap: 16px; padding: 12px 16px 0; }
+    .rtabs b { font-size: 13px; color: var(--ink-3); padding-bottom: 8px; border-bottom: 2px solid transparent; font-weight: 650; }
+    .rtabs b.on { color: var(--ink); border-bottom-color: var(--teal); font-weight: 800; }
+    .pipe { padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 0; }
+    .step { display: grid; grid-template-columns: 16px 1fr auto; gap: 10px; align-items: start; padding: 10px 0; }
+    .spine { position: relative; }
+    .spine::before {
+      content: ""; position: absolute; left: 7px; top: 22px; bottom: -10px; width: 2px; background: var(--line);
+    }
+    .step:last-child .spine::before { display: none; }
+    .dot {
+      width: 16px; height: 16px; border-radius: 50%; background: var(--line); margin-top: 2px;
+    }
+    .dot.go { background: var(--teal); box-shadow: 0 0 0 4px var(--teal-soft); }
+    .dot.ok { background: var(--good); }
+    .dot.bad { background: var(--bad); }
+    .step strong { font-size: 13px; font-weight: 750; display: block; }
+    .step em { font-style: normal; font-size: 12px; color: var(--ink-3); }
+    .now { font-size: 12px; font-weight: 750; color: var(--teal); }
+    .bar { height: 5px; background: var(--bg-2); border-radius: 99px; margin: 8px 0 0; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--teal); }
+    .bar.bad i { background: var(--bad); }
+    .err {
+      margin: 4px 0 8px; padding: 10px 12px; background: var(--bad-soft); color: var(--bad);
+      border-radius: 10px; font-size: 12px; font-weight: 650; line-height: 1.45;
+    }
+    .foot-pet {
+      margin-top: auto; padding: 12px 16px; display: flex; gap: 10px; align-items: center;
+      background: oklch(0.97 0.02 90); border-top: 1px solid oklch(0.9 0.04 80);
+    }
+    .foot-pet p { margin: 0; font-size: 12px; color: var(--honey-ink); line-height: 1.4; }
+
+    .pet {
+      width: 44px; height: 44px; flex-shrink: 0; position: relative;
+    }
+    .pet svg { width: 44px; height: 44px; display: block; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true">
+    <symbol id="pet" viewBox="0 0 44 44">
+      <circle cx="22" cy="24" r="14" fill="oklch(0.82 0.13 75)"/>
+      <circle cx="16" cy="12" r="5" fill="oklch(0.82 0.13 75)"/>
+      <circle cx="28" cy="12" r="5" fill="oklch(0.82 0.13 75)"/>
+      <circle cx="17.5" cy="22.5" r="2" fill="oklch(0.28 0.05 70)"/>
+      <circle cx="26.5" cy="22.5" r="2" fill="oklch(0.28 0.05 70)"/>
+      <path d="M20 27.5c1.2 1.4 2.8 1.4 4 0" fill="none" stroke="oklch(0.42 0.09 70)" stroke-width="1.6" stroke-linecap="round"/>
+      <ellipse cx="22" cy="38" rx="9" ry="3" fill="oklch(0.4 0.08 205 / 0.18)"/>
+    </symbol>
+  </svg>
+
+  <div class="board-head">
+    <div>
+      <h1>zbuild 设计图 · 第二稿</h1>
+      <p>工单主视觉 · 病房青绿 · 蜂蜜桌宠 · 门户不对称</p>
+    </div>
+    <div class="tabs">
+      <button class="on" data-tab="portal">中心</button>
+      <button data-tab="idle">待执行</button>
+      <button data-tab="run">执行中</button>
+      <button data-tab="fail">失败</button>
+    </div>
+  </div>
+
+  <section class="frame-wrap on" id="portal">
+    <p class="label">01  /  开发者中心</p>
+    <div class="chrome">
+      <header class="top">
+        <div class="mark">z</div>
+        <div class="top-main">
+          <div class="brand-block">
+            <strong>智慧病房工具箱</strong>
+            <span>本地构建与现场联调</span>
+          </div>
+          <div class="gear">⚙</div>
+        </div>
+      </header>
+      <div class="portal">
+        <div class="portal-main">
+          <div class="kicker">开发者中心</div>
+          <h1 class="hello">今天要发的单，<em>从构建开始。</em></h1>
+          <p class="sub">打开工作台选项目、填订单、跑流水线。其它工具放在旁边，用到再进。</p>
+          <div class="hero">
+            <div class="hero-ico">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect x="4" y="7" width="20" height="16" rx="3" stroke="#fff" stroke-width="2"/>
+                <path d="M9 7V6a5 5 0 0 1 10 0v1" stroke="#fff" stroke-width="2"/>
+              </svg>
+            </div>
+            <div>
+              <h2>特殊订单构建与上传</h2>
+              <p>选分支、打包、上传 SVN 或服务器，并生成提测目录。</p>
+              <small>上次 · 市一医院 · WO-20260328-014</small>
+            </div>
+            <div class="go">打开工作台</div>
+          </div>
+          <div class="others">
+            <div class="other">
+              <div class="mini" style="background:oklch(0.42 0.08 170)">部</div>
+              <div>
+                <h3>测试订单部署</h3>
+                <p>从 SVN 选测试包，部署到目标服务器。</p>
+              </div>
+              <span class="linkish">打开</span>
+            </div>
+            <div class="other">
+              <div class="mini" style="background:oklch(0.5 0.12 55)">链</div>
+              <div>
+                <h3>终端数据链路提取</h3>
+                <p>抓取机构与患者数据，按模板造数。</p>
+              </div>
+              <span class="linkish">打开</span>
+            </div>
+          </div>
+        </div>
+        <aside class="portal-side">
+          <div class="pet-card">
+            <div class="pet"><svg><use href="#pet"/></svg></div>
+            <p>我看着进度。成功失败以流水线为准，不靠我眨眼。</p>
+          </div>
+          <div class="ztools">
+            <strong>现场联调用 ztools</strong>
+            <p>串口、抓包、接口联调。安装包约 97 MB，和本工具分开维护。</p>
+            <span class="quiet">下载安装包</span>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame-wrap" id="idle">
+    <p class="label">02  /  构建工作台 · 待执行</p>
+    <div class="chrome">
+      <header class="top">
+        <div class="mark">z</div>
+        <div class="top-main">
+          <div style="display:flex;align-items:center">
+            <span class="back">← 中心</span>
+            <div class="modes"><b class="on">SVN</b><b>服务器</b><b>仅本地</b></div>
+          </div>
+          <div class="top-right">
+            <div class="env"><span><i class="ok"></i>git</span><span><i class="ok"></i>svn</span><span><i class="ok"></i>node</span></div>
+            <div class="gear">⚙</div>
+          </div>
+        </div>
+      </header>
+      <div class="work">
+        <div class="slip">
+          <div>
+            <div class="order-no">WO-20260328-014</div>
+            <div class="order-meta">
+              <strong style="color:var(--ink)">市一医院</strong>
+              <span>护士站大屏适配</span>
+              <span class="chip">提测单已开</span>
+            </div>
+          </div>
+          <div class="cta-row">
+            <div class="fields">
+              <div class="in">医院 / 订单可在设置里改</div>
+            </div>
+            <button class="cta">开始执行</button>
+          </div>
+        </div>
+        <div class="split">
+          <section class="panel">
+            <div class="ph"><h2>项目</h2><span>已选 3 / 4 · 智能选择变动</span></div>
+            <div class="th"><span></span><span>名称</span><span>分支</span><span>状态</span></div>
+            <div class="tr"><span>☑</span><span class="name">nws-web</span><span class="br">release/ward-320</span><span class="st wait">未执行</span></div>
+            <div class="tr"><span>☑</span><span class="name">nurse-station</span><span class="br">release/ward-320</span><span class="st wait">未执行</span></div>
+            <div class="tr"><span>☑</span><span class="name">patient-pad</span><span class="br">hotfix/pad-theme</span><span class="st wait">未执行</span></div>
+            <div class="tr"><span>☐</span><span class="name">call-screen</span><span class="br">master</span><span class="st wait">未选中</span></div>
+          </section>
+          <aside class="panel">
+            <div class="rtabs"><b class="on">流水线</b><b>日志</b><b>队列</b></div>
+            <div class="pipe">
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>校验订单与路径</strong><em>医院、订单号、SVN 账号</em></div><span class="now" style="color:var(--ink-3)">等待</span></div>
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>拉取并构建</strong><em>按列表顺序</em></div><span class="now" style="color:var(--ink-3)">等待</span></div>
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>匹配产物</strong><em>dist / release</em></div><span class="now" style="color:var(--ink-3)">等待</span></div>
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>上传 SVN</strong><em>特殊订单库 / 前端</em></div><span class="now" style="color:var(--ink-3)">等待</span></div>
+            </div>
+            <div class="foot-pet">
+              <div class="pet"><svg><use href="#pet"/></svg></div>
+              <p>3 个项目，按表顺序跑。点开始执行就行。</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame-wrap" id="run">
+    <p class="label">03  /  构建工作台 · 执行中</p>
+    <div class="chrome">
+      <header class="top">
+        <div class="mark">z</div>
+        <div class="top-main">
+          <div style="display:flex;align-items:center">
+            <span class="back">← 中心</span>
+            <div class="modes"><b class="on">SVN</b><b>服务器</b><b>仅本地</b></div>
+          </div>
+          <div class="top-right">
+            <div class="env"><span><i class="ok"></i>git</span><span><i class="ok"></i>svn</span><span><i class="ok"></i>node</span></div>
+            <div class="gear">⚙</div>
+          </div>
+        </div>
+      </header>
+      <div class="work">
+        <div class="slip">
+          <div>
+            <div class="order-no">WO-20260328-014</div>
+            <div class="order-meta">
+              <strong style="color:var(--ink)">市一医院</strong>
+              <span>正在构建 nurse-station</span>
+              <span class="chip">1 / 3 完成</span>
+            </div>
+          </div>
+          <button class="cta stop">停止执行</button>
+        </div>
+        <div class="split">
+          <section class="panel">
+            <div class="ph"><h2>项目</h2><span>执行中</span></div>
+            <div class="th"><span></span><span>名称</span><span>分支</span><span>状态</span></div>
+            <div class="tr"><span>☑</span><span class="name">nws-web</span><span class="br">release/ward-320</span><span class="st done">成功</span></div>
+            <div class="tr"><span>☑</span><span class="name">nurse-station</span><span class="br">release/ward-320</span><span class="st runn">构建中</span></div>
+            <div class="tr"><span>☑</span><span class="name">patient-pad</span><span class="br">hotfix/pad-theme</span><span class="st wait">排队</span></div>
+            <div class="tr"><span>☐</span><span class="name">call-screen</span><span class="br">master</span><span class="st wait">未选中</span></div>
+          </section>
+          <aside class="panel">
+            <div class="rtabs"><b class="on">流水线</b><b>日志</b><b>队列</b></div>
+            <div class="pipe">
+              <div class="step"><span class="spine"><i class="dot ok"></i></span><div><strong>校验订单与路径</strong><em>用时 2 秒</em></div><span class="now" style="color:var(--good)">完成</span></div>
+              <div class="step"><span class="spine"><i class="dot go"></i></span><div><strong>拉取并构建</strong><em>nurse-station</em><div class="bar"><i style="width:46%"></i></div></div><span class="now">46%</span></div>
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>匹配产物</strong></div><span class="now" style="color:var(--ink-3)">等待</span></div>
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>上传 SVN</strong></div><span class="now" style="color:var(--ink-3)">等待</span></div>
+            </div>
+            <div class="foot-pet">
+              <div class="pet"><svg><use href="#pet"/></svg></div>
+              <p>别关窗口。停的话用右上角停止执行。</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame-wrap" id="fail">
+    <p class="label">04  /  构建工作台 · 部分失败</p>
+    <div class="chrome">
+      <header class="top">
+        <div class="mark">z</div>
+        <div class="top-main">
+          <div style="display:flex;align-items:center">
+            <span class="back">← 中心</span>
+            <div class="modes"><b class="on">SVN</b><b>服务器</b><b>仅本地</b></div>
+          </div>
+          <div class="top-right">
+            <div class="env"><span><i class="ok"></i>git</span><span><i class="ok"></i>svn</span><span><i class="no"></i>node</span></div>
+            <div class="gear">⚙</div>
+          </div>
+        </div>
+      </header>
+      <div class="work">
+        <div class="slip">
+          <div>
+            <div class="order-no">WO-20260328-014</div>
+            <div class="order-meta">
+              <strong style="color:var(--ink)">市一医院</strong>
+              <span style="color:var(--bad);font-weight:750">2 成功，1 失败：patient-pad</span>
+            </div>
+          </div>
+          <div class="cta-row">
+            <button class="cta retry">重试失败项目</button>
+            <button class="cta">开始执行</button>
+          </div>
+        </div>
+        <div class="split">
+          <section class="panel">
+            <div class="ph"><h2>项目</h2><span>部分失败</span></div>
+            <div class="th"><span></span><span>名称</span><span>分支</span><span>状态</span></div>
+            <div class="tr"><span>☑</span><span class="name">nws-web</span><span class="br">release/ward-320</span><span class="st done">成功</span></div>
+            <div class="tr"><span>☑</span><span class="name">nurse-station</span><span class="br">release/ward-320</span><span class="st done">成功</span></div>
+            <div class="tr"><span>☑</span><span class="name">patient-pad</span><span class="br">hotfix/pad-theme</span><span class="st fail">失败</span></div>
+            <div class="tr"><span>☐</span><span class="name">call-screen</span><span class="br">master</span><span class="st wait">未选中</span></div>
+          </section>
+          <aside class="panel">
+            <div class="rtabs"><b class="on">流水线</b><b>日志</b><b>队列</b></div>
+            <div class="pipe">
+              <div class="step"><span class="spine"><i class="dot ok"></i></span><div><strong>校验订单与路径</strong></div><span class="now" style="color:var(--good)">完成</span></div>
+              <div class="step"><span class="spine"><i class="dot bad"></i></span><div><strong>拉取并构建</strong><em>patient-pad</em><div class="bar bad"><i style="width:70%"></i></div></div><span class="now" style="color:var(--bad)">失败</span></div>
+              <div class="err">patient-pad：deploy.sh 退出码 1。完整输出在日志。</div>
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>匹配产物</strong></div><span class="now" style="color:var(--ink-3)">已跳过失败项</span></div>
+              <div class="step"><span class="spine"><i class="dot"></i></span><div><strong>上传 SVN</strong></div><span class="now" style="color:var(--ink-3)">其余两项已上传</span></div>
+            </div>
+            <div class="foot-pet">
+              <div class="pet"><svg><use href="#pet"/></svg></div>
+              <p>另外两个已经上去了。只重试 patient-pad。</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const buttons = document.querySelectorAll('.tabs button')
+    const frames = document.querySelectorAll('.frame-wrap')
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        buttons.forEach((b) => b.classList.remove('on'))
+        frames.forEach((f) => f.classList.remove('on'))
+        btn.classList.add('on')
+        document.getElementById(btn.dataset.tab).classList.add('on')
+      })
+    })
+  </script>
+</body>
+</html>

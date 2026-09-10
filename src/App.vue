@@ -74,6 +74,17 @@
         <!-- Tabs Header -->
         <div class="p-2 bg-slate-100/90 border-b border-slate-200 flex-shrink-0 select-none">
           <div class="flex items-center gap-1.5 p-1 bg-slate-200/80 rounded-xl">
+            <button
+              type="button"
+              class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer"
+              :class="activeSideTab === 'tasks'
+                ? 'bg-white text-blue-700 shadow-xs border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-300/50'"
+              @click="activeSideTab = 'tasks'"
+            >
+              团队队列
+            </button>
+
             <!-- Pipeline Tab -->
             <button
               type="button"
@@ -138,18 +149,6 @@
               </span>
             </button>
 
-            <button
-              v-if="!ipc.isElectron()"
-              type="button"
-              class="flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer"
-              :class="activeSideTab === 'tasks'
-                ? 'bg-white text-blue-700 shadow-xs border border-slate-200/60'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-300/50'"
-              @click="activeSideTab = 'tasks'"
-            >
-              团队队列
-            </button>
-
             <!-- Width Toggle Button -->
             <button
               type="button"
@@ -182,7 +181,6 @@
         </div>
 
         <div
-          v-if="!ipc.isElectron()"
           v-show="activeSideTab === 'tasks'"
           class="flex-1 min-h-0 flex flex-col overflow-hidden"
         >
@@ -202,7 +200,6 @@
       ref="confirmRef"
       @confirm="onConfirmExecute"
     />
-    <UpdateDialog ref="updateRef" />
 
     <!-- Toast notifications container -->
     <div class="fixed top-4 right-4 z-[9999] space-y-2 pointer-events-none w-80">
@@ -287,7 +284,6 @@ import ActionBar from '@/components/ActionBar.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 import StashDialog from '@/components/StashDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import UpdateDialog from '@/components/UpdateDialog.vue'
 import { refreshProjects } from '@/composables/useProjects'
 import { setupRunListeners, startRun, stopRun } from '@/composables/usePipeline'
 import { checkLocalChanges } from '@/composables/useProjects'
@@ -328,11 +324,10 @@ interface RunPayload {
 }
 
 const store = useAppStore()
-const activeSideTab = ref<'pipeline' | 'logs' | 'tasks'>('pipeline')
+const activeSideTab = ref<'pipeline' | 'logs' | 'tasks'>('tasks')
 const settingsRef = ref<InstanceType<typeof SettingsDialog> | null>(null)
 const confirmRef = ref<InstanceType<typeof ConfirmDialog> | null>(null)
 const stashRef = ref<InstanceType<typeof StashDialog> | null>(null)
-const updateRef = ref<InstanceType<typeof UpdateDialog> | null>(null)
 const pendingPayload = ref<RunPayload | null>(null)
 const pendingDirtyNames = ref<Set<string>>(new Set())
 
@@ -737,13 +732,6 @@ onMounted(async () => {
       console.warn('Failed to refresh projects on startup:', e)
     }
     setupRunListeners()
-    try {
-      if (updateRef.value) {
-        await updateRef.value.check()
-      }
-    } catch (e) {
-      console.warn('Update check failed on startup:', e)
-    }
   } catch (error) {
     console.error('Failed to initialize:', error)
   }

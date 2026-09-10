@@ -960,14 +960,14 @@
             <div v-show="activeTab === 'preference'" class="space-y-5">
               <div class="border-b border-slate-200/60 pb-3">
                 <h3 class="text-sm font-bold text-slate-800">个性化偏好</h3>
-                <p class="text-xs text-slate-400 mt-0.5">设置构建桌宠进度提示与界面交互行为</p>
+                <p class="text-xs text-slate-400 mt-0.5">设置流水线面板进度助手与并行构建行为</p>
               </div>
 
               <div class="bg-white border border-slate-200/80 rounded-xl p-5 shadow-2xs space-y-4">
                 <div class="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
-                    <div class="text-xs font-semibold text-slate-800">启用打包桌宠进度提示</div>
-                    <div class="text-[11px] text-slate-400 mt-0.5">在点击打包构建时，桌宠将在桌面实时同步展示当前打包阶段与进度气泡</div>
+                    <div class="text-xs font-semibold text-slate-800">启用打包进度助手</div>
+                    <div class="text-[11px] text-slate-400 mt-0.5">在流水线面板中展示当前打包阶段与进度</div>
                   </div>
                   <label class="relative inline-flex items-center cursor-pointer">
                     <input
@@ -1051,7 +1051,7 @@
             <div v-show="activeTab === 'about'" class="space-y-5">
               <div class="border-b border-slate-200/60 pb-3">
                 <h3 class="text-sm font-bold text-slate-800">关于软件</h3>
-                <p class="text-xs text-slate-400 mt-0.5">软件版本信息、更新检查与团队致谢</p>
+                <p class="text-xs text-slate-400 mt-0.5">软件版本信息与团队致谢</p>
               </div>
 
               <!-- Brand & Version Hero Card -->
@@ -1074,23 +1074,7 @@
                   <p class="text-xs text-slate-500 leading-relaxed">
                     专为智慧病房前端工程研发与医院定制化特殊订单交付打造的统一构建、测试与部署工作台。
                   </p>
-                  <div class="pt-2 flex items-center justify-center sm:justify-start gap-3">
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg transition-colors shadow-2xs cursor-pointer disabled:opacity-60"
-                      :disabled="checkingUpdate"
-                      @click="checkUpdateManual"
-                    >
-                      <svg v-if="checkingUpdate" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      {{ checkingUpdate ? '正在检查更新...' : '检查新版本' }}
-                    </button>
-                  </div>
+                  <p class="pt-2 text-[11px] text-slate-400">Web 服务无独立安装包更新，由服务端部署升级。</p>
                 </div>
               </div>
 
@@ -1129,7 +1113,7 @@
                 <div class="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs space-y-2">
                   <div class="flex items-center gap-2 text-xs font-bold text-slate-800">
                     <span class="w-2 h-2 rounded-full bg-emerald-500" />
-                    桌面宠物进度实时反馈
+                    流水线进度实时反馈
                   </div>
                   <p class="text-[11px] text-slate-500 leading-relaxed">
                     像素助手与黑团子桌面悬浮伴侣，构建与发布各个阶段状态可视化提示。
@@ -1221,23 +1205,6 @@ const tabs: { id: TabType; label: string }[] = [
 ]
 
 const appVersion = computed(() => ipc.version || '1.0.4')
-const checkingUpdate = ref(false)
-
-async function checkUpdateManual() {
-  checkingUpdate.value = true
-  try {
-    const res = await ipc.checkForUpdates()
-    if (res.state === 'not-available' || res.state === 'idle') {
-      store.showToast(`当前已是最新版本 (v${appVersion.value})`, 'info')
-    } else if (res.state === 'available') {
-      store.showToast(`发现新版本 v${res.version || ''}，可前往更新`, 'success')
-    }
-  } catch (e: unknown) {
-    store.showToast('检查更新失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
-  } finally {
-    checkingUpdate.value = false
-  }
-}
 
 const showAddProjectModal = ref(false)
 const newProjectName = ref('')

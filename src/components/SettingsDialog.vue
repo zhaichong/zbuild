@@ -653,7 +653,6 @@
 
                 <!-- SVN 凭据 -->
                 <div
-                  v-if="!ipc.isElectron()"
                   class="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700"
                 >
                   此浏览器独立保存 SVN 账号和密码；密码不会回传到页面。

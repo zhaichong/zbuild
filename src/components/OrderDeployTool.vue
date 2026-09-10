@@ -795,25 +795,14 @@ async function onOpenFile(node: SvnTreeNode) {
         })
         store.showToast(`已载入预览: ${node.name}`, 'success')
       } else if (res.filePath) {
-        if (ipc.isWeb || (typeof window !== 'undefined' && !(window as any).tool)) {
-          // Web 模式：自动在浏览器中触发文件下载
-          const downloadUrl = `/api/order-dir/download-file?path=${encodeURIComponent(res.filePath)}`
-          const a = document.createElement('a')
-          a.href = downloadUrl
-          a.download = node.name
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          store.showToast(`已开始下载: ${node.name}`, 'success')
-        } else {
-          // 客户端模式：调用系统原生关联软件打开 (Word/WPS 等)
-          const openRes = await ipc.openPath(res.filePath)
-          if (openRes.success) {
-            store.showToast(`已调用系统程序打开: ${node.name}`, 'success')
-          } else {
-            store.showToast(`打开失败: ${openRes.error || '未找到系统关联程序'}`, 'error')
-          }
-        }
+        const downloadUrl = `/api/order-dir/download-file?path=${encodeURIComponent(res.filePath)}`
+        const a = document.createElement('a')
+        a.href = downloadUrl
+        a.download = node.name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        store.showToast(`已开始下载: ${node.name}`, 'success')
       }
     } else {
       store.showToast(`获取文件失败: ${res.error || '未知错误'}`, 'error')
@@ -879,8 +868,6 @@ async function executeDeploy() {
   activeSideTab.value = 'pipeline'
   store.clearLogs()
   store.resetRunState()
-  deploySuccessCount.value = 0
-  deployFailCount.value = 0
   store.running = true
 
   // Pre-populate projectStates so the pipeline immediately displays selected packages and their stages

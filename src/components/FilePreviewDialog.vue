@@ -60,20 +60,6 @@
               <span>下载</span>
             </button>
 
-            <!-- Open with system default app -->
-            <button
-              v-if="filePath && ipc.isElectron()"
-              type="button"
-              class="px-3 py-1.5 text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              title="使用系统默认程序 (如 Navicat / VSCode / 记事本等) 打开"
-              @click="openInSystem"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-              <span>用系统程序打开</span>
-            </button>
-
             <!-- Close -->
             <button
               class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer ml-1"
@@ -151,7 +137,6 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ipc } from '@/services/ipc'
 import { useAppStore } from '@/stores/appStore'
 
 const store = useAppStore()
@@ -240,17 +225,6 @@ async function downloadFile() {
     store.showToast('已开始下载文件', 'success')
   } catch (err: unknown) {
     store.showToast('下载失败: ' + String(err), 'error')
-  }
-}
-
-async function openInSystem() {
-  if (!filePath.value) return
-  store.showToast('正在调用系统程序打开...', 'info')
-  const res = await ipc.openPath(filePath.value)
-  if (res.success) {
-    store.showToast('已调用系统程序打开文件', 'success')
-  } else {
-    store.showToast('打开失败: ' + (res.error || '未找到关联程序'), 'error')
   }
 }
 

@@ -593,7 +593,6 @@ const emit = defineEmits<{
 }>()
 
 const store = useAppStore()
-const appVersion = computed(() => (ipc.version ? `v${ipc.version}` : 'v1.0.4'))
 const showAddAppModal = ref(false)
 const isEditing = ref(false)
 const editingAppId = ref<string | null>(null)

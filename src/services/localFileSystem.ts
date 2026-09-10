@@ -115,7 +115,7 @@ export async function pickAndStoreLocalDirectory(): Promise<{
  * 获取已授权的目录句柄，如未授权则调起选择器
  */
 export async function getOrPromptDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
-  let handle = await getStoredHandle()
+  const handle = await getStoredHandle()
   if (handle) {
     const hasPermission = await verifyPermission(handle, true).catch(() => false)
     if (hasPermission) {

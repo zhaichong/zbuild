@@ -417,19 +417,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { useAppStore } from '@/stores/appStore'
 import { ipc } from '@/services/ipc'
 import { saveConfig } from '@/composables/useConfig'
 import {
   isFileSystemAccessSupported,
   pickAndStoreLocalDirectory,
-  writeFilesToLocalDirectory,
-  type FileDownloadSpec,
 } from '@/services/localFileSystem'
 import PickerDialog from '@/components/PickerDialog.vue'
 import DevJokeBar from '@/components/DevJokeBar.vue'
-import type { SvnLocationItem } from '@/types'
 
 const store = useAppStore()
 const svnLoading = ref(false)
@@ -438,41 +435,6 @@ const pickerItems = ref<string[]>([])
 const pickerCurrentValue = ref('')
 const pickerTitle = ref('')
 const pickerKind = ref<'hospital' | 'order'>('hospital')
-
-const svnLocationOptions = computed<SvnLocationItem[]>(() => {
-  const locs = store.config?.svnLocations || []
-  if (locs.length > 0) return locs
-  if (store.config?.svnRootUrl) {
-    return [
-      {
-        id: 'loc-default',
-        name: '默认特殊订单库',
-        url: store.config.svnRootUrl,
-        isDefault: true,
-      },
-    ]
-  }
-  return []
-})
-
-function isCurrentSvn(url: string): boolean {
-  const current = (store.config?.svnRootUrl || '').trim().replace(/\/$/, '')
-  const target = (url || '').trim().replace(/\/$/, '')
-  return current === target
-}
-
-function onSelectSvnLocation(loc: SvnLocationItem) {
-  if (!store.config) return
-  if (store.config.svnRootUrl === loc.url) return
-  store.config.svnRootUrl = loc.url
-  if (store.config.svnLocations) {
-    store.config.svnLocations.forEach((item) => {
-      item.isDefault = item.url === loc.url
-    })
-  }
-  saveConfig(store.config).catch((e) => console.warn('Auto save config failed:', e))
-  store.showToast(`已切换至 SVN 目录源: ${loc.name}`, 'info')
-}
 
 const testing = ref(false)
 const testResult = ref<'success' | 'error' | ''>('')

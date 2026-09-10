@@ -212,7 +212,10 @@ class WorkspaceManager:
                         pass
 
             for sibling_name, sibling_path in potential_siblings.items():
-                sibling_link = task_root / _safe_segment(sibling_name)
+                try:
+                    sibling_link = task_root / _safe_segment(sibling_name)
+                except ValueError:
+                    continue
                 if not sibling_link.exists() and sibling_path.exists():
                     # If the sibling is a Git repository, automatically sync/pull the latest code
                     # before mounting to ensure micro-frontend builds get the freshest commits.

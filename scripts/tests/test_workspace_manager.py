@@ -79,6 +79,15 @@ class TestWorkspaceManager(unittest.IsolatedAsyncioTestCase):
                 "task-a", {"projects": [{"name": "other", "branch": "main"}]}
             )
 
+    async def test_non_ascii_sibling_directory_does_not_block_prepare(self):
+        (self.base.parent / "新建文件夹").mkdir()
+
+        prepared, _ = await self.manager.prepare(
+            "task-a", {"projects": [{"name": "demo", "branch": "main"}]}
+        )
+
+        self.assertTrue(Path(prepared["projects"][0]["path"]).is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()

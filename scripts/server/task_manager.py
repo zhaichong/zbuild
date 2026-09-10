@@ -114,9 +114,15 @@ class TaskManager:
                 raise
             except Exception as exc:
                 logger.exception("Task %s failed", task_id)
+                detail = str(exc).strip() or type(exc).__name__
+                message = f"任务准备失败（{type(exc).__name__}）：{detail}"
+                event = self.store.append_event(
+                    task_id, "error", {"type": "error", "message": message}
+                )
+                await self._publish(event)
                 await self._finish(
                     task_id, "failed",
-                    error=f"Task preparation failed ({type(exc).__name__})",
+                    error=message,
                 )
             finally:
                 self._queue.task_done()

@@ -59,6 +59,11 @@ class PassthroughWorkspace:
         return None
 
 
+class FailingWorkspace(PassthroughWorkspace):
+    async def prepare(self, task_id, payload):
+        raise ValueError("invalid workspace detail")
+
+
 async def wait_until(predicate, timeout=2.0):
     deadline = asyncio.get_running_loop().time() + timeout
     while not predicate():
@@ -118,6 +123,21 @@ class TestTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.get_task(task_id)["status"], "cancelled")
         events = self.store.list_events(task_id)
         self.assertTrue(any(event["type"] == "status" for event in events))
+
+    async def test_preparation_failure_is_published_as_detailed_error_log(self):
+        self.manager.workspace = FailingWorkspace()
+        task = await self.manager.submit_task(
+            "req-prepare-failure", "run", "bob", {"projects": [{"name": "demo"}]}
+        )
+
+        await wait_until(lambda: self.store.get_task(task["taskId"])["status"] == "failed")
+
+        error_events = [
+            event for event in self.store.list_events(task["taskId"])
+            if event["type"] == "error"
+        ]
+        self.assertEqual(len(error_events), 1)
+        self.assertIn("invalid workspace detail", error_events[0]["payload"]["message"])
 
 
 if __name__ == "__main__":

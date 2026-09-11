@@ -13,7 +13,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from core.errors import BuildError
-from git.build import build_project, is_ignorable_tar_stat_failure
+from git.build import _command_output_tail, build_project, is_ignorable_tar_stat_failure
 from workflow.step_fns import step_build
 from workflow.steps import StepContext, StepResult
 
@@ -148,6 +148,12 @@ class TestBuildFailure(unittest.TestCase):
 
         self.assertTrue(result.success)
         mock_cache.assert_not_called()
+
+    def test_command_output_tail_keeps_end(self):
+        text = "head\n" + ("x" * 5000) + "\nMicro app 'yarward-nova-ai' build failed"
+        tail = _command_output_tail(text, max_chars=80)
+        self.assertIn("yarward-nova-ai", tail)
+        self.assertLessEqual(len(tail), 80)
 
 
 if __name__ == "__main__":

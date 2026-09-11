@@ -16,6 +16,7 @@ from git.deps import (
     dependency_fingerprint,
     dependency_install_command,
     ensure_dependencies,
+    ensure_micro_frontend_sibling_dependencies,
 )
 
 
@@ -161,6 +162,21 @@ class TestDependencyManagement(unittest.TestCase):
         skipped = ensure_dependencies(self.project_dir)
         self.assertTrue(skipped)
         mock_run.assert_not_called()
+
+    def test_sibling_install_skips_non_web_frontend_hosts(self):
+        called = []
+
+        def fake_ensure(path, **kwargs):
+            called.append(path)
+            return True
+
+        with patch("git.deps.ensure_dependencies", side_effect=fake_ensure):
+            ensure_micro_frontend_sibling_dependencies(
+                self.project_dir,
+                build_command="deploy.sh",
+                branch="3.4.4_台州市中心医院",
+            )
+        self.assertEqual(called, [])
 
 
 if __name__ == "__main__":

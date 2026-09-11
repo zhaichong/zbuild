@@ -160,7 +160,7 @@ def step_install_deps(ctx: StepContext) -> StepResult:
     if not ctx.config.get("auto_install_deps", True):
         return StepResult(success=True, message="跳过依赖安装（已禁用）")
 
-    from git.deps import ensure_dependencies
+    from git.deps import ensure_dependencies, ensure_micro_frontend_sibling_dependencies
     from runner.protocol import emit
     from git.build_cmd import resolve_branch_build_command
 
@@ -168,13 +168,20 @@ def step_install_deps(ctx: StepContext) -> StepResult:
         ctx.extra.get("build_command")
         or resolve_branch_build_command(ctx.config, ctx.project_name, ctx.branch)
     )
+    log_line = lambda line: emit("log", {"level": "info", "message": line, "project": ctx.project_name})
 
     try:
         ensure_dependencies(
             ctx.project_path,
             build_command=build_cmd,
             branch=ctx.branch,
-            on_line=lambda line: emit("log", {"level": "info", "message": line, "project": ctx.project_name}),
+            on_line=log_line,
+        )
+        ensure_micro_frontend_sibling_dependencies(
+            ctx.project_path,
+            build_command=build_cmd,
+            branch=ctx.branch,
+            on_line=log_line,
         )
         return StepResult(success=True, message="依赖安装完成")
     except DependencyError as exc:

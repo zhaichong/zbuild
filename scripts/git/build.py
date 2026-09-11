@@ -22,6 +22,15 @@ _TAR_MISSING_PATH = re.compile(r"^tar: .+: Cannot stat: No such file or director
 _TAR_FAILURE_SUMMARY = "tar: Exiting with failure status due to previous errors"
 
 
+def _command_output_tail(text: Optional[str], max_chars: int = 4000) -> str:
+    """Keep the end of command output so nested micro-app errors remain visible."""
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return text[-max_chars:]
+
+
 def get_commit_sha(project_path: Union[Path, str]) -> str:
     """Return the current HEAD commit SHA."""
     try:
@@ -180,7 +189,7 @@ def build_project(
 
     logger.info("Running build command '%s' in %s", " ".join(run_cmd), project)
 
-    from git.build_cmd import resolve_project_node_version
+    from git.build_cmd import is_micro_frontend_context, resolve_project_node_version
     from git.deps import _node_env
 
     node_ver = resolve_project_node_version(
@@ -190,7 +199,15 @@ def build_project(
         parent_command=parent_command,
         parent_branch=parent_branch,
     )
-    env = _node_env(version=node_ver)
+    env = _node_env(
+        version=node_ver,
+        micro_deploy=is_micro_frontend_context(
+            build_command=build_command,
+            branch=target_branch,
+            parent_command=parent_command,
+            parent_branch=parent_branch,
+        ),
+    )
     if target_branch:
         env["BRANCH_NAME"] = str(target_branch)
         env["BUILD_BRANCH"] = str(target_branch)
@@ -226,7 +243,7 @@ def build_project(
     if result.returncode != 0:
         raise BuildError(
             f"打包命令 '{cmd_str}' 执行失败 (exit {result.returncode}): "
-            f"{result.stdout[-500:] if result.stdout else ''}"
+            f"{_command_output_tail(result.stdout)}"
         )
 
     # Find the newest tar.gz that changed during the build

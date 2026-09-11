@@ -99,12 +99,16 @@ def dependency_install_command(project_path: Union[Path, str], version: str = "1
     return [pm, "install"]
 
 
-def _node_env(version: str = "14") -> Dict[str, str]:
+def _node_env(version: str = "14", *, micro_deploy: bool = False) -> Dict[str, str]:
     """Build environment variables guaranteeing the required Node version on PATH.
 
     Also isolates npm's global prefix so stock ``npm.cmd`` / ``npm`` wrappers
     cannot re-route onto a foreign newer npm (e.g. Volta Node 22 / npm 10)
     when one is present under the user global prefix.
+
+    ``micro_deploy`` keeps the host on Node 14 shims, but drops prefix /
+    ``npm_node_execpath`` pins so child ``volta run --node 22`` builds are not
+    forced onto Node 14.
     """
     from tools.bundled import (
         find_node14_dir,
@@ -237,6 +241,19 @@ def _node_env(version: str = "14") -> Dict[str, str]:
     env["GIFSICLE_BIN_DOWNLOAD_BASE_URL"] = "https://npmmirror.com/mirrors/gifsicle"
     env["CWEBP_BIN_DOWNLOAD_BASE_URL"] = "https://npmmirror.com/mirrors/cwebp-bin"
     env["ELECTRON_MIRROR"] = "https://npmmirror.com/mirrors/electron/"
+
+    if micro_deploy:
+        # Host vue-cli still uses Node 14 shims on PATH. Child micro apps are
+        # launched via `volta run --node 22 ... npm`; inherited npm_node_execpath
+        # / isolated prefix would make npm 10 execute under Node 14.
+        for key in ("npm_node_execpath", "npm_config_prefix", "NPM_CONFIG_PREFIX"):
+            env.pop(key, None)
+        node22_dir = find_node22_dir()
+        node22_exe = bundled_node("22")
+        if node22_exe:
+            env["NODE22_EXE"] = node22_exe
+        if node22_dir:
+            env["NODE22_DIR"] = str(node22_dir)
 
     return env
 
@@ -506,3 +523,39 @@ def ensure_dependencies(
         raise
     except Exception as exc:
         raise DependencyError(f"Dependency install error: {exc}") from exc
+
+
+def ensure_micro_frontend_sibling_dependencies(
+    host_project_path: Union[Path, str],
+    *,
+    build_command: str = "",
+    branch: str = "",
+    on_line: Optional[callable] = None,
+) -> None:
+    """Install Node 22 dependencies for sibling micro apps used by deploy-micro.sh."""
+    from git.build_cmd import MICRO_APPS, is_web_frontend_micro_branch
+
+    host_path = Path(host_project_path)
+    cmd = (build_command or "").lower()
+    if "deploy-micro.sh" not in cmd and not is_web_frontend_micro_branch(host_path.name, branch):
+        return
+
+    parent = host_path.resolve().parent
+    for name in sorted(MICRO_APPS):
+        sibling = parent / name
+        if not (sibling / "package.json").is_file():
+            continue
+        try:
+            sibling = sibling.resolve()
+        except OSError:
+            pass
+        if on_line:
+            on_line(f"安装微前端依赖: {name} (Node 22)")
+        ensure_dependencies(
+            sibling,
+            build_command=build_command,
+            branch=branch,
+            parent_command=build_command,
+            parent_branch=branch,
+            on_line=on_line,
+        )

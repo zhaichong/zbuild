@@ -145,51 +145,7 @@ class WorkspaceManager:
                     sha = await asyncio.to_thread(
                         self._prepare_one, base_repo, branch, worktree
                     )
-                # Link persistent node_modules cache for frontend/JS projects with multi-version fingerprint slot
-                from git.deps import compute_deps_slot_key
-                slot_key = compute_deps_slot_key(worktree)
-                deps_project_root = self.deps_cache_root / _safe_segment(name)
-                deps_slot_dir = deps_project_root / slot_key
-                deps_cache_dir = deps_slot_dir / "node_modules"
-                deps_slot_dir.mkdir(parents=True, exist_ok=True)
-
-                # Update slot access timestamp for LRU cache pruning
-                try:
-                    (deps_slot_dir / ".last_accessed").write_text(str(int(asyncio.get_event_loop().time())), encoding="utf-8")
-                except Exception:
-                    pass
-
-                _create_dir_link(worktree / "node_modules", deps_cache_dir)
-
-                # Synchronize project manifest and loader configs to deps_slot_dir
-                # so that loaders (postcss-loader, babel-loader) resolving realpath in
-                # node_modules can correctly discover the project's configs during compilation
-                for cfg_name in (
-                    "package.json",
-                    "package-lock.json",
-                    "postcss.config.js",
-                    ".postcssrc",
-                    ".postcssrc.js",
-                    ".postcssrc.json",
-                    "babel.config.js",
-                    ".babelrc",
-                    ".browserslistrc",
-                ):
-                    src_file = worktree / cfg_name
-                    if src_file.is_file():
-                        try:
-                            shutil.copy2(src_file, deps_slot_dir / cfg_name)
-                        except Exception:
-                            pass
-                # Fallback postcss.config.js if none exists so postcss-load-config won't fail
-                if not (deps_slot_dir / "postcss.config.js").exists() and not (deps_slot_dir / ".postcssrc").exists() and not (deps_slot_dir / ".postcssrc.js").exists():
-                    try:
-                        (deps_slot_dir / "postcss.config.js").write_text(
-                            "module.exports = { plugins: [require('autoprefixer')()] };\n",
-                            encoding="utf-8",
-                        )
-                    except Exception:
-                        pass
+                self._attach_deps_cache(name, worktree)
 
                 project["path"] = str(worktree)
                 metadata.append({
@@ -211,20 +167,63 @@ class WorkspaceManager:
                     except Exception:
                         pass
 
+            host_branch = ""
+            for project in projects:
+                if isinstance(project, dict) and project.get("branch"):
+                    host_branch = str(project.get("branch") or "")
+                    break
+
+            from git.build_cmd import MICRO_APPS
+
             for sibling_name, sibling_path in potential_siblings.items():
                 try:
                     sibling_link = task_root / _safe_segment(sibling_name)
                 except ValueError:
                     continue
-                if not sibling_link.exists() and sibling_path.exists():
-                    # If the sibling is a Git repository, automatically sync/pull the latest code
-                    # before mounting to ensure micro-frontend builds get the freshest commits.
-                    if (sibling_path / ".git").exists() and prepared.get("auto_pull", True):
-                        self._sync_sibling_repo(sibling_path, target_branch=projects[0].get("branch", "") if projects else "")
-                    try:
-                        _create_dir_link(sibling_link, sibling_path)
-                    except Exception:
-                        pass
+                if sibling_link.exists() or not sibling_path.exists():
+                    continue
+
+                is_git = (sibling_path / ".git").exists()
+                # Vite micro apps cannot be mounted as junctions: Node ESM resolves
+                # vite.config.ts through the real path while cwd stays on the junction,
+                # producing `fileName must be neither absolute nor relative`.
+                # Use a real detached worktree, matching how 3.5.0 packs against a
+                # physical checkout instead of a Windows directory junction.
+                if sibling_name.lower() in MICRO_APPS and is_git:
+                    sibling_repo = sibling_path.resolve()
+                    lock = self._repo_locks.setdefault(sibling_repo, asyncio.Lock())
+                    async with lock:
+                        try:
+                            sha, used_branch = await asyncio.to_thread(
+                                self._prepare_sibling_worktree,
+                                sibling_repo,
+                                host_branch,
+                                sibling_link,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Failed to create micro-frontend worktree for %s: %s",
+                                sibling_name,
+                                exc,
+                            )
+                            continue
+                    self._attach_deps_cache(sibling_name, sibling_link)
+                    metadata.append({
+                        "name": sibling_name,
+                        "branch": used_branch,
+                        "sha": sha,
+                        "baseRepo": str(sibling_repo),
+                        "worktree": str(sibling_link),
+                        "role": "micro-sibling",
+                    })
+                    continue
+
+                if is_git and prepared.get("auto_pull", True):
+                    self._sync_sibling_repo(sibling_path, target_branch=host_branch)
+                try:
+                    _create_dir_link(sibling_link, sibling_path)
+                except Exception:
+                    pass
 
             (task_root / "workspace.json").write_text(
                 json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -239,6 +238,79 @@ class WorkspaceManager:
             {"name": item["name"], "branch": item["branch"], "sha": item["sha"]}
             for item in metadata
         ]
+
+    def _attach_deps_cache(self, name: str, worktree: Path) -> None:
+        """Junction a persistent node_modules cache into a worktree."""
+        from git.deps import compute_deps_slot_key
+
+        slot_key = compute_deps_slot_key(worktree)
+        deps_slot_dir = self.deps_cache_root / _safe_segment(name) / slot_key
+        deps_slot_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (deps_slot_dir / ".last_accessed").write_text(
+                str(int(asyncio.get_event_loop().time())), encoding="utf-8"
+            )
+        except Exception:
+            pass
+        _create_dir_link(worktree / "node_modules", deps_slot_dir / "node_modules")
+        for cfg_name in (
+            "package.json",
+            "package-lock.json",
+            "postcss.config.js",
+            ".postcssrc",
+            ".postcssrc.js",
+            ".postcssrc.json",
+            "babel.config.js",
+            ".babelrc",
+            ".browserslistrc",
+        ):
+            src_file = worktree / cfg_name
+            if src_file.is_file():
+                try:
+                    shutil.copy2(src_file, deps_slot_dir / cfg_name)
+                except Exception:
+                    pass
+        if (
+            not (deps_slot_dir / "postcss.config.js").exists()
+            and not (deps_slot_dir / ".postcssrc").exists()
+            and not (deps_slot_dir / ".postcssrc.js").exists()
+        ):
+            try:
+                (deps_slot_dir / "postcss.config.js").write_text(
+                    "module.exports = { plugins: [require('autoprefixer')()] };\n",
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+
+    def _prepare_sibling_worktree(
+        self, base_repo: Path, target_branch: str, worktree: Path
+    ) -> Tuple[str, str]:
+        """Create a detached worktree for a micro-frontend sibling repo.
+
+        Prefers origin/<host-branch> (same as 3.5.0 hospital packs), then HEAD.
+        Returns (sha, branch_used).
+        """
+        self._run_git("fetch", "--prune", "origin", cwd=base_repo)
+        sha = ""
+        branch_used = (target_branch or "").strip()
+        if branch_used:
+            try:
+                self._run_git("fetch", "--prune", "origin", branch_used, cwd=base_repo)
+                sha = self._run_git(
+                    "rev-parse", f"refs/remotes/origin/{branch_used}^{{commit}}", cwd=base_repo
+                )
+            except Exception:
+                sha = ""
+        if not sha:
+            sha = self._run_git("rev-parse", "HEAD", cwd=base_repo)
+            try:
+                current = self._run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=base_repo).strip()
+                branch_used = current if current and current != "HEAD" else branch_used or "HEAD"
+            except Exception:
+                branch_used = branch_used or "HEAD"
+        self._run_git("worktree", "add", "--detach", str(worktree), sha, cwd=base_repo)
+        return sha, branch_used
 
     def _sync_sibling_repo(self, repo_path: Path, target_branch: str = "") -> None:
         """Fetch and pull the freshest commits for a sibling micro-frontend repo.
@@ -345,7 +417,7 @@ class WorkspaceManager:
             worktree = Path(item.get("worktree", ""))
             # Safely detach node_modules junction/symlink before deleting worktree
             _remove_dir_link(worktree / "node_modules")
-            if base_repo in self.projects.values() and worktree.exists():
+            if worktree.exists() and base_repo.exists():
                 try:
                     await asyncio.to_thread(
                         self._run_git, "worktree", "remove", "--force", str(worktree),

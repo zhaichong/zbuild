@@ -106,7 +106,7 @@ def sync_micro_frontend_siblings(
             # 2. Fetch remote updates
             run_process(git + ["fetch", "--prune", "origin"], timeout=60)
 
-            # 3. Check if target branch exists on origin (e.g. 3.5.0)
+            # 3. Check if target branch exists on origin (e.g. 3.4.4_医院)
             branch_to_use = ""
             if target_branch:
                 chk = run_process(git + ["rev-parse", "--verify", f"origin/{target_branch}"], timeout=10)

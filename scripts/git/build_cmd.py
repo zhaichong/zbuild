@@ -22,6 +22,11 @@ from core.errors import BuildError
 
 logger = logging.getLogger(__name__)
 
+WEB_FRONTEND_PROJECT = "yarward-web-frontend"
+WEB_FRONTEND_MICRO_MIN_VERSION = (3, 4, 4)
+WEB_FRONTEND_MICRO_COMMAND = "deploy-micro.sh"
+_BRANCH_VERSION_RE = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?")
+
 # First token must be one of these basenames (case-insensitive) when not a project script.
 _ALLOWED_RUNNERS = frozenset({
     "npm", "npm.cmd", "npm.exe",
@@ -254,6 +259,50 @@ def resolve_run_argv(
     return argv, cmd_str
 
 
+def parse_branch_version(branch: str) -> Optional[Tuple[int, int, int]]:
+    """Parse a leading x.y or x.y.z version from a branch name."""
+    text = (branch or "").strip()
+    if not text:
+        return None
+    match = _BRANCH_VERSION_RE.match(text)
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3) or 0))
+
+
+def _project_basename(project_name: str) -> str:
+    return Path(str(project_name).replace("\\", "/")).name.lower()
+
+
+def is_web_frontend_project(project_name: str) -> bool:
+    return _project_basename(project_name) == WEB_FRONTEND_PROJECT
+
+
+def branch_meets_micro_version(branch: str) -> bool:
+    version = parse_branch_version(branch)
+    return version is not None and version >= WEB_FRONTEND_MICRO_MIN_VERSION
+
+
+def is_web_frontend_micro_branch(project_name: str, branch: str = "") -> bool:
+    return is_web_frontend_project(project_name) and branch_meets_micro_version(branch)
+
+
+def _project_default_build_command(config: dict, project_name: str) -> str:
+    proj_cmds = config.get("build_commands", {})
+    if isinstance(proj_cmds, dict):
+        if project_name in proj_cmds and proj_cmds[project_name]:
+            return str(proj_cmds[project_name]).strip()
+        for p_key, cmd in proj_cmds.items():
+            if isinstance(p_key, str) and p_key.lower() == str(project_name).lower() and cmd:
+                return str(cmd).strip()
+
+    global_cmd = config.get("build_command") or config.get("buildCommand")
+    if global_cmd and str(global_cmd).strip():
+        return str(global_cmd).strip()
+
+    return "deploy.sh"
+
+
 def resolve_branch_build_command(
     config: dict,
     project_name: str,
@@ -261,7 +310,12 @@ def resolve_branch_build_command(
 ) -> str:
     """Resolve build command for a specific project and branch from configuration."""
     if not isinstance(config, dict):
-        return "deploy.sh"
+        return WEB_FRONTEND_MICRO_COMMAND if is_web_frontend_micro_branch(project_name, branch) else "deploy.sh"
+
+    if is_web_frontend_project(project_name):
+        if branch_meets_micro_version(branch):
+            return WEB_FRONTEND_MICRO_COMMAND
+        return _project_default_build_command(config, project_name)
 
     import fnmatch
 
@@ -290,21 +344,7 @@ def resolve_branch_build_command(
             if cmd and (fnmatch.fnmatch(str(branch).lower(), str(pattern).lower()) or (str(pattern).endswith("*") and str(branch).startswith(str(pattern)[:-1]))):
                 return str(cmd).strip()
 
-    # Fallback to project-level build command
-    proj_cmds = config.get("build_commands", {})
-    if isinstance(proj_cmds, dict):
-        if project_name in proj_cmds and proj_cmds[project_name]:
-            return str(proj_cmds[project_name]).strip()
-        for p_key, cmd in proj_cmds.items():
-            if isinstance(p_key, str) and p_key.lower() == str(project_name).lower() and cmd:
-                return str(cmd).strip()
-
-    # Fallback to global build command
-    global_cmd = config.get("build_command") or config.get("buildCommand")
-    if global_cmd and str(global_cmd).strip():
-        return str(global_cmd).strip()
-
-    return "deploy.sh"
+    return _project_default_build_command(config, project_name)
 
 
 MICRO_APPS = frozenset({"yarward-micro-menu", "yarward-nova-ai"})
@@ -319,15 +359,11 @@ def is_micro_frontend_context(
     """Return True when this run is a composite micro-frontend build."""
     cmd_norm = (build_command or "").strip().lower()
     p_cmd_norm = (parent_command or "").strip().lower()
-    branch_norm = (branch or "").strip()
-    p_branch_norm = (parent_branch or "").strip()
     return (
         "deploy-micro.sh" in cmd_norm
         or "deploy-micro.sh" in p_cmd_norm
-        or branch_norm == "3.5.0"
-        or branch_norm.startswith("3.5.0")
-        or p_branch_norm == "3.5.0"
-        or p_branch_norm.startswith("3.5.0")
+        or branch_meets_micro_version(branch)
+        or branch_meets_micro_version(parent_branch)
     )
 
 
@@ -342,11 +378,11 @@ def resolve_project_node_version(
 
     Rules:
     - Default is Node 14 across the entire system.
-    - yarward-web-frontend always uses Node 14 even when on branch 3.5.0 or deploy-micro.sh.
+    - yarward-web-frontend always uses Node 14 even when on 3.4.4+ or deploy-micro.sh.
     - zhbf-bedhead-frontend and all regular frontend projects always use Node 14.
     - Micro frontends (yarward-micro-menu, yarward-nova-ai) use Node 22 ONLY when
       in a micro-frontend deploy context (e.g. build_command / parent_command has
-      deploy-micro.sh or branch / parent_branch is 3.5.0).
+      deploy-micro.sh or branch / parent_branch version is >= 3.4.4).
     """
     proj_norm = Path(str(project_name).replace("\\", "/")).name.lower()
     if proj_norm in MICRO_APPS and is_micro_frontend_context(

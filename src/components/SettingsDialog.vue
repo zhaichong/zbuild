@@ -321,7 +321,7 @@
                           <span class="w-1.5 h-1.5 rounded-full bg-blue-600" />
                           分支专属打包命令 (优先级高于项目默认)
                         </span>
-                        <span class="text-slate-400 text-[10px]">支持精确分支名或通配符 (如 release/*)</span>
+                        <span class="text-slate-400 text-[10px]">支持精确分支名或通配符；yarward-web-frontend 在 3.4.4+ 固定使用 deploy-micro.sh</span>
                       </div>
 
                       <!-- Existing branch rules -->

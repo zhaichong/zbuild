@@ -11,6 +11,7 @@ import type {
   UploadMode,
   ToastInfo,
 } from '@/types'
+import { resolveEffectiveBuildCommand } from '@/utils/buildCommand'
 
 export const useAppStore = defineStore('app', () => {
   const config = ref<AppConfig | null>(null)
@@ -121,26 +122,11 @@ export const useAppStore = defineStore('app', () => {
 
   function getEffectiveBuildCommand(projectName: string, branch?: string): string {
     const targetBranch = branch || projectBranches.value[projectName] || ''
-    const branchCmds = config.value?.branchBuildCommands?.[projectName]
-    if (branchCmds && targetBranch) {
-      if (branchCmds[targetBranch]) {
-        return branchCmds[targetBranch]
-      }
-      for (const [pattern, cmd] of Object.entries(branchCmds)) {
-        if (pattern.endsWith('*')) {
-          const prefix = pattern.slice(0, -1)
-          if (targetBranch.startsWith(prefix)) {
-            return cmd
-          }
-        }
-      }
-    }
-    return (
-      config.value?.buildCommands?.[projectName] ||
-      projectBuildCommands.value[projectName] ||
-      config.value?.buildCommand ||
-      'deploy.sh'
-    )
+    return resolveEffectiveBuildCommand(projectName, targetBranch, {
+      branchCommands: config.value?.branchBuildCommands?.[projectName],
+      projectCommand: config.value?.buildCommands?.[projectName] || projectBuildCommands.value[projectName],
+      globalCommand: config.value?.buildCommand,
+    })
   }
 
   return {

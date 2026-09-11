@@ -167,7 +167,7 @@ def build_project(
     build_start = time.time()
 
     # Auto-synchronize sibling micro-frontend projects before build execution
-    # when running a micro-frontend deploy script (e.g. deploy-micro.sh) or on branch 3.5.0
+    # when running a micro-frontend deploy script (e.g. deploy-micro.sh) or on 3.4.4+
     from git.sync import sync_micro_frontend_siblings
     try:
         sync_micro_frontend_siblings(

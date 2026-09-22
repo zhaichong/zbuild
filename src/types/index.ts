@@ -65,6 +65,8 @@ export interface SvnLocationItem {
   name: string
   url: string
   isDefault?: boolean
+  isSystem?: boolean
+  username?: string
 }
 
 export interface AppConfig {

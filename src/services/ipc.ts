@@ -64,7 +64,8 @@ export const ipc = {
     url: string,
     username: string,
     password: string,
-  ): Promise<string[]> => webApi.svnList(svn, url, username, password),
+    svnLocations?: any[],
+  ): Promise<string[]> => webApi.svnList(svn, url, username, password, svnLocations),
 
   testServer: (
     serverAddress: string,
@@ -79,6 +80,7 @@ export const ipc = {
     svnUsername?: string
     svnPassword?: string
     serverUploadPaths?: Record<string, string>
+    svnLocations?: any[]
   }): Promise<{
     success: boolean
     tree: any[]
@@ -94,6 +96,7 @@ export const ipc = {
     svnUsername?: string
     svnPassword?: string
     forceNative?: boolean
+    svnLocations?: any[]
   }): Promise<{
     success: boolean
     filePath?: string
@@ -186,4 +189,42 @@ export const ipc = {
     logs?: string
     error?: string
   }> => webApi.executeDbSql(payload),
+
+  getAdbDevices: (): Promise<{ success: boolean; devices: any[] }> => webApi.getAdbDevices(),
+
+  connectAdb: (target: string): Promise<{ success: boolean; target: string; output: string }> =>
+    webApi.connectAdb(target),
+
+  disconnectAdb: (serial: string): Promise<{ success: boolean; serial: string; output: string }> =>
+    webApi.disconnectAdb(serial),
+
+  browseSvn: (payload: { url: string; subpath?: string; username?: string; password?: string }): Promise<{
+    success: boolean
+    error?: string
+    currentPath: string
+    fullUrl?: string
+    directories: any[]
+    apks: any[]
+    otherFiles: any[]
+    totalApks: number
+  }> => webApi.browseSvn(payload),
+
+  searchSvnApk: (payload: { url: string; subpath?: string; keyword?: string; username?: string; password?: string }): Promise<{
+    success: boolean
+    error?: string
+    apks: any[]
+    count: number
+  }> => webApi.searchSvnApk(payload),
+
+  installAdbApk: (payload: {
+    url: string
+    apkPath: string
+    serial: string
+    reinstall?: boolean
+    autoReinstallOnIncompatible?: boolean
+    launchAfterInstall?: boolean
+    username?: string
+    password?: string
+  }): Promise<{ success: boolean; error?: string; logs: string[]; filename?: string }> =>
+    webApi.installAdbApk(payload),
 }

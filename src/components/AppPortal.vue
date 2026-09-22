@@ -674,6 +674,17 @@ const defaultApps: PortalApp[] = [
     status: 'active',
     statusLabel: '核心内置',
   },
+  {
+    id: 'apk-installer',
+    name: 'SVN APK 在线设备安装助手',
+    description: '从 SVN 仓库检索应用 APK，支持无线 Wi-Fi / USB ADB 连接真机并在线一键安装与启动。',
+    icon: '🤖',
+    iconType: 'deploy',
+    category: '核心构建',
+    tags: ['SVN APK', '无线 ADB', '大屏安装', '一键直装'],
+    status: 'active',
+    statusLabel: '全新推出',
+  },
 ]
 
 // Load custom apps from localStorage
@@ -715,6 +726,9 @@ function getCardBannerBg(app: PortalApp): string {
   }
   if (app.id === 'order-deploy') {
     return 'bg-gradient-to-b from-emerald-50/80 via-emerald-50/30 to-white'
+  }
+  if (app.id === 'apk-installer') {
+    return 'bg-gradient-to-b from-teal-50/80 via-teal-50/30 to-white'
   }
   if (app.id === 'mock-query') {
     return 'bg-gradient-to-b from-amber-50/80 via-amber-50/30 to-white'
@@ -789,7 +803,7 @@ function onSvnModalSuccess(appId: string) {
 
 async function onLaunchApp(app: PortalApp) {
   // SVN 核心应用校验 SVN 账户
-  const svnRequiredApps = ['zbuild', 'order-deploy', 'order-build-upload']
+  const svnRequiredApps = ['zbuild', 'order-deploy', 'order-build-upload', 'apk-installer']
   if (svnRequiredApps.includes(app.id)) {
     if (!hasSvnAccount()) {
       svnModalRef.value?.show({
@@ -806,6 +820,8 @@ async function onLaunchApp(app: PortalApp) {
     emit('launch-app', 'order-deploy')
   } else if (app.id === 'order-build-upload') {
     emit('launch-app', 'order-build-upload')
+  } else if (app.id === 'apk-installer') {
+    emit('launch-app', 'apk-installer')
   } else if (app.id === 'mock-query') {
     emit('launch-app', 'mock-query')
   } else if (app.id.startsWith('custom-')) {

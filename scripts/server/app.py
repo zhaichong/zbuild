@@ -31,6 +31,7 @@ from server.task_store import TaskStore
 from server.task_routes import register_task_routes
 from server.workspace import WorkspaceManager
 from core.constants import DEFAULT_SVN_ROOT
+from server import adb_service, svn_browser
 
 
 logging.basicConfig(
@@ -43,7 +44,7 @@ PROFILE_COOKIE = "zbuild_profile"
 PROFILE_CONFIG_KEYS = (
     "mode", "server", "selected_projects", "project_branches", "hospital_name", "order_no",
     "order_notes", "create_order_dir", "svn_credentials", "svn_upload_directory",
-    "artifact_paths", "project_artifact_paths", "local_output", "order_dir_path",
+    "artifact_paths", "project_artifact_paths", "local_output", "order_dir_path", "svn_locations",
 )
 
 
@@ -80,8 +81,23 @@ def _execution_config(system_config: Dict[str, Any], profile_config: Dict[str, A
     value.pop("svn_credentials", None)
     value.pop("server", None)
     for key in PROFILE_CONFIG_KEYS:
+        if key == "svn_locations":
+            continue
         if key in profile_config:
             value[key] = profile_config[key]
+
+    # Merge system svn_locations with profile personal svn_locations
+    system_locations = list(value.get("svn_locations") or [])
+    profile_locations = profile_config.get("svn_locations") or []
+    existing_urls = {unquote(str(l.get("url", "") or "")).rstrip("/") for l in system_locations if isinstance(l, dict)}
+    for ploc in profile_locations:
+        if isinstance(ploc, dict) and ploc.get("url"):
+            norm_url = unquote(str(ploc.get("url", "") or "")).rstrip("/")
+            if norm_url and norm_url not in existing_urls:
+                existing_urls.add(norm_url)
+                system_locations.append(ploc)
+    value["svn_locations"] = system_locations
+
     return value
 
 
@@ -91,10 +107,41 @@ def _config_view(system_public: Dict[str, Any], profile_public: Dict[str, Any]) 
     # configuration. Artifact-directory defaults may inherit until this browser
     # saves its own choice.
     for key in PROFILE_CONFIG_KEYS:
-        if key in {"artifact_paths", "project_artifact_paths", "svn_upload_directory", "local_output", "order_dir_path"}:
+        if key in {"artifact_paths", "project_artifact_paths", "svn_upload_directory", "local_output", "order_dir_path", "svn_locations"}:
             continue
         value.pop(key, None)
-    value.update(profile_public.get("config") or {})
+    value.update({k: v for k, v in (profile_public.get("config") or {}).items() if k != "svn_locations"})
+
+    # Ensure system svn_locations have isSystem=True and cannot be removed/modified by users
+    system_locations = list(value.get("svn_locations") or [])
+    has_system_default = False
+    for loc in system_locations:
+        if isinstance(loc, dict):
+            loc["isSystem"] = True
+            if loc.get("isDefault") or loc.get("url") == DEFAULT_SVN_ROOT:
+                has_system_default = True
+    if not has_system_default and DEFAULT_SVN_ROOT:
+        system_locations.insert(0, {
+            "id": "loc-default",
+            "name": "默认特殊订单库",
+            "url": DEFAULT_SVN_ROOT,
+            "isDefault": True,
+            "isSystem": True,
+        })
+
+    # Merge personal svn_locations from profile
+    profile_locations = (profile_public.get("config") or {}).get("svn_locations") or []
+    existing_urls = {unquote(str(l.get("url", "") or "")).rstrip("/") for l in system_locations if isinstance(l, dict)}
+    for ploc in profile_locations:
+        if isinstance(ploc, dict) and ploc.get("url"):
+            norm_url = unquote(str(ploc.get("url", "") or "")).rstrip("/")
+            if norm_url and norm_url not in existing_urls:
+                existing_urls.add(norm_url)
+                ploc_copy = dict(ploc)
+                ploc_copy["isSystem"] = False
+                system_locations.append(ploc_copy)
+    value["svn_locations"] = system_locations
+
     status = dict(system_public.get("secretStatus") or {})
     status["svnPassword"] = bool((profile_public.get("secretStatus") or {}).get("svnPassword"))
     status["serverPassword"] = bool((profile_public.get("secretStatus") or {}).get("serverPassword"))
@@ -102,18 +149,43 @@ def _config_view(system_public: Dict[str, Any], profile_public: Dict[str, Any]) 
 
 
 def _assert_allowed_svn_url(url: object, execution_config: Dict[str, Any]) -> None:
-    """Only permit SVN endpoints administered in the server configuration."""
-    candidate = unquote(str(url or "")).rstrip("/")
+    """Only permit SVN endpoints administered in the server configuration or user profiles."""
+    raw = unquote(str(url or "")).strip().rstrip("/")
+    if not raw:
+        return
+    candidate = svn_browser.normalize_svn_url(raw)
+
     roots = [execution_config.get("svn_root", ""), DEFAULT_SVN_ROOT]
     roots.extend(
         item.get("url", "") for item in execution_config.get("svn_locations", [])
         if isinstance(item, dict)
     )
     roots.extend((execution_config.get("project_svn_roots") or {}).values())
+
     for root in roots:
-        normalized = unquote(str(root or "")).rstrip("/")
+        normalized = svn_browser.normalize_svn_url(unquote(str(root or "")).strip().rstrip("/"))
         if normalized and (candidate == normalized or candidate.startswith(normalized + "/")):
             return
+
+    # Same SVN server host check: Allow any repository hosted on the same SVN server as DEFAULT_SVN_ROOT / svn_root
+    try:
+        from urllib.parse import urlparse
+        cand_p = urlparse(candidate)
+        for root in roots:
+            normalized = unquote(str(root or "")).strip().rstrip("/")
+            if not normalized:
+                continue
+            root_p = urlparse(normalized)
+            if (
+                cand_p.scheme in ("http", "https", "svn")
+                and cand_p.scheme == root_p.scheme
+                and cand_p.netloc.lower() == root_p.netloc.lower()
+                and (root_p.path.startswith("/svn") and cand_p.path.startswith("/svn"))
+            ):
+                return
+    except Exception:
+        pass
+
     raise ValueError("SVN 地址不在服务端配置的目录范围内")
 
 
@@ -436,6 +508,20 @@ async def handle_affected_detect_staged(request: web.Request) -> web.Response:
     })
 
 
+def _merge_payload_svn_locations(payload: Dict[str, Any], execution_config: Dict[str, Any]) -> None:
+    client_locs = payload.get("svnLocations") or payload.get("svn_locations")
+    if isinstance(client_locs, list):
+        curr_locs = list(execution_config.get("svn_locations") or [])
+        curr_urls = {unquote(str(l.get("url", "") or "")).rstrip("/") for l in curr_locs if isinstance(l, dict)}
+        for cl in client_locs:
+            if isinstance(cl, dict) and cl.get("url"):
+                norm = unquote(str(cl.get("url", "") or "")).rstrip("/")
+                if norm and norm not in curr_urls:
+                    curr_urls.add(norm)
+                    curr_locs.append(cl)
+        execution_config["svn_locations"] = curr_locs
+
+
 async def handle_svn_list(request: web.Request) -> web.Response:
     payload = await request.json()
     if not isinstance(payload, dict):
@@ -445,6 +531,7 @@ async def handle_svn_list(request: web.Request) -> web.Response:
     # server-side secret before invoking SVN, while preserving newly entered
     # credentials from the client.
     execution_config = request.app["execution_config"](request)
+    _merge_payload_svn_locations(payload, execution_config)
     _assert_allowed_svn_url(payload.get("url"), execution_config)
     payload["svn"] = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
     stored_credentials = execution_config.get(
@@ -495,6 +582,7 @@ async def handle_order_deploy_list(request: web.Request) -> web.Response:
         raise ValueError("Request body must be an object")
 
     execution_config = request.app["execution_config"](request)
+    _merge_payload_svn_locations(payload, execution_config)
     _assert_allowed_svn_url(payload.get("svnUrl") or payload.get("url"), execution_config)
     payload["svn"] = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
     stored_credentials = execution_config.get(
@@ -514,6 +602,7 @@ async def handle_order_deploy_open_file(request: web.Request) -> web.Response:
         raise ValueError("Request body must be an object")
 
     execution_config = request.app["execution_config"](request)
+    _merge_payload_svn_locations(payload, execution_config)
     _assert_allowed_svn_url(payload.get("fileUrl") or payload.get("url"), execution_config)
     payload["svn"] = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
     stored_credentials = execution_config.get(
@@ -639,6 +728,188 @@ async def handle_ztools_download(request: web.Request) -> web.StreamResponse:
         "Access-Control-Expose-Headers": "Content-Disposition",
     }
     return web.FileResponse(installer, headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# ADB and SVN APK Installer Handlers
+# ---------------------------------------------------------------------------
+
+async def handle_adb_devices(request: web.Request) -> web.Response:
+    execution_config = request.app["execution_config"](request)
+    adb_bin = (execution_config.get("tools") or {}).get("adb")
+    devices = await adb_service.list_devices(adb_bin)
+    return web.json_response({"success": True, "devices": devices})
+
+
+async def handle_adb_connect(request: web.Request) -> web.Response:
+    payload = await request.json()
+    if not isinstance(payload, dict) or not payload.get("target"):
+        raise ValueError("缺少 target 参数 (IP:PORT)")
+    execution_config = request.app["execution_config"](request)
+    adb_bin = (execution_config.get("tools") or {}).get("adb")
+    result = await adb_service.connect_device(payload["target"], adb_path=adb_bin)
+    return web.json_response(result)
+
+
+async def handle_adb_disconnect(request: web.Request) -> web.Response:
+    payload = await request.json()
+    if not isinstance(payload, dict) or not payload.get("serial"):
+        raise ValueError("缺少 serial 参数")
+    execution_config = request.app["execution_config"](request)
+    adb_bin = (execution_config.get("tools") or {}).get("adb")
+    result = await adb_service.disconnect_device(payload["serial"], adb_path=adb_bin)
+    return web.json_response(result)
+
+
+async def handle_svn_browse(request: web.Request) -> web.Response:
+    payload = await request.json()
+    if not isinstance(payload, dict) or not payload.get("url"):
+        raise ValueError("缺少 SVN 仓库 URL")
+
+    execution_config = request.app["execution_config"](request)
+    _merge_payload_svn_locations(payload, execution_config)
+    url = payload.get("url")
+    _assert_allowed_svn_url(url, execution_config)
+
+    svn_bin = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
+    subpath = payload.get("subpath", "")
+
+    stored_credentials = execution_config.get("svn_credentials", {})
+    username = payload.get("username")
+    if username in (None, "", "[configured]"):
+        username = stored_credentials.get("username", "")
+
+    password = payload.get("password")
+    if password in (None, "", "[configured]"):
+        password = stored_credentials.get("password", "")
+
+    res = await svn_browser.browse_directory(
+        base_url=url,
+        subpath=subpath,
+        username=username,
+        password=password,
+        svn_bin=svn_bin,
+    )
+    return web.json_response(res)
+
+
+async def handle_svn_search_apk(request: web.Request) -> web.Response:
+    payload = await request.json()
+    if not isinstance(payload, dict) or not payload.get("url"):
+        raise ValueError("缺少 SVN 仓库 URL")
+
+    execution_config = request.app["execution_config"](request)
+    _merge_payload_svn_locations(payload, execution_config)
+    url = payload.get("url")
+    _assert_allowed_svn_url(url, execution_config)
+
+    svn_bin = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
+    subpath = payload.get("subpath", "")
+    keyword = payload.get("keyword", "")
+
+    stored_credentials = execution_config.get("svn_credentials", {})
+    username = payload.get("username")
+    if username in (None, "", "[configured]"):
+        username = stored_credentials.get("username", "")
+
+    password = payload.get("password")
+    if password in (None, "", "[configured]"):
+        password = stored_credentials.get("password", "")
+
+    res = await svn_browser.search_apks_recursive(
+        base_url=url,
+        subpath=subpath,
+        keyword=keyword,
+        username=username,
+        password=password,
+        svn_bin=svn_bin,
+    )
+    return web.json_response(res)
+
+
+async def handle_adb_install(request: web.Request) -> web.Response:
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be an object")
+
+    url = payload.get("url", "")
+    apk_path = payload.get("apkPath", "")
+    serial = payload.get("serial", "")
+    if not url or not apk_path or not serial:
+        raise ValueError("参数不完整: url, apkPath, serial 为必填项")
+
+    execution_config = request.app["execution_config"](request)
+    _merge_payload_svn_locations(payload, execution_config)
+    _assert_allowed_svn_url(url, execution_config)
+
+    svn_bin = (execution_config.get("tools") or {}).get("svn", payload.get("svn", ""))
+    adb_bin = (execution_config.get("tools") or {}).get("adb")
+
+    stored_credentials = execution_config.get("svn_credentials", {})
+    username = payload.get("username")
+    if username in (None, "", "[configured]"):
+        username = stored_credentials.get("username", "")
+
+    password = payload.get("password")
+    if password in (None, "", "[configured]"):
+        password = stored_credentials.get("password", "")
+
+    cache_dir = Path(request.app.get("data_dir", PROJECT_ROOT / ".zbuild-data")) / "apk_cache"
+    logs = []
+    logs.append(f"正在从 SVN 导出 APK [{apk_path}]...")
+
+    export_res = await svn_browser.export_single_apk(
+        base_url=url,
+        apk_remote_path=apk_path,
+        target_cache_dir=str(cache_dir),
+        username=username,
+        password=password,
+        svn_bin=svn_bin,
+    )
+    if not export_res.get("success"):
+        return web.json_response({
+            "success": False,
+            "error": f"导出 APK 失败: {export_res.get('error')}",
+            "logs": logs,
+        })
+
+    local_apk = export_res["localPath"]
+    logs.append(f"APK 已就绪: {export_res['filename']} ({export_res['sizeDisplay']})")
+
+    auto_reinstall = payload.get("autoReinstallOnIncompatible", True)
+    reinstall = payload.get("reinstall", True)
+    launch_after = payload.get("launchAfterInstall", True)
+
+    install_success = False
+    async for step in adb_service.install_apk(
+        serial=serial,
+        apk_path=local_apk,
+        reinstall=reinstall,
+        auto_reinstall_on_incompatible=auto_reinstall,
+        adb_path=adb_bin,
+    ):
+        logs.append(step.get("message", ""))
+        if step.get("done") and step.get("success"):
+            install_success = True
+
+    if install_success and launch_after:
+        logs.append("正在尝试读取应用包名并启动...")
+        pkg_name = await adb_service.get_package_name_from_apk(local_apk)
+        if pkg_name:
+            logs.append(f"检测到应用包名: {pkg_name}，正在发送启动指令...")
+            launch_res = await adb_service.launch_app(serial, pkg_name, adb_path=adb_bin)
+            if launch_res.get("success"):
+                logs.append("已向设备发送启动指令！")
+            else:
+                logs.append(f"应用启动提示: {launch_res.get('output', '')}")
+        else:
+            logs.append("未能解析出应用包名，已跳过自动启动。")
+
+    return web.json_response({
+        "success": install_success,
+        "logs": logs,
+        "filename": export_res.get("filename"),
+    })
 
 
 async def handle_templates_list(request: web.Request) -> web.Response:
@@ -824,6 +1095,7 @@ def create_app(
     app["task_store"] = store
     app["task_manager"] = manager
     app["workspace"] = workspace_service
+    app["data_dir"] = data_root
     app["config_service"] = config
     app["profile_store"] = profile_store
     app["execution_config"] = lambda request: _execution_config(
@@ -878,6 +1150,12 @@ def create_app(
     app.router.add_post("/api/db/execute-sql", handle_db_execute_sql)
     app.router.add_get("/api/ztools/info", handle_ztools_info)
     app.router.add_get("/api/ztools/download", handle_ztools_download)
+    app.router.add_get("/api/adb/devices", handle_adb_devices)
+    app.router.add_post("/api/adb/connect", handle_adb_connect)
+    app.router.add_post("/api/adb/disconnect", handle_adb_disconnect)
+    app.router.add_post("/api/svn/browse", handle_svn_browse)
+    app.router.add_post("/api/svn/search-apk", handle_svn_search_apk)
+    app.router.add_post("/api/adb/install", handle_adb_install)
 
     register_task_routes(app)
 

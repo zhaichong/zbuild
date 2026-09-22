@@ -82,7 +82,7 @@
                 :key="loc.id"
                 :value="loc.url"
               >
-                {{ loc.name }}
+                {{ loc.name }} {{ loc.isSystem ? ' (系统通用)' : ' (个人)' }}
               </option>
             </select>
           </div>
@@ -540,7 +540,16 @@ const isAllExpanded = computed(() => {
   return dirNodes.every((n) => expandedKeys[n.id])
 })
 
+function getAccountStorageKey(username?: string) {
+  const user = (username !== undefined ? username : (svnUsername.value || store.config?.form?.svnUsername || '')).trim()
+  return user ? `zbuild_order_deploy_user_locations_${user}` : 'zbuild_order_deploy_user_locations_common'
+}
+
 function savePluginConfig() {
+  const personalLocs = moduleSvnLocations.value.filter((l) => !l.isSystem)
+  const accountKey = getAccountStorageKey(svnUsername.value)
+  localStorage.setItem(accountKey, JSON.stringify(personalLocs))
+
   const data = {
     svnLocations: moduleSvnLocations.value,
     currentSvnUrl: currentSvnUrl.value,
@@ -557,7 +566,6 @@ function savePluginConfig() {
 }
 
 function loadPluginConfig() {
-  // Sync SVN credentials from global store if available
   if (store.config?.form?.svnUsername) {
     svnUsername.value = store.config.form.svnUsername
   }
@@ -565,12 +573,44 @@ function loadPluginConfig() {
     svnPassword.value = store.config.form.svnPassword
   }
 
+  const systemLocs: SvnLocationItem[] = [
+    {
+      id: 'loc-default',
+      name: '特殊订单仓库',
+      url: store.config?.svnRootUrl || 'https://10.1.1.120/svn/智慧病房特殊订单',
+      isDefault: true,
+      isSystem: true,
+    },
+  ]
+
+  const accountKey = getAccountStorageKey(svnUsername.value)
+  let userLocs: SvnLocationItem[] = []
+  const rawUserLocs = localStorage.getItem(accountKey)
+  if (rawUserLocs) {
+    try {
+      userLocs = JSON.parse(rawUserLocs)
+    } catch {}
+  } else {
+    const legacyRaw = localStorage.getItem('zbuild_order_deploy_config')
+    if (legacyRaw) {
+      try {
+        const parsed = JSON.parse(legacyRaw)
+        const legacyList: SvnLocationItem[] = parsed.svnLocations || []
+        userLocs = legacyList.filter(
+          (l) => !l.isSystem && l.id !== 'loc-default' && l.url !== 'https://10.1.1.120/svn/智慧病房特殊订单'
+        )
+      } catch {}
+    }
+  }
+
+  userLocs = userLocs.map((l) => ({ ...l, isSystem: false, username: svnUsername.value || '' }))
+  moduleSvnLocations.value = [...systemLocs, ...userLocs]
+
   const raw = localStorage.getItem('zbuild_order_deploy_config')
   if (raw) {
     try {
       const parsed = JSON.parse(raw)
-      moduleSvnLocations.value = parsed.svnLocations || []
-      currentSvnUrl.value = parsed.currentSvnUrl || moduleSvnLocations.value[0]?.url || 'https://10.1.1.120/svn/智慧病房特殊订单'
+      currentSvnUrl.value = parsed.currentSvnUrl || moduleSvnLocations.value[0]?.url || systemLocs[0].url
       hospitalName.value = parsed.hospitalName || ''
       orderNo.value = parsed.orderNo || ''
       svnUsername.value = store.config?.form?.svnUsername || parsed.svnUsername || ''
@@ -580,20 +620,10 @@ function loadPluginConfig() {
       serverPassword.value = parsed.serverPassword || ''
       packageUploadPaths.value = parsed.packageUploadPaths || {}
       return
-    } catch {
-      // fallback to initial defaults
-    }
+    } catch {}
   }
-  // Default values
-  currentSvnUrl.value = 'https://10.1.1.120/svn/智慧病房特殊订单'
-  moduleSvnLocations.value = [
-    {
-      id: 'loc-default',
-      name: '特殊订单仓库',
-      url: 'https://10.1.1.120/svn/智慧病房特殊订单',
-      isDefault: true,
-    },
-  ]
+
+  currentSvnUrl.value = systemLocs[0].url
 }
 
 function openSettings() {
@@ -611,6 +641,7 @@ function onSettingsSaved(cfg: any) {
   serverUsername.value = cfg.serverUsername || serverUsername.value
   serverPassword.value = cfg.serverPassword || serverPassword.value
   packageUploadPaths.value = cfg.packageUploadPaths || {}
+  savePluginConfig()
 }
 
 function onSvnUrlChanged() {
@@ -664,7 +695,7 @@ async function pickHospital() {
   }
   loadingTree.value = true
   try {
-    const items = await ipc.svnList(store.config?.tools.svn || 'svn', root, svnUser, svnPass)
+    const items = await ipc.svnList(store.config?.tools.svn || 'svn', root, svnUser, svnPass, moduleSvnLocations.value)
     pickerKind.value = 'hospital'
     pickerTitle.value = '选择医院'
     pickerItems.value = items
@@ -692,7 +723,7 @@ async function pickOrder() {
 
   loadingTree.value = true
   try {
-    const items = await ipc.svnList(store.config?.tools.svn || 'svn', fetchUrl, svnUser, svnPass)
+    const items = await ipc.svnList(store.config?.tools.svn || 'svn', fetchUrl, svnUser, svnPass, moduleSvnLocations.value)
     pickerKind.value = 'order'
     pickerTitle.value = '选择订单号'
     pickerItems.value = items
@@ -738,6 +769,7 @@ async function loadTree() {
       svnUsername: svnUsername.value || store.config?.form.svnUsername || '',
       svnPassword: svnPassword.value || store.config?.form.svnPassword || '',
       serverUploadPaths: packageUploadPaths.value || {},
+      svnLocations: moduleSvnLocations.value,
     })
 
     if (res.success) {
@@ -782,6 +814,7 @@ async function onOpenFile(node: SvnTreeNode) {
       svn: store.config?.tools.svn || 'svn',
       svnUsername: svnUsername.value || store.config?.form.svnUsername || '',
       svnPassword: svnPassword.value || store.config?.form.svnPassword || '',
+      svnLocations: moduleSvnLocations.value,
     })
 
     if (res.success) {

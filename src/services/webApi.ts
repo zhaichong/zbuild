@@ -321,10 +321,11 @@ export const webApi = {
     url: string,
     username: string,
     password: string,
+    svnLocations?: any[],
   ): Promise<string[]> => {
     const res = await request<unknown>('/api/svn/list', {
       method: 'POST',
-      body: JSON.stringify({ svn, url, username, password }),
+      body: JSON.stringify({ svn, url, username, password, svnLocations }),
     })
     if (Array.isArray(res)) {
       return res.map((e) => (typeof e === 'object' && e ? (e as { name?: string }).name || '' : String(e))).filter(Boolean)
@@ -353,6 +354,7 @@ export const webApi = {
     svnUsername?: string
     svnPassword?: string
     serverUploadPaths?: Record<string, string>
+    svnLocations?: any[]
   }): Promise<{ success: boolean; tree: any[]; flatList: any[]; totalFiles?: number; totalDirs?: number; error?: string }> =>
     request<{ success: boolean; tree: any[]; flatList: any[]; totalFiles?: number; totalDirs?: number; error?: string }>('/api/order-deploy/list', {
       method: 'POST',
@@ -365,6 +367,7 @@ export const webApi = {
     svnUsername?: string
     svnPassword?: string
     forceNative?: boolean
+    svnLocations?: any[]
   }): Promise<{ success: boolean; filePath?: string; fileName?: string; isText?: boolean; content?: string; size?: number; error?: string }> =>
     request<{ success: boolean; filePath?: string; fileName?: string; isText?: boolean; content?: string; size?: number; error?: string }>('/api/order-deploy/open-file', {
       method: 'POST',
@@ -526,4 +529,60 @@ export const webApi = {
   installUpdate: (): Promise<boolean> => Promise.resolve(false),
 
   onUpdateStatus: (_handler: (status: UpdateStatus) => void): (() => void) => () => {},
+
+  getAdbDevices: (): Promise<{ success: boolean; devices: any[] }> =>
+    request<{ success: boolean; devices: any[] }>('/api/adb/devices'),
+
+  connectAdb: (target: string): Promise<{ success: boolean; target: string; output: string }> =>
+    request<{ success: boolean; target: string; output: string }>('/api/adb/connect', {
+      method: 'POST',
+      body: JSON.stringify({ target }),
+    }),
+
+  disconnectAdb: (serial: string): Promise<{ success: boolean; serial: string; output: string }> =>
+    request<{ success: boolean; serial: string; output: string }>('/api/adb/disconnect', {
+      method: 'POST',
+      body: JSON.stringify({ serial }),
+    }),
+
+  browseSvn: (payload: { url: string; subpath?: string; username?: string; password?: string }): Promise<{
+    success: boolean
+    error?: string
+    currentPath: string
+    fullUrl?: string
+    directories: any[]
+    apks: any[]
+    otherFiles: any[]
+    totalApks: number
+  }> =>
+    request<any>('/api/svn/browse', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  searchSvnApk: (payload: { url: string; subpath?: string; keyword?: string; username?: string; password?: string }): Promise<{
+    success: boolean
+    error?: string
+    apks: any[]
+    count: number
+  }> =>
+    request<any>('/api/svn/search-apk', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  installAdbApk: (payload: {
+    url: string
+    apkPath: string
+    serial: string
+    reinstall?: boolean
+    autoReinstallOnIncompatible?: boolean
+    launchAfterInstall?: boolean
+    username?: string
+    password?: string
+  }): Promise<{ success: boolean; error?: string; logs: string[]; filename?: string }> =>
+    request<any>('/api/adb/install', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 }

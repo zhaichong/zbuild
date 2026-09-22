@@ -25,6 +25,7 @@
         <span v-if="activeApp === 'mock-query'">终端数据链路提取控制台</span>
         <span v-else-if="activeApp === 'order-deploy'">测试订单部署解决方案</span>
         <span v-else-if="activeApp === 'order-build-upload'">订单打包上传 SVN</span>
+        <span v-else-if="activeApp === 'apk-installer'">SVN APK 在线设备安装助手</span>
         <span v-else-if="activeApp === 'portal'">开发者中心</span>
         <span v-else>智慧病房构建工具</span>
       </h1>

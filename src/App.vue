@@ -39,7 +39,15 @@
       <OrderBuildUploadTool />
     </div>
 
-    <!-- App View 4: Special Order Build & Upload Tool -->
+    <!-- App View 5: SVN APK Device Installer Tool -->
+    <div
+      v-else-if="currentApp === 'apk-installer'"
+      class="flex-1 min-h-0 flex flex-col overflow-hidden"
+    >
+      <ApkInstallerTool />
+    </div>
+
+    <!-- App View: Special Order Build & Upload Tool -->
     <div
       v-else
       class="app-shell flex-1 min-h-0"
@@ -275,6 +283,7 @@ import AppPortal from '@/components/AppPortal.vue'
 import MockQueryTool from '@/components/MockQueryTool.vue'
 import OrderDeployTool from '@/components/OrderDeployTool.vue'
 import OrderBuildUploadTool from '@/components/OrderBuildUploadTool.vue'
+import ApkInstallerTool from '@/components/ApkInstallerTool.vue'
 import CommandForm from '@/components/CommandForm.vue'
 import ProjectTable from '@/components/ProjectTable.vue'
 import PipelineView from '@/components/PipelineView.vue'
@@ -696,7 +705,20 @@ onMounted(async () => {
           url: cfg.svnRootUrl || 'https://10.1.1.120/svn/智慧病房特殊订单',
           isDefault: true,
         },
+        {
+          id: 'loc-zhbf-common',
+          name: '智慧病房通用版',
+          url: 'https://192.168.30.124/svn/智慧病房通用版',
+          isDefault: false,
+        },
       ]
+    } else if (!cfg.svnLocations.some(l => l.url && (l.url.includes('智慧病房通用版') || l.url.includes('192.168.30.124')))) {
+      cfg.svnLocations.push({
+        id: 'loc-zhbf-common',
+        name: '智慧病房通用版',
+        url: 'https://192.168.30.124/svn/智慧病房通用版',
+        isDefault: false,
+      })
     }
     if (!cfg.tools) {
       cfg.tools = { git: '', bash: '', svn: '', node: '', npm: '' }

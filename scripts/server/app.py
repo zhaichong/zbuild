@@ -31,7 +31,8 @@ from server.task_store import TaskStore
 from server.task_routes import register_task_routes
 from server.workspace import WorkspaceManager
 from core.constants import DEFAULT_SVN_ROOT
-from server import adb_service, svn_browser
+import server.adb_service as adb_service
+import server.svn_browser as svn_browser
 
 
 logging.basicConfig(

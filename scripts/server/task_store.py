@@ -433,6 +433,27 @@ class TaskStore:
                 (task_id, action, submitter, remote_ip, result, _now()),
             )
 
+    def list_tool_usage(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute(
+                """SELECT substr(action, 10) AS tool_id, submitter,
+                          COUNT(*) AS use_count, MAX(timestamp) AS last_used_at
+                   FROM audit
+                   WHERE action LIKE 'tool.use:%' AND result = 'success'
+                         AND submitter IS NOT NULL
+                   GROUP BY tool_id, submitter
+                   ORDER BY last_used_at DESC"""
+            ).fetchall()
+        return [
+            {
+                "toolId": row["tool_id"],
+                "svnUsername": row["submitter"],
+                "useCount": row["use_count"],
+                "lastUsedAt": row["last_used_at"],
+            }
+            for row in rows
+        ]
+
     def recover_after_restart(self) -> None:
         timestamp = _now()
         with self._lock, self._db:

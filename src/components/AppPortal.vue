@@ -795,15 +795,23 @@ function hasSvnAccount(): boolean {
   return Boolean(username && password)
 }
 
-function onSvnModalSuccess(appId: string) {
+async function onSvnModalSuccess(appId: string) {
   if (appId) {
+    await recordToolUsage(appId)
     emit('launch-app', appId)
   }
 }
 
+async function recordToolUsage(appId: string) {
+  try {
+    await ipc.recordToolUsage(appId)
+  } catch (err: unknown) {
+    store.showToast(`使用记录保存失败: ${err instanceof Error ? err.message : String(err)}`, 'warning')
+  }
+}
+
 async function onLaunchApp(app: PortalApp) {
-  // SVN 核心应用校验 SVN 账户
-  const svnRequiredApps = ['zbuild', 'order-deploy', 'order-build-upload', 'apk-installer']
+  const svnRequiredApps = ['zbuild', 'order-deploy', 'order-build-upload', 'apk-installer', 'mock-query']
   if (svnRequiredApps.includes(app.id)) {
     if (!hasSvnAccount()) {
       svnModalRef.value?.show({
@@ -812,6 +820,7 @@ async function onLaunchApp(app: PortalApp) {
       })
       return
     }
+    await recordToolUsage(app.id)
   }
 
   if (app.id === 'zbuild') {

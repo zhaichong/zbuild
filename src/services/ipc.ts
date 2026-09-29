@@ -139,6 +139,9 @@ export const ipc = {
   ): Promise<{ success: boolean; message: string; dir?: string; excel?: string }> =>
     webApi.createOrderDir(payload),
 
+  recordToolUsage: (toolId: string): Promise<{ success: boolean }> =>
+    webApi.recordToolUsage(toolId),
+
   startRun: (payload: Record<string, unknown>): Promise<boolean> => webApi.startRun(payload),
 
   stopRun: (): Promise<boolean> => webApi.stopRun(),

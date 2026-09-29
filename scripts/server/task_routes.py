@@ -12,6 +12,9 @@ from aiohttp import web
 from server.workspace import assert_within
 
 
+TOOL_IDS = {"zbuild", "order-deploy", "order-build-upload", "mock-query", "apk-installer"}
+
+
 def _trusted_projects(config: Dict[str, Any], requested: List[Dict[str, Any]]) -> Dict[str, Path]:
     root_value = config.get("root_path")
     if not root_value:
@@ -98,6 +101,26 @@ async def list_tasks(request: web.Request) -> web.Response:
         profile_id=request["profile_id"],
     )
     return web.json_response(tasks)
+
+
+async def record_tool_usage(request: web.Request) -> web.Response:
+    body = await request.json()
+    tool_id = str(body.get("toolId") or "") if isinstance(body, dict) else ""
+    if tool_id not in TOOL_IDS:
+        raise ValueError("Unknown toolId")
+    svn = request.app["execution_config"](request).get("svn_credentials") or {}
+    username = str(svn.get("username") or "").strip()
+    if not username:
+        raise ValueError("SVN account is required")
+    request.app["task_store"].record_audit(
+        f"tool.use:{tool_id}", "success",
+        submitter=username, remote_ip=request.remote or "",
+    )
+    return web.json_response({"success": True})
+
+
+async def list_tool_usage(request: web.Request) -> web.Response:
+    return web.json_response(request.app["task_store"].list_tool_usage())
 
 
 async def get_task(request: web.Request) -> web.Response:
@@ -204,6 +227,8 @@ async def task_websocket(request: web.Request) -> web.WebSocketResponse:
 
 
 def register_task_routes(app: web.Application) -> None:
+    app.router.add_post("/api/tool-usage", record_tool_usage)
+    app.router.add_get("/api/tool-usage", list_tool_usage)
     app.router.add_post("/api/tasks", create_task)
     app.router.add_get("/api/tasks", list_tasks)
     app.router.add_get("/api/tasks/{task_id}", get_task)

@@ -431,6 +431,12 @@ export const webApi = {
       body: JSON.stringify(payload),
     }),
 
+  recordToolUsage: (toolId: string): Promise<{ success: boolean }> =>
+    request<{ success: boolean }>('/api/tool-usage', {
+      method: 'POST',
+      body: JSON.stringify({ toolId }),
+    }),
+
   startRun: async (payload: Record<string, unknown>): Promise<boolean> => {
     await createTask('run', payload)
     return true

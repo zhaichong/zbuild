@@ -103,6 +103,20 @@ class TestTaskStore(unittest.TestCase):
         queued = self.store.list_queued_ids()
         self.assertEqual(queued, [second["taskId"]])
 
+    def test_lists_tool_usage_grouped_by_tool_and_svn_user(self):
+        self.store.record_audit("tool.use:zbuild", "success", submitter="alice")
+        self.store.record_audit("tool.use:zbuild", "success", submitter="alice")
+        self.store.record_audit("tool.use:mock-query", "success", submitter="bob")
+        self.store.record_audit("task.create", "created", submitter="alice")
+
+        usage = self.store.list_tool_usage()
+
+        self.assertEqual(
+            {(item["toolId"], item["svnUsername"], item["useCount"]) for item in usage},
+            {("zbuild", "alice", 2), ("mock-query", "bob", 1)},
+        )
+        self.assertTrue(all(item["lastUsedAt"] for item in usage))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -95,43 +95,26 @@
               <div
                 v-for="(loc, idx) in localConfig.svnLocations"
                 :key="loc.id || idx"
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors"
-                :class="loc.isSystem ? 'bg-blue-50/40 border-blue-200/80' : 'bg-slate-50 border-slate-200 hover:border-blue-300'"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:border-blue-300 transition-colors"
               >
                 <!-- Badge -->
                 <span
-                  v-if="loc.isSystem"
                   class="px-1.5 py-0.5 text-[10px] font-bold text-blue-700 bg-blue-100 rounded shrink-0 flex items-center gap-0.5"
-                  title="系统通用配置，所有用户共享，不可修改与删除"
                 >
-                  <span>🌐</span>
-                  <span>系统通用</span>
-                </span>
-                <span
-                  v-else
-                  class="px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-100 rounded shrink-0 flex items-center gap-0.5"
-                  :title="`个人自定义源 (账号: ${localConfig.svnUsername || '当前用户'})`"
-                >
-                  <span>👤</span>
-                  <span>个人源</span>
+                  <span>📁</span>
+                  <span>目录源</span>
                 </span>
 
                 <input
                   v-model="loc.name"
                   type="text"
-                  class="w-32 px-2 py-0.5 text-xs font-semibold rounded outline-none"
-                  :class="loc.isSystem ? 'text-slate-700 font-bold cursor-not-allowed bg-transparent' : 'border border-transparent hover:border-slate-300 focus:border-blue-500 bg-transparent text-slate-800'"
-                  :readonly="loc.isSystem"
-                  :title="loc.isSystem ? '系统通用配置，不可修改' : '源名称'"
+                  class="w-32 px-2 py-0.5 text-xs font-semibold rounded outline-none border border-transparent hover:border-slate-300 focus:border-blue-500 bg-transparent text-slate-800"
                   placeholder="源名称"
                 >
                 <input
                   v-model="loc.url"
                   type="text"
-                  class="flex-1 min-w-0 px-2 py-0.5 text-xs font-mono rounded outline-none"
-                  :class="loc.isSystem ? 'text-slate-500 cursor-not-allowed bg-slate-100/80 border border-slate-200/60' : 'bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 text-slate-700'"
-                  :readonly="loc.isSystem"
-                  :title="loc.isSystem ? '系统通用配置，不可修改' : 'SVN URL'"
+                  class="flex-1 min-w-0 px-2 py-0.5 text-xs font-mono rounded outline-none bg-white border border-transparent hover:border-slate-300 focus:border-blue-500 text-slate-700"
                   placeholder="SVN URL"
                 >
                 <button
@@ -144,25 +127,15 @@
                   {{ localConfig.currentSvnUrl === loc.url ? '当前默认' : '设为默认' }}
                 </button>
                 <button
-                  v-if="!loc.isSystem"
                   type="button"
                   class="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0 cursor-pointer"
-                  title="删除此个人目录源"
+                  title="删除此目录源"
                   @click="removeSvnLocation(idx)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
-                <span
-                  v-else
-                  class="p-1 text-slate-300 cursor-not-allowed shrink-0 flex items-center justify-center"
-                  title="系统通用配置，不可删除"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </span>
               </div>
               <div v-if="!localConfig.svnLocations || localConfig.svnLocations.length === 0" class="text-center py-3 text-xs text-slate-400">
                 暂无目录源
@@ -367,18 +340,7 @@ function loadFromStorage() {
     localConfig.svnPassword = store.config.form.svnPassword
   }
 
-  // 1. 系统通用配置 (只读、不可删)
-  const systemLocs: SvnLocationItem[] = [
-    {
-      id: 'loc-default',
-      name: '特殊订单仓库',
-      url: store.config?.svnRootUrl || DEFAULT_SVN_LOCATIONS[0].url,
-      isDefault: true,
-      isSystem: true,
-    },
-  ]
-
-  // 2. 个人配置 (按当前 SVN 账号隔离)
+  // 个人配置 (按当前 SVN 账号隔离)
   const accountKey = getAccountStorageKey(localConfig.svnUsername)
   let userLocs: SvnLocationItem[] = []
   const rawUserLocs = localStorage.getItem(accountKey)
@@ -392,22 +354,23 @@ function loadFromStorage() {
     if (legacyRaw) {
       try {
         const parsed = JSON.parse(legacyRaw)
-        const legacyList: SvnLocationItem[] = parsed.svnLocations || []
-        userLocs = legacyList.filter(
-          (l) => !l.isSystem && l.id !== 'loc-default' && l.url !== 'https://10.1.1.120/svn/智慧病房特殊订单'
-        )
+        userLocs = parsed.svnLocations || []
       } catch {}
+    } else if (store.config?.svnLocations && store.config.svnLocations.length > 0) {
+      userLocs = JSON.parse(JSON.stringify(store.config.svnLocations))
     }
   }
 
-  userLocs = userLocs.map((l) => ({ ...l, isSystem: false, username: localConfig.svnUsername || '' }))
+  userLocs = userLocs
+    .filter((l) => l.id !== 'loc-default' && l.id !== 'default-loc' && l.name !== '默认特殊订单库' && l.name !== '特殊订单仓库')
+    .map((l) => ({ ...l, isSystem: false, username: localConfig.svnUsername || '' }))
 
-  // 3. 读取通用服务参数
+  // 读取通用服务参数
   const raw = localStorage.getItem('zbuild_order_deploy_config')
   if (raw) {
     try {
       const parsed = JSON.parse(raw)
-      localConfig.currentSvnUrl = parsed.currentSvnUrl || systemLocs[0].url
+      localConfig.currentSvnUrl = parsed.currentSvnUrl || store.config?.svnRootUrl || ''
       localConfig.svnUsername = localConfig.svnUsername || parsed.svnUsername || ''
       localConfig.svnPassword = localConfig.svnPassword || parsed.svnPassword || ''
       localConfig.serverAddress = parsed.serverAddress || '192.168.31.202'
@@ -418,13 +381,13 @@ function loadFromStorage() {
       // fallback
     }
   } else {
-    localConfig.currentSvnUrl = systemLocs[0].url
+    localConfig.currentSvnUrl = store.config?.svnRootUrl || ''
     localConfig.packageUploadPaths = { ...DEFAULT_PACKAGE_UPLOAD_PATHS }
   }
 
-  localConfig.svnLocations = [...systemLocs, ...userLocs]
+  localConfig.svnLocations = userLocs
   if (!localConfig.currentSvnUrl) {
-    localConfig.currentSvnUrl = systemLocs[0].url
+    localConfig.currentSvnUrl = store.config?.svnRootUrl || (userLocs[0] ? userLocs[0].url : '')
   }
 }
 
@@ -445,20 +408,9 @@ watch(() => localConfig.svnUsername, (newVal, oldVal) => {
         userLocs = JSON.parse(raw)
       } catch {}
     }
-    const systemLocs = localConfig.svnLocations.filter((l) => l.isSystem)
-    if (systemLocs.length === 0) {
-      systemLocs.push({
-        id: 'loc-default',
-        name: '特殊订单仓库',
-        url: store.config?.svnRootUrl || DEFAULT_SVN_LOCATIONS[0].url,
-        isDefault: true,
-        isSystem: true,
-      })
-    }
-    localConfig.svnLocations = [
-      ...systemLocs,
-      ...userLocs.map((l) => ({ ...l, isSystem: false, username: newVal || '' })),
-    ]
+    localConfig.svnLocations = userLocs
+      .filter((l) => l.id !== 'loc-default' && l.id !== 'default-loc' && l.name !== '默认特殊订单库' && l.name !== '特殊订单仓库')
+      .map((l) => ({ ...l, isSystem: false, username: newVal || '' }))
   }
 })
 
@@ -481,16 +433,12 @@ function confirmAddSvnLocation() {
   newSvnLocName.value = ''
   newSvnLocUrl.value = ''
   showAddSvnLocModal.value = false
-  store.showToast(`已添加个人目录源: ${name}`, 'success')
+  store.showToast(`已添加目录源: ${name}`, 'success')
 }
 
 function removeSvnLocation(idx: number) {
-  const item = localConfig.svnLocations[idx]
-  if (item && item.isSystem) {
-    store.showToast('系统通用配置不可删除', 'warning')
-    return
-  }
   localConfig.svnLocations.splice(idx, 1)
+  store.showToast('已删除目录源', 'info')
 }
 
 function setDefaultSvnLocation(loc: SvnLocationItem) {

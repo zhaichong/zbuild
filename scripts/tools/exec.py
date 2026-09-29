@@ -78,16 +78,35 @@ def run_process(
         merged_env = {**os.environ, **env}
 
     logger.debug("run_process: %s (cwd=%s)", _redacted_args(args), cwd)
-    result = subprocess.run(
+    res = subprocess.run(
         list(args),
         cwd=str(cwd) if cwd else None,
         env=merged_env,
         capture_output=True,
-        text=True,
-        encoding=encoding,
-        errors="replace",
         timeout=timeout,
         startupinfo=_startupinfo(),
+    )
+
+    def _decode_bytes(b: bytes) -> str:
+        if not b:
+            return ""
+        try:
+            return b.decode(encoding)
+        except UnicodeDecodeError:
+            pass
+        if os.name == "nt":
+            for fb in ("gbk", "cp936"):
+                try:
+                    return b.decode(fb)
+                except (UnicodeDecodeError, LookupError):
+                    pass
+        return b.decode(encoding, errors="replace")
+
+    result = subprocess.CompletedProcess(
+        args=res.args,
+        returncode=res.returncode,
+        stdout=_decode_bytes(res.stdout),
+        stderr=_decode_bytes(res.stderr),
     )
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(

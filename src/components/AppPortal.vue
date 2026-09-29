@@ -229,7 +229,27 @@
                 </span>
               </div>
 
-              <!-- 4. Custom URL / Web App Artwork -->
+              <!-- 4. SVN APK Installer Visual Artwork: Device APK Installer -->
+              <div v-else-if="app.id === 'apk-installer'" class="relative flex items-center justify-center">
+                <!-- Soft Glow Backdrop -->
+                <div class="w-20 h-20 rounded-full bg-teal-400/20 blur-xl absolute" />
+
+                <!-- Main Device / APK Graphic -->
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-teal-500/25 border border-white/30">
+                  <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <!-- Mini Satellite Badges -->
+                <span class="absolute -top-1 -right-2 px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-700 text-[9px] font-bold border border-teal-200 shadow-xs">
+                  ADB
+                </span>
+                <span class="absolute -bottom-1 -left-2 px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold border border-emerald-200 shadow-xs">
+                  APK
+                </span>
+              </div>
+
+              <!-- 5. Custom URL / Web App Artwork -->
               <div v-else-if="app.launchType === 'url'" class="relative flex items-center justify-center">
                 <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-500 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-sky-500/25 border border-white/30">
                   <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">

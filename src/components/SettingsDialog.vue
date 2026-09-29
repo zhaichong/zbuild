@@ -611,44 +611,30 @@
                     <div
                       v-for="(loc, idx) in configuredSvnLocations"
                       :key="loc.id || idx"
-                      class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl border shadow-2xs transition-colors"
-                      :class="(loc.isSystem || loc.id === 'default-loc' || loc.url === 'https://10.1.1.120/svn/智慧病房特殊订单') ? 'bg-blue-50/40 border-blue-200/80' : 'bg-slate-50/60 border-slate-200/80 hover:border-blue-300'"
+                      class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:border-blue-300 shadow-2xs transition-colors"
                     >
                       <span
-                        v-if="loc.isSystem || loc.id === 'default-loc' || loc.url === 'https://10.1.1.120/svn/智慧病房特殊订单'"
                         class="px-1.5 py-0.5 text-[10px] font-bold text-blue-700 bg-blue-100 rounded shrink-0 flex items-center gap-0.5"
-                        title="系统通用配置，不可修改与删除"
                       >
-                        <span>🌐</span>
-                        <span>系统通用</span>
-                      </span>
-                      <span
-                        v-else
-                        class="px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-100 rounded shrink-0 flex items-center gap-0.5"
-                      >
-                        <span>👤</span>
-                        <span>自定义</span>
+                        <span>📁</span>
+                        <span>目录源</span>
                       </span>
 
                       <input
                         v-model="loc.name"
                         type="text"
-                        class="w-32 px-2.5 py-1 text-xs font-semibold rounded-lg outline-none"
-                        :class="(loc.isSystem || loc.id === 'default-loc' || loc.url === 'https://10.1.1.120/svn/智慧病房特殊订单') ? 'text-slate-700 font-bold cursor-not-allowed bg-transparent' : 'border border-transparent hover:border-slate-200 focus:border-blue-500 bg-transparent text-slate-800'"
-                        :readonly="Boolean(loc.isSystem || loc.id === 'default-loc' || loc.url === 'https://10.1.1.120/svn/智慧病房特殊订单')"
+                        class="w-32 px-2.5 py-1 text-xs font-semibold rounded-lg outline-none border border-transparent hover:border-slate-200 focus:border-blue-500 bg-transparent text-slate-800"
                         placeholder="源名称"
                       >
                       <input
                         v-model="loc.url"
                         type="text"
-                        class="flex-1 min-w-0 px-2.5 py-1 text-xs font-mono rounded-lg outline-none"
-                        :class="(loc.isSystem || loc.id === 'default-loc' || loc.url === 'https://10.1.1.120/svn/智慧病房特殊订单') ? 'text-slate-500 cursor-not-allowed bg-slate-100/80 border border-slate-200/60' : 'bg-white/70 border border-transparent hover:border-slate-200 focus:border-blue-500 text-slate-700'"
-                        :readonly="Boolean(loc.isSystem || loc.id === 'default-loc' || loc.url === 'https://10.1.1.120/svn/智慧病房特殊订单')"
+                        class="flex-1 min-w-0 px-2.5 py-1 text-xs font-mono rounded-lg outline-none bg-white/70 border border-transparent hover:border-slate-200 focus:border-blue-500 text-slate-700"
                         placeholder="SVN URL"
                       >
                       <button
                         type="button"
-                        class="px-2.5 py-1 text-[11px] rounded-lg transition-colors cursor-pointer"
+                        class="px-2.5 py-1 text-[11px] rounded-lg transition-colors cursor-pointer shrink-0"
                         :class="store.config.svnRootUrl === loc.url ? 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200' : 'bg-white text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-600'"
                         :title="store.config.svnRootUrl === loc.url ? '当前默认根目录' : '设为默认根目录'"
                         @click="setDefaultSvnLocation(loc)"
@@ -656,7 +642,6 @@
                         {{ store.config.svnRootUrl === loc.url ? '默认' : '设为默认' }}
                       </button>
                       <button
-                        v-if="!loc.isSystem && loc.id !== 'default-loc' && loc.url !== 'https://10.1.1.120/svn/智慧病房特殊订单'"
                         type="button"
                         class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0 cursor-pointer"
                         title="删除此目录源"
@@ -666,15 +651,6 @@
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
-                      <span
-                        v-else
-                        class="p-1.5 text-slate-300 cursor-not-allowed shrink-0 flex items-center justify-center"
-                        title="系统通用目录源不可删除"
-                      >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </span>
                     </div>
                     <div v-if="configuredSvnLocations.length === 0" class="text-center py-3 text-xs text-slate-400">
                       暂无自定义目录源，默认使用全局 SVN 根 URL
@@ -1341,19 +1317,12 @@ function initConfigDefaults() {
   if (!store.config.projectSvnRoots) {
     store.config.projectSvnRoots = {}
   }
-  if (!store.config.svnLocations || store.config.svnLocations.length === 0) {
-    if (store.config.svnRootUrl) {
-      store.config.svnLocations = [
-        {
-          id: 'default-loc',
-          name: '默认特殊订单库',
-          url: store.config.svnRootUrl,
-          isDefault: true,
-        },
-      ]
-    } else {
-      store.config.svnLocations = []
-    }
+  if (store.config.svnLocations) {
+    store.config.svnLocations = store.config.svnLocations.filter(
+      (l) => l.id !== 'default-loc' && l.id !== 'loc-default' && l.name !== '默认特殊订单库' && l.name !== '特殊订单仓库'
+    )
+  } else {
+    store.config.svnLocations = []
   }
   if (!store.config.branchBuildCommands) {
     store.config.branchBuildCommands = {}
@@ -1540,12 +1509,8 @@ function confirmAddSvnLocation() {
 
 function removeSvnLocation(idx: number) {
   if (store.config?.svnLocations) {
-    const item = store.config.svnLocations[idx]
-    if (item && (item.isSystem || item.id === 'default-loc' || item.url === 'https://10.1.1.120/svn/智慧病房特殊订单')) {
-      store.showToast('系统通用配置不可删除', 'warning')
-      return
-    }
     store.config.svnLocations.splice(idx, 1)
+    store.showToast('已删除目录源', 'info')
   }
 }
 

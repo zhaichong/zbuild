@@ -81,10 +81,11 @@ class TestDepsCache(unittest.TestCase):
             cache_root.mkdir(parents=True)
 
             # Create 6 slots with different access times
+            base_time = int(asyncio.get_event_loop().time())
             for i in range(6):
                 slot = cache_root / f"slot_{i}"
                 slot.mkdir(parents=True)
-                (slot / ".last_accessed").write_text(str(1000 + i * 10), encoding="utf-8")
+                (slot / ".last_accessed").write_text(str(base_time - 100 + i * 10), encoding="utf-8")
 
             # Prune keeping max 3 slots
             pruned = await ws.prune_deps_cache(max_slots_per_project=3, max_age_seconds=999999)

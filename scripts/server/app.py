@@ -113,28 +113,21 @@ def _config_view(system_public: Dict[str, Any], profile_public: Dict[str, Any]) 
         value.pop(key, None)
     value.update({k: v for k, v in (profile_public.get("config") or {}).items() if k != "svn_locations"})
 
-    # Ensure system svn_locations have isSystem=True and cannot be removed/modified by users
-    system_locations = list(value.get("svn_locations") or [])
-    has_system_default = False
+    # Clean up legacy forced default location if present, do not force-lock items
+    system_locations = [
+        dict(loc) for loc in (value.get("svn_locations") or [])
+        if isinstance(loc, dict) and loc.get("id") not in ("loc-default", "default-loc") and loc.get("name") not in ("默认特殊订单库", "特殊订单仓库")
+    ]
     for loc in system_locations:
-        if isinstance(loc, dict):
-            loc["isSystem"] = True
-            if loc.get("isDefault") or loc.get("url") == DEFAULT_SVN_ROOT:
-                has_system_default = True
-    if not has_system_default and DEFAULT_SVN_ROOT:
-        system_locations.insert(0, {
-            "id": "loc-default",
-            "name": "默认特殊订单库",
-            "url": DEFAULT_SVN_ROOT,
-            "isDefault": True,
-            "isSystem": True,
-        })
+        loc["isSystem"] = False
 
     # Merge personal svn_locations from profile
     profile_locations = (profile_public.get("config") or {}).get("svn_locations") or []
     existing_urls = {unquote(str(l.get("url", "") or "")).rstrip("/") for l in system_locations if isinstance(l, dict)}
     for ploc in profile_locations:
         if isinstance(ploc, dict) and ploc.get("url"):
+            if ploc.get("id") in ("loc-default", "default-loc") or ploc.get("name") in ("默认特殊订单库", "特殊订单仓库"):
+                continue
             norm_url = unquote(str(ploc.get("url", "") or "")).rstrip("/")
             if norm_url and norm_url not in existing_urls:
                 existing_urls.add(norm_url)
@@ -173,7 +166,7 @@ def _assert_allowed_svn_url(url: object, execution_config: Dict[str, Any]) -> No
         from urllib.parse import urlparse
         cand_p = urlparse(candidate)
         for root in roots:
-            normalized = unquote(str(root or "")).strip().rstrip("/")
+            normalized = svn_browser.normalize_svn_url(unquote(str(root or "")).strip().rstrip("/"))
             if not normalized:
                 continue
             root_p = urlparse(normalized)

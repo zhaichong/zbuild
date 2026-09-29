@@ -46,8 +46,8 @@ export function resolveEffectiveBuildCommand(
   } = {},
 ): string {
   const fallback = options.projectCommand || options.globalCommand || 'deploy.sh'
-  if (isWebFrontendProject(projectName)) {
-    return branchMeetsMicroVersion(branch) ? WEB_FRONTEND_MICRO_COMMAND : fallback
+  if (isWebFrontendMicroBranch(projectName, branch)) {
+    return WEB_FRONTEND_MICRO_COMMAND
   }
 
   const branchCmds = options.branchCommands

@@ -299,7 +299,7 @@ import { checkLocalChanges } from '@/composables/useProjects'
 import { saveConfig } from '@/composables/useConfig'
 import type { UploadMode, LocalChangeSummary, AppConfig } from '@/types'
 
-const currentApp = ref<'zbuild' | 'portal' | 'mock-query' | 'order-deploy' | 'order-build-upload'>('portal')
+const currentApp = ref<'zbuild' | 'portal' | 'mock-query' | 'order-deploy' | 'order-build-upload' | 'apk-installer'>('portal')
 
 function onSwitchApp(appId: string) {
   if (appId === 'portal') {
@@ -310,6 +310,8 @@ function onSwitchApp(appId: string) {
     currentApp.value = 'order-deploy'
   } else if (appId === 'order-build-upload') {
     currentApp.value = 'order-build-upload'
+  } else if (appId === 'apk-installer') {
+    currentApp.value = 'apk-installer'
   } else {
     currentApp.value = 'zbuild'
   }
@@ -640,14 +642,7 @@ const defaultConfig: AppConfig = {
   rootPath: '',
   svnRootUrl: 'https://10.1.1.120/svn/智慧病房特殊订单',
   svnUploadDirectory: '前端',
-  svnLocations: [
-    {
-      id: 'loc-default',
-      name: '默认特殊订单库',
-      url: 'https://10.1.1.120/svn/智慧病房特殊订单',
-      isDefault: true,
-    },
-  ],
+  svnLocations: [],
   buildCommand: 'deploy.sh',
   buildCommands: {},
   artifactPaths: ['dist', 'release', 'build', 'output', 'target'],
@@ -697,28 +692,12 @@ onMounted(async () => {
       store.config = JSON.parse(JSON.stringify(defaultConfig))
     }
     const cfg = store.config!
-    if (!cfg.svnLocations || cfg.svnLocations.length === 0) {
-      cfg.svnLocations = [
-        {
-          id: 'loc-default',
-          name: '默认特殊订单库',
-          url: cfg.svnRootUrl || 'https://10.1.1.120/svn/智慧病房特殊订单',
-          isDefault: true,
-        },
-        {
-          id: 'loc-zhbf-common',
-          name: '智慧病房通用版',
-          url: 'https://192.168.30.124/svn/智慧病房通用版',
-          isDefault: false,
-        },
-      ]
-    } else if (!cfg.svnLocations.some(l => l.url && (l.url.includes('智慧病房通用版') || l.url.includes('192.168.30.124')))) {
-      cfg.svnLocations.push({
-        id: 'loc-zhbf-common',
-        name: '智慧病房通用版',
-        url: 'https://192.168.30.124/svn/智慧病房通用版',
-        isDefault: false,
-      })
+    if (cfg.svnLocations) {
+      cfg.svnLocations = cfg.svnLocations.filter(
+        (l) => l.id !== 'loc-default' && l.id !== 'default-loc' && l.name !== '默认特殊订单库' && l.name !== '特殊订单仓库'
+      )
+    } else {
+      cfg.svnLocations = []
     }
     if (!cfg.tools) {
       cfg.tools = { git: '', bash: '', svn: '', node: '', npm: '' }

@@ -312,10 +312,8 @@ def resolve_branch_build_command(
     if not isinstance(config, dict):
         return WEB_FRONTEND_MICRO_COMMAND if is_web_frontend_micro_branch(project_name, branch) else "deploy.sh"
 
-    if is_web_frontend_project(project_name):
-        if branch_meets_micro_version(branch):
-            return WEB_FRONTEND_MICRO_COMMAND
-        return _project_default_build_command(config, project_name)
+    if is_web_frontend_micro_branch(project_name, branch):
+        return WEB_FRONTEND_MICRO_COMMAND
 
     import fnmatch
 

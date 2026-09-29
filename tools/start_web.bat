@@ -17,6 +17,8 @@ cd /d "%TARGET_DIR%"
 set "ZBUILD_RESOURCES_DIR=%TARGET_DIR%"
 set "PYTHONUTF8=1"
 set "PATH=%TARGET_DIR%runtime\git\cmd;%TARGET_DIR%runtime\git\bin;%TARGET_DIR%runtime\svn\bin;%TARGET_DIR%runtime\node;%PATH%"
+if exist "D:\androidSDK\platform-tools" set "PATH=D:\androidSDK\platform-tools;%PATH%"
+if exist "D:\adb\platform-tools" set "PATH=D:\adb\platform-tools;%PATH%"
 
 if exist "%TARGET_DIR%runtime\python\python.exe" (
     "%TARGET_DIR%runtime\python\python.exe" scripts\start_web.py --open %*

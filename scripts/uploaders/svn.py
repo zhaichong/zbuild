@@ -25,8 +25,60 @@ from uploaders.base import BaseUploader, UploadResult
 # URL helpers
 # ---------------------------------------------------------------------------
 
+def convert_visualsvn_url(url: str) -> str:
+    """Convert VisualSVN Server Web Client URL to real SVN repository URL.
+
+    Examples:
+        https://192.168.30.124/!/#%E6%99%BA%E6%85%A7%E7%97%85%E6%88%BF%E9%80%9A%E7%94%A8%E7%89%88
+        -> https://192.168.30.124/svn/智慧病房通用版
+
+        https://192.168.30.124/!/#智慧病房通用版/view/head/subdir
+        -> https://192.168.30.124/svn/智慧病房通用版/subdir
+    """
+    if not url:
+        return ""
+    raw = str(url).strip()
+    if "#" in raw:
+        try:
+            split = urlsplit(raw)
+            path = split.path.rstrip("/")
+            frag = unquote(split.fragment).strip("/")
+            if path.endswith("/!") or "/!/" in path or path in ("/!", "", "/"):
+                parts = [p for p in frag.replace("\\", "/").split("/") if p]
+                if parts:
+                    repo_name = parts[0]
+                    subparts = parts[1:]
+                    if len(subparts) >= 2 and subparts[0] == "view":
+                        subparts = subparts[2:]
+                    real_path = "/svn/" + "/".join([repo_name] + subparts)
+                    return urlunsplit((split.scheme, split.netloc, real_path, "", "")).rstrip("/")
+            elif frag:
+                parts = [p for p in frag.replace("\\", "/").split("/") if p]
+                if parts:
+                    repo_name = parts[0]
+                    subparts = parts[1:]
+                    if len(subparts) >= 2 and subparts[0] == "view":
+                        subparts = subparts[2:]
+                    base_p = path if path.startswith("/svn") else f"/svn{path}"
+                    real_path = f"{base_p.rstrip('/')}/" + "/".join([repo_name] + subparts)
+                    return urlunsplit((split.scheme, split.netloc, real_path, "", "")).rstrip("/")
+        except Exception:
+            pass
+
+    if "/!/" in raw:
+        try:
+            split = urlsplit(raw)
+            path = split.path.replace("/!/", "/svn/").replace("/!", "/svn")
+            return urlunsplit((split.scheme, split.netloc, path, split.query, "")).rstrip("/")
+        except Exception:
+            pass
+
+    return raw
+
+
 def join_svn_url(root: str, *segments: str) -> str:
     """Join SVN URL with proper encoding, avoiding double slashes."""
+    clean_root = convert_visualsvn_url(root)
     decoded_segments = [unquote(segment).strip() for segment in segments]
     if any(
         part in (".", "..")
@@ -34,7 +86,7 @@ def join_svn_url(root: str, *segments: str) -> str:
         for part in segment.replace(chr(92), "/").split("/")
     ):
         raise ValueError("SVN path segments cannot contain '.' or '..'")
-    split = urlsplit(root.rstrip("/"))
+    split = urlsplit(clean_root.rstrip("/"))
     root_parts = [p for p in unquote(split.path).split("/") if p]
     all_parts = root_parts + [s.strip().strip("/") for s in segments if s.strip()]
     encoded_path = "/" + "/".join(quote(unquote(part), safe="") for part in all_parts)

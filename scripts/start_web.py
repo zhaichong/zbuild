@@ -81,6 +81,19 @@ def resolve_runtime_tools() -> list[str]:
                 os.environ["PATH"] = executable_dir + os.pathsep + os.environ.get("PATH", "")
         else:
             missing.append(name)
+
+    # Automatically detect and inject ADB into PATH if found
+    try:
+        from server.adb_service import resolve_adb_path
+        adb_exec = resolve_adb_path()
+        if adb_exec and os.path.isfile(adb_exec):
+            adb_dir = str(Path(adb_exec).parent)
+            path_parts = os.environ.get("PATH", "").split(os.pathsep)
+            if adb_dir not in path_parts:
+                os.environ["PATH"] = adb_dir + os.pathsep + os.environ.get("PATH", "")
+    except Exception:
+        pass
+
     return missing
 
 

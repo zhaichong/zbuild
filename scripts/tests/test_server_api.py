@@ -145,6 +145,22 @@ class TestWebServerAPI(AioHTTPTestCase):
         self.assertEqual(current["config"]["form"]["svnUsername"], "alice")
         self.assertEqual(current["config"]["form"]["svnPassword"], "[configured]")
 
+    async def test_tool_usage_uses_stored_svn_username(self):
+        self.app["profile_store"].save(self.profile_id, {
+            "svn_credentials": {"username": "alice", "password": "secret"},
+        }, "0")
+
+        recorded = await self.client.post(
+            "/api/tool-usage", json={"toolId": "zbuild"}, headers=self.profile_headers,
+        )
+        listed = await self.client.get("/api/tool-usage", headers=self.profile_headers)
+
+        self.assertEqual(recorded.status, 200)
+        self.assertEqual(await recorded.json(), {"success": True})
+        self.assertEqual((await listed.json())[0]["toolId"], "zbuild")
+        self.assertEqual((await listed.json())[0]["svnUsername"], "alice")
+        self.assertEqual((await listed.json())[0]["useCount"], 1)
+
     async def test_task_contract_and_event_replay(self):
         response = await self.client.post("/api/tasks", json={
             "requestId": "api-1", "type": "order-deploy-run", "submitter": "alice",
